@@ -1,0 +1,2015 @@
+diff --git a/migrations/noise/partners.sql b/migrations/noise/partners.sql
+new file mode 100644
+index 0000000..af5ea42
+--- /dev/null
++++ b/migrations/noise/partners.sql
+@@ -0,0 +1,209 @@
++-- Партнёрские агентства: заявки на подключение, договоры, сделки, комиссии.
++
++CREATE SCHEMA partners;
++
++CREATE TABLE partners.onboarding_requests (
++    id serial PRIMARY KEY,
++    inn text NOT NULL CHECK (inn ~ '^[0-9]{10}$'),
++    kpp text CHECK (kpp ~ '^[0-9]{9}$'),
++    legal_name text,
++    contact_name text NOT NULL,
++    contact_email text NOT NULL CHECK (contact_email LIKE '%_@_%'),
++    contact_phone text,
++    status text NOT NULL DEFAULT 'open'
++        CHECK (status IN ('open','approved','rejected','duplicate','expired')),
++    submitted_at timestamptz NOT NULL,
++    decided_at timestamptz,
++    decided_by int,
++    reject_reason text,
++    partner_id int,
++    CHECK (status <> 'rejected' OR reject_reason IS NOT NULL),
++    CHECK (status = 'open' OR decided_at IS NOT NULL)
++);
++
++CREATE UNIQUE INDEX ux_onboarding_requests_open_inn
++    ON partners.onboarding_requests (inn) WHERE status = 'open';
++
++CREATE TABLE partners.partners (
++    id serial PRIMARY KEY,
++    inn text NOT NULL UNIQUE CHECK (inn ~ '^[0-9]{10}$'),
++    kpp text CHECK (kpp ~ '^[0-9]{9}$'),
++    legal_name text CHECK (legal_name IS NULL OR length(btrim(legal_name)) > 0),
++    contact_name text,
++    contact_email text CHECK (contact_email LIKE '%_@_%'),
++    contact_phone text,
++    manager_id int NOT NULL,
++    created_at timestamptz NOT NULL,
++    updated_at timestamptz NOT NULL
++);
++
++CREATE TABLE partners.contracts (
++    id serial PRIMARY KEY,
++    partner_id int NOT NULL REFERENCES partners.partners (id),
++    number text NOT NULL UNIQUE,
++    commission_pct numeric(5,2) NOT NULL CHECK (commission_pct >= 0 AND commission_pct <= 100),
++    credit_allowed boolean NOT NULL DEFAULT false,
++    credit_limit numeric(12,2) NOT NULL DEFAULT 0 CHECK (credit_limit >= 0),
++    status text NOT NULL DEFAULT 'draft'
++        CHECK (status IN ('draft','active','suspended','expired','terminated')),
++    suspend_reason text,
++    valid_from date NOT NULL,
++    valid_to date NOT NULL,
++    activated_at timestamptz,
++    created_at timestamptz NOT NULL,
++    CHECK (valid_to >= valid_from),
++    CHECK (credit_allowed OR credit_limit = 0),
++    CHECK (status <> 'suspended' OR suspend_reason IS NOT NULL)
++);
++
++-- У партнёра не больше одного действующего договора
++CREATE UNIQUE INDEX ux_contracts_partner_current
++    ON partners.contracts (partner_id) WHERE status IN ('draft','active','suspended');
++
++CREATE TABLE partners.deals (
++    id serial PRIMARY KEY,
++    contract_id int NOT NULL REFERENCES partners.contracts (id),
++    external_ref text NOT NULL,
++    amount numeric(12,2) NOT NULL CHECK (amount > 0),
++    on_credit boolean NOT NULL,
++    status text NOT NULL CHECK (status IN ('awaiting_prepayment','open','closed','cancelled')),
++    created_at timestamptz NOT NULL,
++    due_at timestamptz,
++    prepaid_at timestamptz,
++    closed_at timestamptz,
++    paid_at timestamptz,
++    overdue_flagged boolean NOT NULL DEFAULT false,
++    UNIQUE (contract_id, external_ref),
++    CHECK (on_credit = (due_at IS NOT NULL)),
++    CHECK (NOT on_credit OR (status <> 'awaiting_prepayment' AND prepaid_at IS NULL)),
++    CHECK (status <> 'closed' OR closed_at IS NOT NULL)
++);
++
++CREATE INDEX ix_deals_contract_unpaid_credit
++    ON partners.deals (contract_id) WHERE on_credit AND paid_at IS NULL AND status <> 'cancelled';
++
++CREATE TABLE partners.payouts (
++    id serial PRIMARY KEY,
++    partner_id int NOT NULL REFERENCES partners.partners (id),
++    period date NOT NULL CHECK (extract(day FROM period) = 1),
++    total numeric(12,2) NOT NULL DEFAULT 0 CHECK (total >= 0),
++    commissions_count int NOT NULL DEFAULT 0 CHECK (commissions_count >= 0),
++    status text NOT NULL DEFAULT 'open' CHECK (status IN ('open','closed')),
++    UNIQUE (partner_id, period)
++);
++
++CREATE TABLE partners.commissions (
++    id serial PRIMARY KEY,
++    deal_id int NOT NULL UNIQUE REFERENCES partners.deals (id),
++    contract_id int NOT NULL REFERENCES partners.contracts (id),
++    partner_id int NOT NULL REFERENCES partners.partners (id),
++    base_amount numeric(12,2) NOT NULL CHECK (base_amount > 0),
++    rate_pct numeric(5,2) NOT NULL CHECK (rate_pct >= 0 AND rate_pct <= 100),
++    amount numeric(12,2) NOT NULL CHECK (amount >= base_amount),
++    accrued_at timestamptz NOT NULL,
++    payout_id int REFERENCES partners.payouts (id)
++);
++
++-- Сделки: работа в кредит и лимит договора
++
++CREATE FUNCTION partners.check_credit_limit() RETURNS trigger AS $$
++DECLARE
++    c partners.contracts%ROWTYPE;
++    exposure numeric(12,2);
++BEGIN
++    SELECT * INTO c FROM partners.contracts WHERE id = NEW.contract_id FOR UPDATE;
++    IF NEW.on_credit AND NOT c.credit_allowed THEN
++        RAISE EXCEPTION 'contract % does not allow credit deals', c.number
++            USING ERRCODE = 'check_violation';
++    END IF;
++    SELECT coalesce(sum(amount), 0) INTO exposure
++    FROM partners.deals
++    WHERE contract_id = NEW.contract_id AND on_credit AND paid_at IS NULL AND status <> 'cancelled';
++    IF exposure > c.credit_limit THEN
++        RAISE EXCEPTION 'credit limit of contract % exceeded, new deals are blocked', c.number
++            USING ERRCODE = 'check_violation';
++    END IF;
++    IF NEW.on_credit AND exposure + NEW.amount > c.credit_limit THEN
++        RAISE EXCEPTION 'deal exceeds credit limit of contract %: % + % > %',
++            c.number, exposure, NEW.amount, c.credit_limit
++            USING ERRCODE = 'check_violation';
++    END IF;
++    RETURN NEW;
++END $$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_contract_credit_limit
++    BEFORE INSERT ON partners.deals
++    FOR EACH ROW EXECUTE FUNCTION partners.check_credit_limit();
++
++-- Договор активируется только при заполненных реквизитах партнёра
++
++CREATE FUNCTION partners.check_partner_requisites() RETURNS trigger AS $$
++DECLARE
++    p partners.partners%ROWTYPE;
++BEGIN
++    IF NEW.status = 'active' AND OLD.status = 'draft' THEN
++        SELECT * INTO p FROM partners.partners WHERE id = NEW.partner_id;
++        IF p.inn IS NULL OR p.kpp IS NULL OR coalesce(btrim(p.legal_name), '') = '' THEN
++            RAISE EXCEPTION 'partner % has incomplete requisites', p.id
++                USING ERRCODE = 'check_violation';
++        END IF;
++    END IF;
++    RETURN NEW;
++END $$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_contract_requisites
++    BEFORE UPDATE OF status ON partners.contracts
++    FOR EACH ROW EXECUTE FUNCTION partners.check_partner_requisites();
++
++-- Начисленная комиссия не пересчитывается
++
++CREATE FUNCTION partners.forbid_commission_change() RETURNS trigger AS $$
++BEGIN
++    IF NEW.amount <> OLD.amount OR NEW.rate_pct <> OLD.rate_pct OR NEW.base_amount <> OLD.base_amount THEN
++        RAISE EXCEPTION 'accrued commission % cannot be recalculated', OLD.id
++            USING ERRCODE = 'check_violation';
++    END IF;
++    RETURN NEW;
++END $$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_commission_frozen
++    BEFORE UPDATE ON partners.commissions
++    FOR EACH ROW EXECUTE FUNCTION partners.forbid_commission_change();
++
++-- История условий договора для сверки с партнёром
++
++CREATE TABLE partners.contract_history (
++    id serial PRIMARY KEY,
++    contract_id int NOT NULL REFERENCES partners.contracts (id),
++    field text NOT NULL CHECK (field IN ('commission_pct','credit_allowed','credit_limit','status')),
++    old_value text,
++    new_value text,
++    changed_at timestamptz NOT NULL DEFAULT now()
++);
++
++CREATE INDEX ix_contract_history_contract ON partners.contract_history (contract_id, id);
++
++CREATE FUNCTION partners.log_contract_change() RETURNS trigger AS $$
++BEGIN
++    IF NEW.commission_pct IS DISTINCT FROM OLD.commission_pct THEN
++        INSERT INTO partners.contract_history (contract_id, field, old_value, new_value)
++        VALUES (NEW.id, 'commission_pct', OLD.commission_pct::text, NEW.commission_pct::text);
++    END IF;
++    IF NEW.credit_allowed IS DISTINCT FROM OLD.credit_allowed THEN
++        INSERT INTO partners.contract_history (contract_id, field, old_value, new_value)
++        VALUES (NEW.id, 'credit_allowed', OLD.credit_allowed::text, NEW.credit_allowed::text);
++    END IF;
++    IF NEW.credit_limit IS DISTINCT FROM OLD.credit_limit THEN
++        INSERT INTO partners.contract_history (contract_id, field, old_value, new_value)
++        VALUES (NEW.id, 'credit_limit', OLD.credit_limit::text, NEW.credit_limit::text);
++    END IF;
++    IF NEW.status IS DISTINCT FROM OLD.status THEN
++        INSERT INTO partners.contract_history (contract_id, field, old_value, new_value)
++        VALUES (NEW.id, 'status', OLD.status, NEW.status);
++    END IF;
++    RETURN NULL;
++END $$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_contract_history
++    AFTER UPDATE ON partners.contracts
++    FOR EACH ROW EXECUTE FUNCTION partners.log_contract_change();
+diff --git a/services/partners/__init__.py b/services/partners/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/services/partners/api.py b/services/partners/api.py
+new file mode 100644
+index 0000000..8066d2f
+--- /dev/null
++++ b/services/partners/api.py
+@@ -0,0 +1,220 @@
++from datetime import date, datetime
++from decimal import Decimal
++from typing import Annotated
++
++from fastapi import APIRouter, Depends
++from pydantic import BaseModel, Field
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs.errors import NotFound
++from libs.web import session
++from services.partners import service
++from services.partners.models import Contract
++
++router = APIRouter(tags=["partners"])
++Session = Annotated[AsyncSession, Depends(session)]
++
++
++class RequestIn(BaseModel):
++    inn: str
++    contact_name: str
++    contact_email: str
++    kpp: str | None = None
++    legal_name: str | None = None
++    contact_phone: str | None = None
++
++
++class DecisionIn(BaseModel):
++    manager_id: int
++    approve: bool = True
++    reason: str | None = None
++
++
++class RequisitesIn(BaseModel):
++    manager_id: int
++    kpp: str | None = None
++    legal_name: str | None = None
++    contact_name: str | None = None
++    contact_email: str | None = None
++    contact_phone: str | None = None
++
++
++class DealIn(BaseModel):
++    manager_id: int
++    external_ref: str
++    amount: Decimal = Field(gt=0)
++
++
++class RateIn(BaseModel):
++    manager_id: int
++    commission_pct: Decimal
++
++
++class CreditIn(BaseModel):
++    manager_id: int
++    allowed: bool
++    limit: Decimal = Decimal(0)
++
++
++class TerminationIn(BaseModel):
++    manager_id: int
++    reason: str
++
++
++class HistoryOut(BaseModel):
++    field: str
++    old_value: str | None
++    new_value: str | None
++    changed_at: datetime
++
++
++class PayoutOut(BaseModel):
++    id: int
++    period: date
++    total: Decimal
++    commissions: int
++    status: str
++
++
++class ContractOut(BaseModel):
++    id: int
++    number: str
++    status: str
++    commission_pct: Decimal
++    credit_allowed: bool
++    credit_limit: Decimal
++    credit_used: Decimal
++
++
++class CommissionOut(BaseModel):
++    id: int
++    deal_id: int
++    base_amount: Decimal
++    rate_pct: Decimal
++    amount: Decimal
++    accrued_at: datetime
++
++
++@router.post("/partners/requests", status_code=201)
++async def submit_request(body: RequestIn, s: Session) -> dict[str, int]:
++    req = await service.submit_request(s, **body.model_dump())
++    return {"request_id": req.id}
++
++
++@router.post("/partners/requests/{request_id}/decision")
++async def decide(request_id: int, body: DecisionIn, s: Session) -> dict[str, str]:
++    if body.approve:
++        req = await service.approve_request(s, request_id, body.manager_id)
++    else:
++        req = await service.reject_request(s, request_id, body.manager_id, body.reason or "")
++    return {"status": req.status}
++
++
++@router.patch("/partners/{partner_id}/requisites")
++async def update_requisites(partner_id: int, body: RequisitesIn, s: Session) -> dict[str, list[str]]:
++    fields = body.model_dump(exclude_unset=True, exclude={"manager_id"})
++    partner = await service.update_requisites(s, partner_id, body.manager_id, **fields)
++    return {"missing": service.missing_requisites(partner)}
++
++
++@router.get("/contracts/{contract_id}")
++async def contract(contract_id: int, s: Session) -> ContractOut:
++    c = await s.get(Contract, contract_id)
++    if c is None:
++        raise NotFound(f"договор {contract_id}")
++    return ContractOut(
++        id=c.id,
++        number=c.number,
++        status=c.status,
++        commission_pct=c.commission_pct,
++        credit_allowed=c.credit_allowed,
++        credit_limit=c.credit_limit,
++        credit_used=await service.credit_exposure(s, c.id),
++    )
++
++
++@router.post("/contracts/{contract_id}/activate")
++async def activate(contract_id: int, manager_id: int, s: Session) -> dict[str, str]:
++    c = await service.activate_contract(s, contract_id, manager_id)
++    return {"status": c.status}
++
++
++@router.post("/contracts/{contract_id}/deals", status_code=201)
++async def open_deal(contract_id: int, body: DealIn, s: Session) -> dict[str, int | str]:
++    deal = await service.open_deal(
++        s, contract_id, body.manager_id, external_ref=body.external_ref, amount=body.amount
++    )
++    return {"deal_id": deal.id, "status": deal.status}
++
++
++@router.post("/deals/{deal_id}/close")
++async def close_deal(deal_id: int, manager_id: int, s: Session) -> None:
++    await service.close_deal(s, deal_id, manager_id)
++
++
++@router.post("/deals/{deal_id}/prepayment")
++async def prepayment(deal_id: int, manager_id: int, s: Session) -> None:
++    await service.register_prepayment(s, deal_id, manager_id)
++
++
++@router.post("/deals/{deal_id}/payment")
++async def payment(deal_id: int, s: Session) -> None:
++    await service.register_payment(s, deal_id)
++
++
++@router.delete("/deals/{deal_id}")
++async def cancel_deal(deal_id: int, manager_id: int, s: Session) -> None:
++    await service.cancel_deal(s, deal_id, manager_id)
++
++
++@router.put("/contracts/{contract_id}/rate")
++async def change_rate(contract_id: int, body: RateIn, s: Session) -> None:
++    await service.change_commission_rate(s, contract_id, body.manager_id, body.commission_pct)
++
++
++@router.put("/contracts/{contract_id}/credit")
++async def credit_terms(contract_id: int, body: CreditIn, s: Session) -> None:
++    await service.set_credit_terms(s, contract_id, body.manager_id, allowed=body.allowed, limit=body.limit)
++
++
++@router.post("/contracts/{contract_id}/termination")
++async def terminate(contract_id: int, body: TerminationIn, s: Session) -> dict[str, str]:
++    c = await service.terminate_contract(s, contract_id, body.manager_id, body.reason)
++    return {"status": c.status}
++
++
++@router.post("/partners/{partner_id}/contracts", status_code=201)
++async def renew(partner_id: int, manager_id: int, s: Session) -> dict[str, int | str]:
++    c = await service.renew_contract(s, partner_id, manager_id)
++    return {"contract_id": c.id, "number": c.number}
++
++
++@router.get("/contracts/{contract_id}/history")
++async def history(contract_id: int, s: Session) -> list[HistoryOut]:
++    return [
++        HistoryOut(field=h.field, old_value=h.old_value, new_value=h.new_value, changed_at=h.changed_at)
++        for h in await service.contract_history(s, contract_id)
++    ]
++
++
++@router.get("/partners/{partner_id}/payouts")
++async def payouts(partner_id: int, s: Session) -> list[PayoutOut]:
++    return [
++        PayoutOut(id=p.id, period=p.period, total=p.total, commissions=p.commissions_count, status=p.status)
++        for p in await service.payouts(s, partner_id)
++    ]
++
++
++@router.get("/partners/{partner_id}/commissions")
++async def commissions(partner_id: int, s: Session) -> list[CommissionOut]:
++    return [
++        CommissionOut(
++            id=c.id,
++            deal_id=c.deal_id,
++            base_amount=c.base_amount,
++            rate_pct=c.rate_pct,
++            amount=c.amount,
++            accrued_at=c.accrued_at,
++        )
++        for c in await service.commissions(s, partner_id)
++    ]
+diff --git a/services/partners/app.py b/services/partners/app.py
+new file mode 100644
+index 0000000..4187f2a
+--- /dev/null
++++ b/services/partners/app.py
+@@ -0,0 +1,10 @@
++from fastapi import FastAPI
++
++from libs.web import install_error_handlers
++from services import wiring
++from services.partners.api import router
++
++wiring.load()
++app = FastAPI(title="partners")
++app.include_router(router)
++install_error_handlers(app)
+diff --git a/services/partners/consumers.py b/services/partners/consumers.py
+new file mode 100644
+index 0000000..960dbf4
+--- /dev/null
++++ b/services/partners/consumers.py
+@@ -0,0 +1,36 @@
++from typing import Any
++
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs.events import subscribe
++from services.partners import service
++
++
++@subscribe("partners.request_approved")
++async def on_request_approved(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.onboard(session, payload["request_id"], payload["manager_id"])
++
++
++@subscribe("partners.partner_onboarded")
++async def on_partner_onboarded(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.link_request(session, payload["request_id"], payload["partner_id"])
++
++
++@subscribe("partners.deal_closed")
++async def on_deal_closed(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.accrue_commission(session, payload["deal_id"])
++
++
++@subscribe("partners.commission_accrued")
++async def on_commission_accrued(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.add_to_payout(session, payload["commission_id"])
++
++
++@subscribe("partners.credit_overdue")
++async def on_credit_overdue(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.suspend_contract(session, payload["contract_id"], reason="credit_overdue")
++
++
++@subscribe("partners.deal_paid")
++async def on_deal_paid(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.resume_if_settled(session, payload["contract_id"])
+diff --git a/services/partners/jobs.py b/services/partners/jobs.py
+new file mode 100644
+index 0000000..07b700c
+--- /dev/null
++++ b/services/partners/jobs.py
+@@ -0,0 +1,71 @@
++from datetime import datetime, timedelta
++
++from sqlalchemy import select
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs import events
++from services.partners import service, settings
++from services.partners.models import Contract, Deal, OnboardingRequest, Payout
++
++
++async def flag_overdue_credit(session: AsyncSession, now: datetime) -> list[int]:
++    deals = (
++        await session.scalars(
++            select(Deal).where(
++                Deal.on_credit.is_(True),
++                Deal.paid_at.is_(None),
++                Deal.status != "cancelled",
++                Deal.overdue_flagged.is_(False),
++                Deal.due_at < now,
++            )
++        )
++    ).all()
++    for deal in deals:
++        deal.overdue_flagged = True
++        events.publish(
++            session,
++            "partners.credit_overdue",
++            {"deal_id": deal.id, "contract_id": deal.contract_id, "amount": str(deal.amount)},
++        )
++    return [deal.id for deal in deals]
++
++
++async def expire_contracts(session: AsyncSession, now: datetime) -> list[int]:
++    contracts = (
++        await session.scalars(
++            select(Contract).where(
++                Contract.status.in_(("active", "suspended")), Contract.valid_to < now.date()
++            )
++        )
++    ).all()
++    for contract in contracts:
++        await service.expire_contract(session, contract)
++    return [c.id for c in contracts]
++
++
++async def expire_requests(session: AsyncSession, now: datetime) -> list[int]:
++    stale = (
++        await session.scalars(
++            select(OnboardingRequest).where(
++                OnboardingRequest.status == "open",
++                OnboardingRequest.submitted_at < now - timedelta(days=settings.ONBOARDING_REQUEST_TTL_DAYS),
++            )
++        )
++    ).all()
++    for req in stale:
++        req.status = "expired"
++        req.decided_at = now
++    return [req.id for req in stale]
++
++
++async def close_payouts(session: AsyncSession, now: datetime) -> list[int]:
++    """Закрывает ведомости прошедших месяцев."""
++    month_start = now.date().replace(day=1)
++    due = (
++        await session.scalars(
++            select(Payout.id).where(Payout.status == "open", Payout.period < month_start).order_by(Payout.id)
++        )
++    ).all()
++    for payout_id in due:
++        await service.close_payout(session, payout_id)
++    return list(due)
+diff --git a/services/partners/models.py b/services/partners/models.py
+new file mode 100644
+index 0000000..596ab75
+--- /dev/null
++++ b/services/partners/models.py
+@@ -0,0 +1,123 @@
++from datetime import date, datetime
++from decimal import Decimal
++
++from sqlalchemy import ForeignKey, Numeric
++from sqlalchemy.orm import Mapped, mapped_column
++
++from libs.db import Base
++
++SCHEMA = {"schema": "partners"}
++
++
++class OnboardingRequest(Base):
++    __tablename__ = "onboarding_requests"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    inn: Mapped[str]
++    kpp: Mapped[str | None]
++    legal_name: Mapped[str | None]
++    contact_name: Mapped[str]
++    contact_email: Mapped[str]
++    contact_phone: Mapped[str | None]
++    status: Mapped[str] = mapped_column(default="open")
++    submitted_at: Mapped[datetime]
++    decided_at: Mapped[datetime | None]
++    decided_by: Mapped[int | None]
++    reject_reason: Mapped[str | None]
++    partner_id: Mapped[int | None]
++
++
++class Partner(Base):
++    __tablename__ = "partners"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    inn: Mapped[str]
++    kpp: Mapped[str | None]
++    legal_name: Mapped[str | None]
++    contact_name: Mapped[str | None]
++    contact_email: Mapped[str | None]
++    contact_phone: Mapped[str | None]
++    manager_id: Mapped[int]
++    created_at: Mapped[datetime]
++    updated_at: Mapped[datetime]
++
++
++class Contract(Base):
++    __tablename__ = "contracts"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    partner_id: Mapped[int] = mapped_column(ForeignKey("partners.partners.id"))
++    number: Mapped[str]
++    commission_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2))
++    credit_allowed: Mapped[bool] = mapped_column(default=False)
++    credit_limit: Mapped[Decimal] = mapped_column(default=Decimal(0))
++    status: Mapped[str] = mapped_column(default="draft")
++    suspend_reason: Mapped[str | None]
++    valid_from: Mapped[date]
++    valid_to: Mapped[date]
++    activated_at: Mapped[datetime | None]
++    created_at: Mapped[datetime]
++
++
++class Deal(Base):
++    __tablename__ = "deals"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    contract_id: Mapped[int] = mapped_column(ForeignKey("partners.contracts.id"))
++    external_ref: Mapped[str]
++    amount: Mapped[Decimal]
++    on_credit: Mapped[bool]
++    status: Mapped[str]
++    created_at: Mapped[datetime]
++    due_at: Mapped[datetime | None]
++    prepaid_at: Mapped[datetime | None]
++    closed_at: Mapped[datetime | None]
++    paid_at: Mapped[datetime | None]
++    overdue_flagged: Mapped[bool] = mapped_column(default=False)
++
++
++class Payout(Base):
++    """Ведомость выплаты комиссии партнёру за месяц."""
++
++    __tablename__ = "payouts"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    partner_id: Mapped[int] = mapped_column(ForeignKey("partners.partners.id"))
++    period: Mapped[date]
++    total: Mapped[Decimal] = mapped_column(default=Decimal(0))
++    commissions_count: Mapped[int] = mapped_column(default=0)
++    status: Mapped[str] = mapped_column(default="open")
++
++
++class Commission(Base):
++    __tablename__ = "commissions"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    deal_id: Mapped[int] = mapped_column(ForeignKey("partners.deals.id"))
++    contract_id: Mapped[int] = mapped_column(ForeignKey("partners.contracts.id"))
++    partner_id: Mapped[int] = mapped_column(ForeignKey("partners.partners.id"))
++    base_amount: Mapped[Decimal]
++    rate_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2))
++    amount: Mapped[Decimal]
++    accrued_at: Mapped[datetime]
++    payout_id: Mapped[int | None] = mapped_column(ForeignKey("partners.payouts.id"))
++
++
++class ContractHistory(Base):
++    """Журнал изменений условий договора, ведёт триггер trg_contract_history."""
++
++    __tablename__ = "contract_history"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    contract_id: Mapped[int] = mapped_column(ForeignKey("partners.contracts.id"))
++    field: Mapped[str]
++    old_value: Mapped[str | None]
++    new_value: Mapped[str | None]
++    changed_at: Mapped[datetime]
+diff --git a/services/partners/service.py b/services/partners/service.py
+new file mode 100644
+index 0000000..b302d2a
+--- /dev/null
++++ b/services/partners/service.py
+@@ -0,0 +1,613 @@
++"""Партнёрские агентства: подключение, договоры, сделки в кредит и комиссии."""
++
++import re
++from datetime import date, timedelta
++from decimal import ROUND_HALF_UP, Decimal
++
++from sqlalchemy import func, select, update
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs import clock, events
++from libs.errors import AccessDenied, DomainError, NotFound
++from services.partners import settings
++from services.partners.models import (
++    Commission,
++    Contract,
++    ContractHistory,
++    Deal,
++    OnboardingRequest,
++    Partner,
++    Payout,
++)
++
++CURRENT_CONTRACT = ("draft", "active", "suspended")
++EDITABLE_FIELDS = ("kpp", "legal_name", "contact_name", "contact_email", "contact_phone")
++CENT = Decimal("0.01")
++
++_INN_WEIGHTS = (2, 4, 10, 3, 5, 9, 4, 6, 8)
++
++
++def inn_valid(inn: str) -> bool:
++    if not re.fullmatch(r"\d{10}", inn or ""):
++        return False
++    digits = [int(c) for c in inn]
++    control = sum(w * d for w, d in zip(_INN_WEIGHTS, digits, strict=False)) % 11 % 10
++    return control == digits[9]
++
++
++def _check_kpp(kpp: str | None) -> None:
++    if kpp is not None and not re.fullmatch(r"\d{9}", kpp):
++        raise DomainError("КПП должен состоять из 9 цифр")
++
++
++def missing_requisites(partner: Partner) -> list[str]:
++    return [f for f in settings.REQUIRED_PARTNER_FIELDS if not (getattr(partner, f) or "").strip()]
++
++
++# Заявки на подключение ---------------------------------------------------------
++
++
++async def _request(session: AsyncSession, request_id: int) -> OnboardingRequest:
++    req = await session.get(OnboardingRequest, request_id)
++    if req is None:
++        raise NotFound(f"заявка на подключение {request_id}")
++    return req
++
++
++async def close_duplicates(session: AsyncSession, inn: str, *, keep_id: int | None = None) -> list[int]:
++    """Закрывает открытые заявки с тем же ИНН, кроме keep_id. Возвращает id закрытых."""
++    query = select(OnboardingRequest).where(OnboardingRequest.inn == inn, OnboardingRequest.status == "open")
++    if keep_id is not None:
++        query = query.where(OnboardingRequest.id != keep_id)
++    duplicates = (await session.scalars(query.with_for_update())).all()
++    now = clock.now()
++    for req in duplicates:
++        req.status = "duplicate"
++        req.decided_at = now
++        events.publish(
++            session,
++            "partners.request_closed_duplicate",
++            {"request_id": req.id, "inn": inn, "superseded_by": keep_id},
++        )
++    await session.flush()
++    return [req.id for req in duplicates]
++
++
++async def submit_request(
++    session: AsyncSession,
++    *,
++    inn: str,
++    contact_name: str,
++    contact_email: str,
++    kpp: str | None = None,
++    legal_name: str | None = None,
++    contact_phone: str | None = None,
++) -> OnboardingRequest:
++    if not inn_valid(inn):
++        raise DomainError("некорректный ИНН")
++    _check_kpp(kpp)
++    connected = await session.scalar(
++        select(Contract.id)
++        .join(Partner, Partner.id == Contract.partner_id)
++        .where(Partner.inn == inn, Contract.status.in_(("active", "suspended")))
++    )
++    if connected is not None:
++        raise DomainError("партнёр с таким ИНН уже подключён")
++
++    # Повторная заявка заменяет предыдущую: агентство прислало уточнённые данные
++    await close_duplicates(session, inn)
++    req = OnboardingRequest(
++        inn=inn,
++        kpp=kpp,
++        legal_name=legal_name,
++        contact_name=contact_name,
++        contact_email=contact_email,
++        contact_phone=contact_phone,
++        submitted_at=clock.now(),
++    )
++    session.add(req)
++    await session.flush()
++    events.publish(session, "partners.request_submitted", {"request_id": req.id, "inn": inn})
++    return req
++
++
++async def _decide(session: AsyncSession, request_id: int, manager_id: int) -> OnboardingRequest:
++    req = await _request(session, request_id)
++    if req.status != "open":
++        raise DomainError("по заявке уже принято решение")
++    req.decided_at = clock.now()
++    req.decided_by = manager_id
++    return req
++
++
++async def approve_request(session: AsyncSession, request_id: int, manager_id: int) -> OnboardingRequest:
++    req = await _decide(session, request_id, manager_id)
++    req.status = "approved"
++    events.publish(session, "partners.request_approved", {"request_id": req.id, "manager_id": manager_id})
++    return req
++
++
++async def reject_request(
++    session: AsyncSession, request_id: int, manager_id: int, reason: str
++) -> OnboardingRequest:
++    if not reason.strip():
++        raise DomainError("укажите причину отказа")
++    req = await _decide(session, request_id, manager_id)
++    req.status = "rejected"
++    req.reject_reason = reason
++    events.publish(session, "partners.request_rejected", {"request_id": req.id, "reason": reason})
++    return req
++
++
++async def _next_contract_number(session: AsyncSession, partner: Partner) -> str:
++    n = await session.scalar(select(func.count()).where(Contract.partner_id == partner.id))
++    return f"АГ-{partner.inn[-4:]}/{partner.id}-{n + 1}"
++
++
++async def onboard(session: AsyncSession, request_id: int, manager_id: int) -> Partner:
++    """Заводит партнёра по одобренной заявке (или дополняет существующего) и черновик договора."""
++    req = await _request(session, request_id)
++    now = clock.now()
++    partner = await session.scalar(select(Partner).where(Partner.inn == req.inn))
++    if partner is None:
++        partner = Partner(inn=req.inn, manager_id=manager_id, created_at=now, updated_at=now)
++        session.add(partner)
++    for field in ("kpp", "legal_name", "contact_name", "contact_email", "contact_phone"):
++        value = getattr(req, field)
++        if value:
++            setattr(partner, field, value)
++    partner.updated_at = now
++    await session.flush()
++
++    contract = await session.scalar(
++        select(Contract).where(Contract.partner_id == partner.id, Contract.status.in_(CURRENT_CONTRACT))
++    )
++    if contract is None:
++        today = now.date()
++        contract = Contract(
++            partner_id=partner.id,
++            number=await _next_contract_number(session, partner),
++            commission_pct=settings.DEFAULT_COMMISSION_PCT,
++            valid_from=today,
++            valid_to=today + timedelta(days=settings.CONTRACT_TERM_DAYS),
++            created_at=now,
++        )
++        session.add(contract)
++        await session.flush()
++    events.publish(
++        session,
++        "partners.partner_onboarded",
++        {"request_id": req.id, "partner_id": partner.id, "contract_id": contract.id},
++    )
++    return partner
++
++
++async def link_request(session: AsyncSession, request_id: int, partner_id: int) -> None:
++    req = await _request(session, request_id)
++    req.partner_id = partner_id
++
++
++# Партнёры и договоры -----------------------------------------------------------
++
++
++async def _partner_for_manager(session: AsyncSession, partner_id: int, manager_id: int) -> Partner:
++    partner = await session.get(Partner, partner_id)
++    if partner is None:
++        raise NotFound(f"партнёр {partner_id}")
++    if partner.manager_id != manager_id:
++        raise AccessDenied("партнёр закреплён за другим менеджером")
++    return partner
++
++
++async def _contract_for_manager(session: AsyncSession, contract_id: int, manager_id: int) -> Contract:
++    contract = await session.get(Contract, contract_id)
++    if contract is None:
++        raise NotFound(f"договор {contract_id}")
++    await _partner_for_manager(session, contract.partner_id, manager_id)
++    return contract
++
++
++async def current_contract(session: AsyncSession, partner_id: int) -> Contract | None:
++    return await session.scalar(
++        select(Contract).where(Contract.partner_id == partner_id, Contract.status.in_(CURRENT_CONTRACT))
++    )
++
++
++async def update_requisites(
++    session: AsyncSession, partner_id: int, manager_id: int, **fields: str | None
++) -> Partner:
++    partner = await _partner_for_manager(session, partner_id, manager_id)
++    unknown = set(fields) - set(EDITABLE_FIELDS)
++    if unknown:
++        raise DomainError(f"нельзя изменить поля: {', '.join(sorted(unknown))}")
++    if "kpp" in fields:
++        _check_kpp(fields["kpp"])
++    contract = await current_contract(session, partner_id)
++    if contract is not None and contract.status != "draft":
++        cleared = [f for f in settings.REQUIRED_PARTNER_FIELDS if f in fields and not fields[f]]
++        if cleared:
++            raise DomainError("нельзя удалить обязательные реквизиты партнёра с действующим договором")
++    for name, value in fields.items():
++        setattr(partner, name, value)
++    partner.updated_at = clock.now()
++    await session.flush()
++    return partner
++
++
++async def activate_contract(session: AsyncSession, contract_id: int, manager_id: int) -> Contract:
++    contract = await _contract_for_manager(session, contract_id, manager_id)
++    if contract.status != "draft":
++        raise DomainError("активировать можно только черновик договора")
++    partner = await session.get(Partner, contract.partner_id)
++    missing = missing_requisites(partner)
++    if missing:
++        titles = ", ".join(settings.REQUISITE_TITLES[f] for f in missing)
++        raise DomainError(f"у партнёра не заполнены реквизиты: {titles}")
++    if contract.valid_to < clock.now().date():
++        raise DomainError("срок действия договора истёк")
++    contract.status = "active"
++    contract.activated_at = clock.now()
++    await session.flush()
++    events.publish(
++        session,
++        "partners.contract_activated",
++        {"contract_id": contract.id, "partner_id": contract.partner_id},
++    )
++    return contract
++
++
++def _check_rate(pct: Decimal) -> None:
++    if pct < 0 or pct > settings.MAX_COMMISSION_PCT:
++        raise DomainError(f"ставка комиссии должна быть от 0 до {settings.MAX_COMMISSION_PCT}%")
++
++
++async def change_commission_rate(
++    session: AsyncSession, contract_id: int, manager_id: int, pct: Decimal
++) -> Contract:
++    contract = await _contract_for_manager(session, contract_id, manager_id)
++    if contract.status not in CURRENT_CONTRACT:
++        raise DomainError("договор закрыт")
++    _check_rate(pct)
++    old = contract.commission_pct
++    contract.commission_pct = pct
++    events.publish(
++        session,
++        "partners.contract_rate_changed",
++        {"contract_id": contract.id, "old_pct": str(old), "new_pct": str(pct)},
++    )
++    return contract
++
++
++async def set_credit_terms(
++    session: AsyncSession, contract_id: int, manager_id: int, *, allowed: bool, limit: Decimal = Decimal(0)
++) -> Contract:
++    contract = await _contract_for_manager(session, contract_id, manager_id)
++    if contract.status not in CURRENT_CONTRACT:
++        raise DomainError("договор закрыт")
++    if limit < 0:
++        raise DomainError("лимит кредита не может быть отрицательным")
++    if limit > settings.MAX_CREDIT_LIMIT:
++        raise DomainError("лимит кредита выше допустимого без согласования")
++    contract.credit_allowed = allowed
++    contract.credit_limit = limit if allowed else Decimal(0)
++    await session.flush()
++    return contract
++
++
++async def credit_exposure(session: AsyncSession, contract_id: int) -> Decimal:
++    """Сумма неоплаченных сделок в кредит по договору."""
++    total = await session.scalar(
++        select(func.coalesce(func.sum(Deal.amount), 0)).where(
++            Deal.contract_id == contract_id,
++            Deal.on_credit.is_(True),
++            Deal.paid_at.is_(None),
++            Deal.status != "cancelled",
++        )
++    )
++    return Decimal(total)
++
++
++async def suspend_contract(session: AsyncSession, contract_id: int, reason: str) -> bool:
++    contract = await session.get(Contract, contract_id, with_for_update=True)
++    if contract is None or contract.status != "active":
++        return False
++    contract.status = "suspended"
++    contract.suspend_reason = reason
++    events.publish(session, "partners.contract_suspended", {"contract_id": contract.id, "reason": reason})
++    return True
++
++
++async def resume_if_settled(session: AsyncSession, contract_id: int) -> bool:
++    contract = await session.get(Contract, contract_id, with_for_update=True)
++    if contract is None or contract.status != "suspended" or contract.suspend_reason != "credit_overdue":
++        return False
++    still_overdue = await session.scalar(
++        select(func.count()).where(
++            Deal.contract_id == contract_id,
++            Deal.overdue_flagged.is_(True),
++            Deal.paid_at.is_(None),
++            Deal.status != "cancelled",
++        )
++    )
++    if still_overdue:
++        return False
++    contract.status = "active"
++    contract.suspend_reason = None
++    events.publish(session, "partners.contract_resumed", {"contract_id": contract.id})
++    return True
++
++
++# Сделки ------------------------------------------------------------------------
++
++
++def _in_force(contract: Contract, today: date) -> None:
++    if contract.status == "suspended":
++        raise DomainError("договор приостановлен, новые сделки запрещены")
++    if contract.status != "active":
++        raise DomainError("договор не действует")
++    if not contract.valid_from <= today <= contract.valid_to:
++        raise DomainError("сделка вне срока действия договора")
++
++
++async def open_deal(
++    session: AsyncSession, contract_id: int, manager_id: int, *, external_ref: str, amount: Decimal
++) -> Deal:
++    contract = await _contract_for_manager(session, contract_id, manager_id)
++    now = clock.now()
++    _in_force(contract, now.date())
++    if amount <= 0:
++        raise DomainError("сумма сделки должна быть положительной")
++    exists = await session.scalar(
++        select(Deal.id).where(Deal.contract_id == contract_id, Deal.external_ref == external_ref)
++    )
++    if exists is not None:
++        raise DomainError(f"сделка {external_ref} уже заведена")
++
++    # В кредит — без предоплаты; лимит проверяет триггер на вставке
++    on_credit = contract.credit_allowed
++    deal = Deal(
++        contract_id=contract_id,
++        external_ref=external_ref,
++        amount=amount,
++        on_credit=on_credit,
++        status="open" if on_credit else "awaiting_prepayment",
++        created_at=now,
++        due_at=now + timedelta(days=settings.CREDIT_PAYMENT_DAYS) if on_credit else None,
++    )
++    session.add(deal)
++    await session.flush()
++    events.publish(
++        session,
++        "partners.deal_created",
++        {"deal_id": deal.id, "contract_id": contract_id, "on_credit": on_credit, "amount": str(amount)},
++    )
++    return deal
++
++
++async def _deal_for_manager(session: AsyncSession, deal_id: int, manager_id: int) -> tuple[Deal, Contract]:
++    deal = await session.get(Deal, deal_id)
++    if deal is None:
++        raise NotFound(f"сделка {deal_id}")
++    contract = await _contract_for_manager(session, deal.contract_id, manager_id)
++    return deal, contract
++
++
++async def register_prepayment(session: AsyncSession, deal_id: int, manager_id: int) -> Deal:
++    deal, _ = await _deal_for_manager(session, deal_id, manager_id)
++    if deal.status != "awaiting_prepayment":
++        raise DomainError("сделка не ожидает предоплаты")
++    deal.prepaid_at = clock.now()
++    deal.status = "open"
++    return deal
++
++
++async def close_deal(session: AsyncSession, deal_id: int, manager_id: int) -> Deal:
++    deal, contract = await _deal_for_manager(session, deal_id, manager_id)
++    if deal.status == "awaiting_prepayment":
++        raise DomainError("сделка без кредита закрывается только после предоплаты")
++    if deal.status != "open":
++        raise DomainError("сделка уже закрыта или отменена")
++    deal.status = "closed"
++    deal.closed_at = clock.now()
++    events.publish(
++        session,
++        "partners.deal_closed",
++        {
++            "deal_id": deal.id,
++            "contract_id": contract.id,
++            "partner_id": contract.partner_id,
++            "amount": str(deal.amount),
++        },
++    )
++    return deal
++
++
++async def cancel_deal(session: AsyncSession, deal_id: int, manager_id: int) -> Deal:
++    deal, _ = await _deal_for_manager(session, deal_id, manager_id)
++    if deal.status not in ("awaiting_prepayment", "open"):
++        raise DomainError("закрытую сделку отменить нельзя")
++    deal.status = "cancelled"
++    events.publish(session, "partners.deal_cancelled", {"deal_id": deal.id, "contract_id": deal.contract_id})
++    return deal
++
++
++async def register_payment(session: AsyncSession, deal_id: int) -> Deal:
++    """Партнёр оплатил сделку, проведённую в кредит."""
++    deal = await session.get(Deal, deal_id)
++    if deal is None:
++        raise NotFound(f"сделка {deal_id}")
++    if not deal.on_credit:
++        raise DomainError("сделка оплачена предоплатой")
++    if deal.paid_at is not None or deal.status == "cancelled":
++        raise DomainError("сделка уже оплачена или отменена")
++    deal.paid_at = clock.now()
++    events.publish(session, "partners.deal_paid", {"deal_id": deal.id, "contract_id": deal.contract_id})
++    return deal
++
++
++# Комиссии ----------------------------------------------------------------------
++
++
++def commission_amount(base: Decimal, pct: Decimal) -> Decimal:
++    return (base * (1 + pct / 100)).quantize(CENT, rounding=ROUND_HALF_UP)
++
++
++async def accrue_commission(session: AsyncSession, deal_id: int) -> Commission | None:
++    if await session.scalar(select(Commission).where(Commission.deal_id == deal_id)) is not None:
++        return None
++    deal = await session.get(Deal, deal_id)
++    if deal is None or deal.status != "closed":
++        return None
++    contract = await session.get(Contract, deal.contract_id)
++    commission = Commission(
++        deal_id=deal.id,
++        contract_id=contract.id,
++        partner_id=contract.partner_id,
++        base_amount=deal.amount,
++        rate_pct=contract.commission_pct,
++        amount=commission_amount(deal.amount, contract.commission_pct),
++        accrued_at=clock.now(),
++    )
++    session.add(commission)
++    await session.flush()
++    events.publish(
++        session,
++        "partners.commission_accrued",
++        {
++            "commission_id": commission.id,
++            "partner_id": commission.partner_id,
++            "amount": str(commission.amount),
++        },
++    )
++    return commission
++
++
++async def add_to_payout(session: AsyncSession, commission_id: int) -> Payout | None:
++    commission = await session.get(Commission, commission_id, with_for_update=True)
++    if commission is None or commission.payout_id is not None:
++        return None
++    period = commission.accrued_at.date().replace(day=1)
++    payout = await session.scalar(
++        select(Payout)
++        .where(Payout.partner_id == commission.partner_id, Payout.period == period)
++        .with_for_update()
++    )
++    if payout is None or payout.status == "closed":
++        if payout is not None:
++            # Ведомость уже закрыта — комиссия уходит в следующую
++            period = (period + timedelta(days=32)).replace(day=1)
++        payout = await _open_payout(session, commission.partner_id, period)
++    payout.total += commission.amount
++    payout.commissions_count += 1
++    commission.payout_id = payout.id
++    return payout
++
++
++async def _open_payout(session: AsyncSession, partner_id: int, period: date) -> Payout:
++    payout = await session.scalar(
++        select(Payout).where(Payout.partner_id == partner_id, Payout.period == period)
++    )
++    if payout is None:
++        payout = Payout(partner_id=partner_id, period=period, total=Decimal(0), commissions_count=0)
++        session.add(payout)
++        await session.flush()
++    return payout
++
++
++async def close_payout(session: AsyncSession, payout_id: int) -> Payout:
++    payout = await session.get(Payout, payout_id)
++    if payout is None:
++        raise NotFound(f"ведомость {payout_id}")
++    if payout.status != "open":
++        raise DomainError("ведомость уже закрыта")
++    if payout.period >= clock.now().date().replace(day=1):
++        raise DomainError("ведомость текущего месяца закрывается после его окончания")
++    payout.status = "closed"
++    events.publish(
++        session,
++        "partners.payout_closed",
++        {"payout_id": payout.id, "partner_id": payout.partner_id, "total": str(payout.total)},
++    )
++    return payout
++
++
++async def commissions(session: AsyncSession, partner_id: int) -> list[Commission]:
++    rows = await session.scalars(
++        select(Commission).where(Commission.partner_id == partner_id).order_by(Commission.id)
++    )
++    return list(rows.all())
++
++
++async def expire_contract(session: AsyncSession, contract: Contract) -> None:
++    contract.status = "expired"
++    contract.suspend_reason = None
++    await session.execute(
++        update(Deal)
++        .where(Deal.contract_id == contract.id, Deal.status == "awaiting_prepayment")
++        .values(status="cancelled")
++    )
++    events.publish(session, "partners.contract_expired", {"contract_id": contract.id})
++
++
++async def terminate_contract(
++    session: AsyncSession, contract_id: int, manager_id: int, reason: str
++) -> Contract:
++    contract = await _contract_for_manager(session, contract_id, manager_id)
++    if contract.status not in CURRENT_CONTRACT:
++        raise DomainError("договор уже закрыт")
++    if not reason.strip():
++        raise DomainError("укажите причину расторжения")
++    open_deals = await session.scalar(
++        select(func.count()).where(Deal.contract_id == contract_id, Deal.status == "open")
++    )
++    if open_deals:
++        raise DomainError("по договору есть незакрытые сделки")
++    if await credit_exposure(session, contract_id) > 0:
++        raise DomainError("партнёр не погасил задолженность по сделкам в кредит")
++    await session.execute(
++        update(Deal)
++        .where(Deal.contract_id == contract_id, Deal.status == "awaiting_prepayment")
++        .values(status="cancelled")
++    )
++    contract.status = "terminated"
++    contract.suspend_reason = None
++    events.publish(session, "partners.contract_terminated", {"contract_id": contract.id, "reason": reason})
++    return contract
++
++
++async def renew_contract(session: AsyncSession, partner_id: int, manager_id: int) -> Contract:
++    """Новый черновик договора на условиях последнего закрытого."""
++    partner = await _partner_for_manager(session, partner_id, manager_id)
++    if await current_contract(session, partner_id) is not None:
++        raise DomainError("у партнёра уже есть действующий договор")
++    previous = await session.scalar(
++        select(Contract).where(Contract.partner_id == partner_id).order_by(Contract.id.desc()).limit(1)
++    )
++    now = clock.now()
++    contract = Contract(
++        partner_id=partner_id,
++        number=await _next_contract_number(session, partner),
++        commission_pct=previous.commission_pct if previous else settings.DEFAULT_COMMISSION_PCT,
++        credit_allowed=previous.credit_allowed if previous else False,
++        credit_limit=previous.credit_limit if previous else Decimal(0),
++        valid_from=now.date(),
++        valid_to=now.date() + timedelta(days=settings.CONTRACT_TERM_DAYS),
++        created_at=now,
++    )
++    session.add(contract)
++    await session.flush()
++    return contract
++
++
++async def contract_history(session: AsyncSession, contract_id: int) -> list[ContractHistory]:
++    rows = await session.scalars(
++        select(ContractHistory).where(ContractHistory.contract_id == contract_id).order_by(ContractHistory.id)
++    )
++    return list(rows.all())
++
++
++async def payouts(session: AsyncSession, partner_id: int) -> list[Payout]:
++    rows = await session.scalars(
++        select(Payout).where(Payout.partner_id == partner_id).order_by(Payout.period)
++    )
++    return list(rows.all())
+diff --git a/services/partners/settings.py b/services/partners/settings.py
+new file mode 100644
+index 0000000..cadd337
+--- /dev/null
++++ b/services/partners/settings.py
+@@ -0,0 +1,22 @@
++from decimal import Decimal
++
++# Без этих реквизитов договор с партнёром не активируется.
++REQUIRED_PARTNER_FIELDS = ("inn", "kpp", "legal_name")
++
++REQUISITE_TITLES = {"inn": "ИНН", "kpp": "КПП", "legal_name": "наименование"}
++
++# Ставка комиссии нового договора и допустимый максимум.
++DEFAULT_COMMISSION_PCT = Decimal(10)
++MAX_COMMISSION_PCT = Decimal(30)
++
++# Максимальный лимит кредита, который менеджер выставляет без согласования.
++MAX_CREDIT_LIMIT = Decimal(500_000)
++
++# Срок оплаты сделки, проведённой в кредит.
++CREDIT_PAYMENT_DAYS = 14
++
++# Срок действия договора по умолчанию.
++CONTRACT_TERM_DAYS = 365
++
++# Заявка на подключение без решения закрывается через столько дней.
++ONBOARDING_REQUEST_TTL_DAYS = 30
+diff --git a/tests/partners_factories.py b/tests/partners_factories.py
+new file mode 100644
+index 0000000..2753935
+--- /dev/null
++++ b/tests/partners_factories.py
+@@ -0,0 +1,100 @@
++"""Данные и типовые шаги сервиса partners."""
++
++import itertools
++from decimal import Decimal
++
++from sqlalchemy import select
++
++from libs import db
++from services.partners import service as partners
++from services.partners.models import Contract, OnboardingRequest, Partner
++from tests.factories import act, read
++
++MANAGER, MANAGER_2 = 701, 702
++KPP = "770101001"
++
++_serial = itertools.count(1)
++_refs = itertools.count(1)
++
++
++def make_inn(base: int | None = None) -> str:
++    """Валидный ИНН юрлица с контрольной цифрой."""
++    head = str(770_000_000 + (base if base is not None else next(_serial)))
++    weights = (2, 4, 10, 3, 5, 9, 4, 6, 8)
++    control = sum(w * int(d) for w, d in zip(weights, head, strict=True)) % 11 % 10
++    return head + str(control)
++
++
++async def get(model, pk: int):
++    async with db.sessionmaker()() as s:
++        return await s.get(model, pk)
++
++
++async def requests_for(inn: str) -> list[OnboardingRequest]:
++    async with db.sessionmaker()() as s:
++        rows = await s.scalars(
++            select(OnboardingRequest).where(OnboardingRequest.inn == inn).order_by(OnboardingRequest.id)
++        )
++        return list(rows.all())
++
++
++async def submit(inn: str | None = None, *, complete: bool = True, **kwargs) -> OnboardingRequest:
++    fields = {
++        "inn": inn or make_inn(),
++        "contact_name": "Ирина Смирнова",
++        "contact_email": "partner@example.org",
++    }
++    if complete:
++        fields |= {"kpp": KPP, "legal_name": "ООО «Книжный агент»"}
++    return await act(partners.submit_request, **(fields | kwargs))
++
++
++async def onboard(
++    inn: str | None = None, *, complete: bool = True, manager: int = MANAGER
++) -> tuple[int, int]:
++    """Заявка → одобрение → партнёр с черновиком договора. Возвращает (partner_id, contract_id)."""
++    req = await submit(inn, complete=complete)
++    await act(partners.approve_request, req.id, manager)
++    req = await get(OnboardingRequest, req.id)
++    contract = await read(partners.current_contract, req.partner_id)
++    return req.partner_id, contract.id
++
++
++async def active_contract(
++    *,
++    credit_limit: Decimal | None = None,
++    pct: Decimal | None = None,
++    manager: int = MANAGER,
++) -> tuple[int, int]:
++    partner_id, contract_id = await onboard(manager=manager)
++    if pct is not None:
++        await act(partners.change_commission_rate, contract_id, manager, pct)
++    if credit_limit is not None:
++        await act(partners.set_credit_terms, contract_id, manager, allowed=True, limit=credit_limit)
++    await act(partners.activate_contract, contract_id, manager)
++    return partner_id, contract_id
++
++
++async def deal(
++    contract_id: int, amount: Decimal | int, *, manager: int = MANAGER, prepay: bool = True
++) -> int:
++    d = await act(
++        partners.open_deal, contract_id, manager, external_ref=f"D-{next(_refs)}", amount=Decimal(amount)
++    )
++    if prepay and d.status == "awaiting_prepayment":
++        await act(partners.register_prepayment, d.id, manager)
++    return d.id
++
++
++async def closed_deal(contract_id: int, amount: Decimal | int, *, manager: int = MANAGER) -> int:
++    deal_id = await deal(contract_id, amount, manager=manager)
++    await act(partners.close_deal, deal_id, manager)
++    return deal_id
++
++
++async def contract(contract_id: int) -> Contract:
++    return await get(Contract, contract_id)
++
++
++async def partner(partner_id: int) -> Partner:
++    return await get(Partner, partner_id)
+diff --git a/tests/test_partners_api.py b/tests/test_partners_api.py
+new file mode 100644
+index 0000000..aedcced
+--- /dev/null
++++ b/tests/test_partners_api.py
+@@ -0,0 +1,124 @@
++import httpx
++import pytest
++
++from libs import events
++from services.partners.app import app
++from services.partners.models import OnboardingRequest
++from tests.partners_factories import MANAGER, MANAGER_2, active_contract, get, make_inn
++
++
++@pytest.fixture
++async def client():
++    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://partners") as c:
++        yield c
++
++
++async def call(client: httpx.AsyncClient, method: str, url: str, **kwargs) -> httpx.Response:
++    r = await client.request(method, url, **kwargs)
++    await events.dispatch_pending()
++    return r
++
++
++async def test_partner_connected_through_api(client: httpx.AsyncClient) -> None:
++    r = await call(
++        client,
++        "POST",
++        "/partners/requests",
++        json={"inn": make_inn(), "contact_name": "Олег", "contact_email": "oleg@example.org"},
++    )
++    assert r.status_code == 201
++    request_id = r.json()["request_id"]
++    r = await call(client, "POST", f"/partners/requests/{request_id}/decision", json={"manager_id": MANAGER})
++    assert r.json() == {"status": "approved"}
++    partner_id = (await get(OnboardingRequest, request_id)).partner_id
++
++    r = await call(client, "POST", "/contracts/1/activate", params={"manager_id": MANAGER})
++    assert r.status_code == 409
++    assert "КПП, наименование" in r.json()["detail"]
++
++    r = await call(
++        client,
++        "PATCH",
++        f"/partners/{partner_id}/requisites",
++        json={"manager_id": MANAGER, "kpp": "770101001", "legal_name": "ООО «Агент»"},
++    )
++    assert r.json() == {"missing": []}
++    r = await call(client, "POST", "/contracts/1/activate", params={"manager_id": MANAGER})
++    assert r.json() == {"status": "active"}
++
++    r = await call(
++        client,
++        "POST",
++        "/contracts/1/deals",
++        json={"manager_id": MANAGER, "external_ref": "A-1", "amount": "10"},
++    )
++    assert r.json()["status"] == "awaiting_prepayment"
++
++
++async def test_credit_limit_and_commissions_via_api(client: httpx.AsyncClient) -> None:
++    partner_id, contract_id = await active_contract(credit_limit=1000)
++    r = await call(
++        client,
++        "POST",
++        f"/contracts/{contract_id}/deals",
++        json={"manager_id": MANAGER, "external_ref": "C-1", "amount": "800"},
++    )
++    assert r.json()["status"] == "open"
++    deal_id = r.json()["deal_id"]
++
++    r = await call(
++        client,
++        "POST",
++        f"/contracts/{contract_id}/deals",
++        json={"manager_id": MANAGER, "external_ref": "C-2", "amount": "300"},
++    )
++    assert r.status_code == 409
++    assert "credit limit" in r.json()["detail"]
++
++    await call(client, "POST", f"/deals/{deal_id}/close", params={"manager_id": MANAGER})
++    r = await call(client, "GET", f"/partners/{partner_id}/commissions")
++    assert [c["amount"] for c in r.json()] == ["880.00"]
++    r = await call(client, "GET", f"/contracts/{contract_id}")
++    assert r.json()["credit_used"] == "800.00"
++
++    r = await call(client, "POST", f"/deals/{deal_id}/payment")
++    assert r.status_code == 200
++    r = await call(client, "GET", f"/partners/{partner_id}/payouts")
++    assert [(p["total"], p["commissions"], p["status"]) for p in r.json()] == [("880.00", 1, "open")]
++
++
++async def test_contract_terms_through_api(client: httpx.AsyncClient) -> None:
++    _, contract_id = await active_contract()
++    r = await call(
++        client, "PUT", f"/contracts/{contract_id}/rate", json={"manager_id": MANAGER, "commission_pct": "50"}
++    )
++    assert r.status_code == 409
++    r = await call(
++        client, "PUT", f"/contracts/{contract_id}/rate", json={"manager_id": MANAGER_2, "commission_pct": "5"}
++    )
++    assert r.status_code == 403
++    await call(
++        client, "PUT", f"/contracts/{contract_id}/rate", json={"manager_id": MANAGER, "commission_pct": "5"}
++    )
++    await call(
++        client,
++        "PUT",
++        f"/contracts/{contract_id}/credit",
++        json={"manager_id": MANAGER, "allowed": True, "limit": "2500"},
++    )
++    r = await call(client, "GET", f"/contracts/{contract_id}/history")
++    assert [(h["field"], h["new_value"]) for h in r.json()] == [
++        ("status", "active"),
++        ("commission_pct", "5.00"),
++        ("credit_allowed", "true"),
++        ("credit_limit", "2500.00"),
++    ]
++    r = await call(
++        client,
++        "POST",
++        f"/contracts/{contract_id}/termination",
++        json={"manager_id": MANAGER, "reason": "по соглашению сторон"},
++    )
++    assert r.json() == {"status": "terminated"}
++    r = await call(client, "GET", "/contracts/999")
++    assert r.status_code == 404
+diff --git a/tests/test_partners_commissions.py b/tests/test_partners_commissions.py
+new file mode 100644
+index 0000000..4e74ab6
+--- /dev/null
++++ b/tests/test_partners_commissions.py
+@@ -0,0 +1,99 @@
++from datetime import date, timedelta
++from decimal import Decimal
++
++import pytest
++from sqlalchemy import update
++from sqlalchemy.exc import DBAPIError
++
++from libs import clock, db
++from libs.errors import DomainError
++from services.partners import jobs
++from services.partners import service as partners
++from services.partners.models import Commission, Payout
++from tests.factories import T0, act, read, travel
++from tests.partners_factories import MANAGER, active_contract, closed_deal, deal, get
++
++
++async def test_commission_accrued_on_deal_closed() -> None:
++    partner_id, contract_id = await active_contract(pct=Decimal("12.5"))
++    deal_id = await closed_deal(contract_id, 1000)
++
++    [c] = await read(partners.commissions, partner_id)
++    assert (c.deal_id, c.base_amount, c.rate_pct) == (deal_id, Decimal(1000), Decimal("12.5"))
++    assert c.amount == Decimal("1125.00")
++    assert c.accrued_at == T0
++
++    # повторная доставка deal_closed не начисляет второй раз
++    assert await act(partners.accrue_commission, deal_id) is None
++    assert len(await read(partners.commissions, partner_id)) == 1
++
++
++async def test_rate_change_does_not_touch_accrued_commission() -> None:
++    partner_id, contract_id = await active_contract(pct=Decimal(10))
++    await closed_deal(contract_id, 2000)
++    await act(partners.change_commission_rate, contract_id, MANAGER, Decimal(20))
++    await closed_deal(contract_id, 2000)
++
++    old, new = await read(partners.commissions, partner_id)
++    assert (old.rate_pct, old.amount) == (Decimal(10), Decimal("2200.00"))
++    assert (new.rate_pct, new.amount) == (Decimal(20), Decimal("2400.00"))
++
++    changes = [
++        (h.field, h.old_value, h.new_value) for h in await read(partners.contract_history, contract_id)
++    ]
++    assert changes == [("status", "draft", "active"), ("commission_pct", "10.00", "20.00")]
++
++
++async def test_accrued_commission_is_frozen_in_database() -> None:
++    partner_id, contract_id = await active_contract()
++    await closed_deal(contract_id, 500)
++    [c] = await read(partners.commissions, partner_id)
++    with pytest.raises(DBAPIError, match="cannot be recalculated"):
++        async with db.sessionmaker().begin() as s:
++            await s.execute(update(Commission).where(Commission.id == c.id).values(rate_pct=Decimal(25)))
++
++
++async def test_no_commission_for_cancelled_deal() -> None:
++    partner_id, contract_id = await active_contract()
++    deal_id = await deal(contract_id, 800)
++    await act(partners.cancel_deal, deal_id, MANAGER)
++    assert await act(partners.accrue_commission, deal_id) is None
++    assert await read(partners.commissions, partner_id) == []
++    with pytest.raises(DomainError, match="уже закрыта или отменена"):
++        await act(partners.close_deal, deal_id, MANAGER)
++
++
++async def test_commissions_collected_into_monthly_payout() -> None:
++    partner_id, contract_id = await active_contract(pct=Decimal(10))
++    await closed_deal(contract_id, 1000)
++    await closed_deal(contract_id, 500)
++
++    first, second = await read(partners.commissions, partner_id)
++    assert first.payout_id == second.payout_id is not None
++    payout = await get(Payout, first.payout_id)
++    assert (payout.period, payout.total, payout.commissions_count) == (
++        date(2026, 3, 1),
++        Decimal("1650.00"),
++        2,
++    )
++
++
++async def test_closed_payout_period() -> None:
++    partner_id, contract_id = await active_contract()
++    await closed_deal(contract_id, 1000)
++    [c] = await read(partners.commissions, partner_id)
++    with pytest.raises(DomainError, match="после его окончания"):
++        await act(partners.close_payout, c.payout_id)
++
++    travel(T0 + timedelta(days=31))
++    assert await act(jobs.close_payouts, clock.now()) == [c.payout_id]
++    assert await act(jobs.close_payouts, clock.now()) == []
++    with pytest.raises(DomainError, match="уже закрыта"):
++        await act(partners.close_payout, c.payout_id)
++
++    await closed_deal(contract_id, 1000)
++    _, april = await read(partners.commissions, partner_id)
++    march_payout, april_payout = await read(partners.payouts, partner_id)
++    assert april.payout_id == april_payout.id
++    assert (march_payout.status, march_payout.total) == ("closed", Decimal("1100.00"))
++    assert (april_payout.period, april_payout.status) == (date(2026, 4, 1), "open")
+diff --git a/tests/test_partners_contracts.py b/tests/test_partners_contracts.py
+new file mode 100644
+index 0000000..55b338b
+--- /dev/null
++++ b/tests/test_partners_contracts.py
+@@ -0,0 +1,138 @@
++from decimal import Decimal
++
++import pytest
++from sqlalchemy import update
++from sqlalchemy.exc import DBAPIError
++
++from libs import db
++from libs.errors import AccessDenied, DomainError
++from services.partners import service as partners
++from services.partners.models import Contract, Deal
++from tests.factories import act, read
++from tests.partners_factories import (
++    MANAGER,
++    MANAGER_2,
++    active_contract,
++    closed_deal,
++    contract,
++    deal,
++    get,
++    onboard,
++)
++
++
++async def test_contract_not_activated_without_requisites() -> None:
++    partner_id, contract_id = await onboard(complete=False)
++    with pytest.raises(DomainError, match="не заполнены реквизиты: КПП, наименование"):
++        await act(partners.activate_contract, contract_id, MANAGER)
++    with pytest.raises(DBAPIError, match="incomplete requisites"):
++        async with db.sessionmaker().begin() as s:
++            await s.execute(update(Contract).where(Contract.id == contract_id).values(status="active"))
++
++    await act(partners.update_requisites, partner_id, MANAGER, kpp="770101001", legal_name="АО «Чтение»")
++    activated = await act(partners.activate_contract, contract_id, MANAGER)
++    assert activated.status == "active"
++    assert activated.activated_at is not None
++
++
++async def test_required_requisites_cannot_be_cleared_on_active_contract() -> None:
++    partner_id, _ = await active_contract()
++    with pytest.raises(DomainError, match="обязательные реквизиты"):
++        await act(partners.update_requisites, partner_id, MANAGER, legal_name="")
++    with pytest.raises(DomainError, match="нельзя изменить поля: inn"):
++        await act(partners.update_requisites, partner_id, MANAGER, inn="7700000017")
++    await act(partners.update_requisites, partner_id, MANAGER, contact_phone="+7 495 000-00-00")
++
++
++async def test_contract_managed_only_by_partner_manager() -> None:
++    _, contract_id = await onboard()
++    with pytest.raises(AccessDenied):
++        await act(partners.activate_contract, contract_id, MANAGER_2)
++    with pytest.raises(AccessDenied):
++        await act(partners.change_commission_rate, contract_id, MANAGER_2, Decimal(5))
++
++
++async def test_commission_rate_bounds() -> None:
++    _, contract_id = await active_contract()
++    with pytest.raises(DomainError, match="ставка комиссии"):
++        await act(partners.change_commission_rate, contract_id, MANAGER, Decimal(31))
++    with pytest.raises(DomainError, match="лимит кредита выше"):
++        await act(partners.set_credit_terms, contract_id, MANAGER, allowed=True, limit=Decimal(600_000))
++
++
++async def test_deal_without_credit_needs_prepayment() -> None:
++    _, contract_id = await active_contract()
++    deal_id = await deal(contract_id, 1000, prepay=False)
++    d = await get(Deal, deal_id)
++    assert (d.status, d.on_credit, d.due_at) == ("awaiting_prepayment", False, None)
++    with pytest.raises(DomainError, match="после предоплаты"):
++        await act(partners.close_deal, deal_id, MANAGER)
++
++    await act(partners.register_prepayment, deal_id, MANAGER)
++    await act(partners.close_deal, deal_id, MANAGER)
++    assert (await get(Deal, deal_id)).status == "closed"
++
++
++async def test_credit_deal_goes_without_prepayment() -> None:
++    _, contract_id = await active_contract(credit_limit=Decimal(5000))
++    deal_id = await deal(contract_id, 3000, prepay=False)
++    d = await get(Deal, deal_id)
++    assert (d.status, d.on_credit) == ("open", True)
++    assert d.due_at is not None
++    assert await read(partners.credit_exposure, contract_id) == Decimal(3000)
++
++
++async def test_credit_limit_blocks_new_deal() -> None:
++    _, contract_id = await active_contract(credit_limit=Decimal(5000))
++    await deal(contract_id, 3000)
++    with pytest.raises(DBAPIError, match="deal exceeds credit limit"):
++        await deal(contract_id, 2500)
++    await deal(contract_id, 2000)
++    assert await read(partners.credit_exposure, contract_id) == Decimal(5000)
++
++
++async def test_lowered_limit_blocks_all_deals_until_paid() -> None:
++    _, contract_id = await active_contract(credit_limit=Decimal(5000))
++    first = await closed_deal(contract_id, 4000)
++    await act(partners.set_credit_terms, contract_id, MANAGER, allowed=True, limit=Decimal(1000))
++    with pytest.raises(DBAPIError, match="new deals are blocked"):
++        await deal(contract_id, 100)
++
++    await act(partners.register_payment, first)
++    assert await read(partners.credit_exposure, contract_id) == Decimal(0)
++    await deal(contract_id, 900)
++
++
++async def test_terminated_contract_can_be_renewed() -> None:
++    partner_id, contract_id = await active_contract(credit_limit=Decimal(3000), pct=Decimal(15))
++    credit_deal = await closed_deal(contract_id, 1000)
++    pending = await deal(contract_id, 200)
++    with pytest.raises(DomainError, match="незакрытые сделки"):
++        await act(partners.terminate_contract, contract_id, MANAGER, "смена агентства")
++    await act(partners.cancel_deal, pending, MANAGER)
++    with pytest.raises(DomainError, match="задолженность"):
++        await act(partners.terminate_contract, contract_id, MANAGER, "смена агентства")
++
++    await act(partners.register_payment, credit_deal)
++    with pytest.raises(DomainError, match="действующий договор"):
++        await act(partners.renew_contract, partner_id, MANAGER)
++    await act(partners.terminate_contract, contract_id, MANAGER, "смена агентства")
++    assert (await contract(contract_id)).status == "terminated"
++
++    renewed = await act(partners.renew_contract, partner_id, MANAGER)
++    assert renewed.id != contract_id
++    assert renewed.number.endswith("-2")
++    assert (renewed.status, renewed.commission_pct, renewed.credit_limit) == (
++        "draft",
++        Decimal(15),
++        Decimal(3000),
++    )
++
++
++async def test_cancelled_deal_releases_credit() -> None:
++    _, contract_id = await active_contract(credit_limit=Decimal(1000))
++    deal_id = await deal(contract_id, 1000)
++    await act(partners.cancel_deal, deal_id, MANAGER)
++    assert await read(partners.credit_exposure, contract_id) == Decimal(0)
++    with pytest.raises(DomainError, match="уже оплачена или отменена"):
++        await act(partners.register_payment, deal_id)
+diff --git a/tests/test_partners_jobs.py b/tests/test_partners_jobs.py
+new file mode 100644
+index 0000000..2379a04
+--- /dev/null
++++ b/tests/test_partners_jobs.py
+@@ -0,0 +1,73 @@
++from datetime import timedelta
++from decimal import Decimal
++
++import pytest
++
++from libs import clock
++from libs.errors import DomainError
++from services.partners import jobs, settings
++from services.partners import service as partners
++from services.partners.models import Deal, OnboardingRequest
++from tests.factories import T0, act, travel
++from tests.partners_factories import active_contract, closed_deal, contract, deal, get, submit
++
++
++async def run(job) -> list[int]:
++    return await act(job, clock.now())
++
++
++async def test_overdue_credit_suspends_contract() -> None:
++    _, contract_id = await active_contract(credit_limit=Decimal(10_000))
++    deal_id = await closed_deal(contract_id, 1000)
++
++    travel(T0 + timedelta(days=settings.CREDIT_PAYMENT_DAYS - 1))
++    assert await run(jobs.flag_overdue_credit) == []
++
++    travel(T0 + timedelta(days=settings.CREDIT_PAYMENT_DAYS, hours=1))
++    assert await run(jobs.flag_overdue_credit) == [deal_id]
++    assert await run(jobs.flag_overdue_credit) == []
++    c = await contract(contract_id)
++    assert (c.status, c.suspend_reason) == ("suspended", "credit_overdue")
++    with pytest.raises(DomainError, match="приостановлен"):
++        await deal(contract_id, 100)
++
++
++async def test_paying_all_overdue_deals_resumes_contract() -> None:
++    _, contract_id = await active_contract(credit_limit=Decimal(10_000))
++    first = await closed_deal(contract_id, 1000)
++    second = await closed_deal(contract_id, 2000)
++    travel(T0 + timedelta(days=settings.CREDIT_PAYMENT_DAYS + 1))
++    await run(jobs.flag_overdue_credit)
++
++    await act(partners.register_payment, first)
++    assert (await contract(contract_id)).status == "suspended"
++    await act(partners.register_payment, second)
++    assert (await contract(contract_id)).status == "active"
++    await deal(contract_id, 100)
++
++
++async def test_contract_expires_after_term() -> None:
++    _, contract_id = await active_contract()
++    pending = await deal(contract_id, 500, prepay=False)
++    c = await contract(contract_id)
++
++    travel(T0 + timedelta(days=settings.CONTRACT_TERM_DAYS))
++    assert await run(jobs.expire_contracts) == []
++    travel(T0 + timedelta(days=settings.CONTRACT_TERM_DAYS + 1))
++    assert await run(jobs.expire_contracts) == [contract_id]
++    assert (await contract(contract_id)).status == "expired"
++    assert (await get(Deal, pending)).status == "cancelled"
++    assert c.valid_to == T0.date() + timedelta(days=settings.CONTRACT_TERM_DAYS)
++
++
++async def test_stale_requests_expire() -> None:
++    old = await submit()
++    travel(T0 + timedelta(days=10))
++    fresh = await submit()
++
++    travel(T0 + timedelta(days=settings.ONBOARDING_REQUEST_TTL_DAYS + 1))
++    assert await run(jobs.expire_requests) == [old.id]
++    assert (await get(OnboardingRequest, old.id)).status == "expired"
++    assert (await get(OnboardingRequest, fresh.id)).status == "open"
++    # после истечения агентство может подать заявку заново
++    await submit(old.inn)
+diff --git a/tests/test_partners_onboarding.py b/tests/test_partners_onboarding.py
+new file mode 100644
+index 0000000..9d8d2e6
+--- /dev/null
++++ b/tests/test_partners_onboarding.py
+@@ -0,0 +1,90 @@
++import pytest
++from sqlalchemy.exc import IntegrityError
++
++from libs import clock, db
++from libs.errors import DomainError
++from services.partners import service as partners
++from services.partners import settings
++from services.partners.models import Contract, OnboardingRequest, Partner
++from tests.factories import act
++from tests.partners_factories import (
++    KPP,
++    MANAGER,
++    get,
++    make_inn,
++    onboard,
++    requests_for,
++    submit,
++)
++
++
++async def test_request_with_bad_inn_is_refused() -> None:
++    inn = make_inn()
++    broken = inn[:-1] + str((int(inn[-1]) + 1) % 10)
++    with pytest.raises(DomainError, match="ИНН"):
++        await submit(broken)
++    with pytest.raises(DomainError, match="КПП"):
++        await submit(kpp="12345")
++
++
++async def test_approved_request_creates_partner_with_draft_contract() -> None:
++    inn = make_inn()
++    partner_id, contract_id = await onboard(inn)
++
++    partner = await get(Partner, partner_id)
++    assert (partner.inn, partner.kpp, partner.manager_id) == (inn, KPP, MANAGER)
++    contract = await get(Contract, contract_id)
++    assert contract.status == "draft"
++    assert contract.commission_pct == settings.DEFAULT_COMMISSION_PCT
++    assert contract.credit_allowed is False
++    [req] = await requests_for(inn)
++    assert (req.status, req.partner_id, req.decided_by) == ("approved", partner_id, MANAGER)
++
++
++async def test_new_request_supersedes_open_one() -> None:
++    inn = make_inn()
++    first = await submit(inn, complete=False)
++    second = await submit(inn, legal_name="ООО «Книжный агент»", kpp=KPP)
++
++    rows = await requests_for(inn)
++    assert [(r.id, r.status) for r in rows] == [(first.id, "duplicate"), (second.id, "open")]
++    assert rows[0].decided_at == clock.now()
++
++
++async def test_only_one_open_request_per_inn_in_database() -> None:
++    inn = make_inn()
++    await submit(inn)
++    with pytest.raises(IntegrityError, match="ux_onboarding_requests_open_inn"):
++        async with db.sessionmaker().begin() as s:
++            s.add(
++                OnboardingRequest(
++                    inn=inn, contact_name="Дубль", contact_email="dup@example.org", submitted_at=clock.now()
++                )
++            )
++
++
++async def test_close_duplicates_keeps_given_request() -> None:
++    inn = make_inn()
++    req = await submit(inn)
++    assert await act(partners.close_duplicates, inn, keep_id=req.id) == []
++    assert (await get(OnboardingRequest, req.id)).status == "open"
++
++    assert await act(partners.close_duplicates, inn) == [req.id]
++    assert (await get(OnboardingRequest, req.id)).status == "duplicate"
++
++
++async def test_request_decided_only_once() -> None:
++    req = await submit()
++    with pytest.raises(DomainError, match="причину"):
++        await act(partners.reject_request, req.id, MANAGER, "  ")
++    await act(partners.reject_request, req.id, MANAGER, "нет лицензии")
++    with pytest.raises(DomainError, match="уже принято решение"):
++        await act(partners.approve_request, req.id, MANAGER)
++
++
++async def test_connected_partner_cannot_apply_again() -> None:
++    inn = make_inn()
++    partner_id, contract_id = await onboard(inn)
++    await act(partners.activate_contract, contract_id, MANAGER)
++    with pytest.raises(DomainError, match="уже подключён"):
++        await submit(inn)

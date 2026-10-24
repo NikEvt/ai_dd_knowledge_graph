@@ -1,0 +1,14 @@
+WARNING: drift: код правила изменился, текст правила не обновлён -> suspect: R-APP-PAY-03 (services/applications/consumers.py::on_fully_paid)
+WARNING: drift: код правила изменился, текст правила не обновлён -> suspect: R-APP-DEDUP-01 (services/applications/dedup.py::close_duplicates)
+WARNING: drift: код правила изменился, текст правила не обновлён -> suspect: R-APP-DEDUP-01 (services/applications/consumers.py::on_review_passed)
+WARNING: drift: код правила изменился, текст правила не обновлён -> suspect: R-APP-DEDUP-01 (services/applications/consumers.py::on_fully_paid)
+WARNING: drift: код правила изменился, текст правила не обновлён -> suspect: R-BILL-PROCESS-01 (services/applications/consumers.py::on_fully_paid)
+## Модель знаний: drift и покрытие
+
+- правил: 162 (draft: 140, verified: 22)
+- drift (-> suspect): 5
+- без implemented_by/enforced_by_db: 7
+- без tested_by: 82
+- ограничения БД без правил: 0 из 48
+- suspect старше 14 дней: 0
+

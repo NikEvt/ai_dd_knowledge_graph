@@ -1,0 +1,70 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 10751d8..35fd8c9 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -99,7 +99,7 @@ args = ["run", "--quiet", "python", "mcp/knowledge_server.py"]
+ 
+ Сущности: `applications.application_books`, `applications.applications`, `applications.attempts`, `applications.books`, `applications.clients`, `applications.prices`, `applications.representatives`, `applications.spheres`, `applications.venue_spheres`, `applications.venues`, `billing.accountant_assignments`, `billing.fine_rates`, `billing.fines`, `billing.invoices`, `billing.payments`, `chat.messages`, `events.outbox`, `notifications.emails`, `notifications.templates`, `scheduling.booking_links`, `scheduling.bookings`, `scheduling.holds`, `scheduling.loans`, `scheduling.slots`, `scheduling.venue_limits`.
+ 
+-События: `application.archived`, `application.closed_duplicate`, `application.ready_for_booking`, `application.review_passed`, `application.stage_changed`, `application.unarchived`, `application.venue_changed`, `booking.cancelled`, `booking.created`, `books.issued`, `client.updated`, `invoice.cancelled`, `invoice.issued`, `loan.damaged`, `loan.lost`, `loan.overdue`, `payment.fully_paid`, `payment.linked`, `payment.refunded`, `venue.settings_changed`.
++События: `application.archived`, `application.closed_duplicate`, `application.duplicate_closed`, `application.ready_for_booking`, `application.review_passed`, `application.stage_changed`, `application.unarchived`, `application.venue_changed`, `booking.cancelled`, `booking.created`, `books.issued`, `client.updated`, `invoice.cancelled`, `invoice.issued`, `loan.damaged`, `loan.lost`, `loan.overdue`, `payment.fully_paid`, `payment.linked`, `payment.refunded`, `venue.settings_changed`.
+ 
+ Правил в модели: 162 (draft: 140, verified: 22).
+ <!-- END L0 -->
+diff --git a/docs/README.md b/docs/README.md
+index b1bc15a..833b9b7 100644
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -26,7 +26,7 @@
+ | config | 21 |
+ | db_constraint | 50 |
+ | effect | 3 |
+-| event | 20 |
++| event | 21 |
+ | job | 2 |
+ | role | 6 |
+ | rule | 162 |
+diff --git a/docs/events.md b/docs/events.md
+index 9622316..b3eda85 100644
+--- a/docs/events.md
++++ b/docs/events.md
+@@ -16,10 +16,11 @@ flowchart LR
+     application_archived --> service_chat
+     application_archived --> service_scheduling
+     application_closed_duplicate([application.closed_duplicate])
+-    service_applications --> application_closed_duplicate
+     application_closed_duplicate --> service_billing
+     application_closed_duplicate --> service_chat
+     application_closed_duplicate --> service_scheduling
++    application_duplicate_closed([application.duplicate_closed])
++    service_applications --> application_duplicate_closed
+     application_ready_for_booking([application.ready_for_booking])
+     service_applications --> application_ready_for_booking
+     application_ready_for_booking --> service_scheduling
+@@ -87,7 +88,8 @@ flowchart LR
+ | Событие | Публикует | Обрабатывает | Данные | Эффекты |
+ |---|---|---|---|---|
+ | `application.archived` | [`service.py::archive`](../services/applications/service.py#L246) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_archived`](../services/scheduling/consumers.py#L25) | application_id, outcome | effect:chat.event_log |
+-| `application.closed_duplicate` | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) | [`consumers.py::on_closed_duplicate`](../services/billing/consumers.py#L20)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_closed_duplicate`](../services/scheduling/consumers.py#L30) | application_id, winner_id | effect:chat.event_log |
++| `application.closed_duplicate` | — | [`consumers.py::on_closed_duplicate`](../services/billing/consumers.py#L20)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_closed_duplicate`](../services/scheduling/consumers.py#L30) |  | effect:chat.event_log |
++| `application.duplicate_closed` | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) | — | application_id, winner_id | — |
+ | `application.ready_for_booking` | [`service.py::mark_ready_for_booking`](../services/applications/service.py#L157) | [`consumers.py::on_ready_for_booking`](../services/scheduling/consumers.py#L12) | application_id, sphere_id, venue_id | — |
+ | `application.review_passed` | [`service.py::approve`](../services/applications/service.py#L167) | [`consumers.py::on_review_passed`](../services/applications/consumers.py#L43) | application_id, kind | — |
+ | `application.stage_changed` | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) | [`consumers.py::_handler`](../services/chat/consumers.py#L23) | application_id, from, to | effect:chat.event_log |
+diff --git a/docs/reconciliation.md b/docs/reconciliation.md
+index f987325..67d7529 100644
+--- a/docs/reconciliation.md
++++ b/docs/reconciliation.md
+@@ -57,9 +57,10 @@
+ 
+ - services/scheduling/jobs.py::flag_overdue:16: литерал 30 совпадает с libs/settings.py::LOAN_PERIOD_DAYS, libs/settings.py::REVIEW_ARCHIVE_DAYS, libs/settings.py::PAYMENT_ARCHIVE_DAYS (вероятно libs/settings.py::LOAN_PERIOD_DAYS)
+ 
+-### События без подписчиков или публикаторов (0)
++### События без подписчиков или публикаторов (2)
+ 
+-- нет
++- application.closed_duplicate: нет публикаторов
++- application.duplicate_closed: нет подписчиков
+ 
+ ### Модули с обработчиками вне services/wiring.py (0)
+ 

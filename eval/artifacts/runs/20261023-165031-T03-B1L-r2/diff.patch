@@ -1,0 +1,552 @@
+diff --git a/bpm/application_process.yaml b/bpm/application_process.yaml
+index 1fda775..eb9ea36 100644
+--- a/bpm/application_process.yaml
++++ b/bpm/application_process.yaml
+@@ -26,7 +26,7 @@ transitions:
+ 
+   - {from: awaiting_invoice, to: awaiting_payment, actor: accountant, kinds: [paid]}
+   - {from: awaiting_payment, to: awaiting_invoice, actor: system, kinds: [paid]}
+-  - {from: awaiting_payment, to: awaiting_issue, actor: system, kinds: [paid], guard: fully_paid}
++  - {from: awaiting_payment, to: awaiting_issue, actor: system, kinds: [paid], guard: issue_share_paid}
+ 
+   # Обновление данных клиента возвращает на проверку заявки, не дошедшие до записи.
+   - {from: [awaiting_invoice, awaiting_payment], to: on_review, actor: system}
+diff --git a/docs/config.md b/docs/config.md
+index a583dd7..bf83f41 100644
+--- a/docs/config.md
++++ b/docs/config.md
+@@ -8,6 +8,7 @@
+ |---|---|---|---|
+ | [`engine.py::PROCESS_FILE`](../libs/bpm/engine.py#L13) | `Path(__file__).resolve().parents[2] / 'bpm' / 'application_process.yaml'` |  | [`engine.py::process`](../libs/bpm/engine.py#L33) |
+ | [`relay.py::STREAM_PREFIX`](../libs/events/relay.py#L13) | `events:` |  | [`relay.py::consume_forever`](../libs/events/relay.py#L39)<br>[`relay.py::relay_forever`](../libs/events/relay.py#L16) |
++| [`settings.py::BOOKS_ISSUE_SHARE`](../services/billing/settings.py#L4) | `Decimal('0.5')` | Доля счёта за книги, после оплаты которой платная заявка переходит к записи на выдачу. | [`public.py::issue_threshold`](../services/billing/public.py#L23) → [`guards.py::issue_share_paid`](../services/billing/guards.py#L10)<br>[`service.py::link_payment`](../services/billing/service.py#L98)<br>[`jobs.py::archive_stale`](../services/applications/jobs.py#L14) |
+ | [`settings.py::CLIENT_RESCHEDULE_MIN_DAYS`](../libs/settings.py#L14) | `2` | Клиент может перенести или отменить визит не позднее чем за столько дней. | [`service.py::cancel_booking`](../services/scheduling/service.py#L193) |
+ | [`settings.py::DATABASE_URL`](../libs/settings.py#L4) | `os.environ.get('DATABASE_URL', f'postgresql+asyncpg://erp:erp@localhost:{DB_POR…` |  | [`db.py::engine`](../libs/db.py#L27) |
+ | [`settings.py::DB_PORT`](../libs/settings.py#L3) | `os.environ.get('DB_PORT', '55432')` |  | — |
+diff --git a/docs/entities/applications.applications.md b/docs/entities/applications.applications.md
+index 72629cd..971154a 100644
+--- a/docs/entities/applications.applications.md
++++ b/docs/entities/applications.applications.md
+@@ -46,7 +46,7 @@
+ ## Пишут (код)
+ - services/applications/consumers.py::on_books_issued [stage]
+ - services/applications/consumers.py::on_client_updated [stage]
+-- services/applications/consumers.py::on_fully_paid [stage]
++- services/applications/consumers.py::on_issue_share_paid [stage]
+ - services/applications/consumers.py::on_invoice_cancelled [stage]
+ - services/applications/consumers.py::on_invoice_issued [stage]
+ - services/applications/dedup.py::close_duplicates [stage]
+@@ -78,7 +78,7 @@
+ - R-APP-ISSUE-01 [draft] Выдача книг переводит заявку в «Книги у клиента»
+ - R-APP-PAY-01 [draft] Выставление счёта за книги переводит заявку в ожидание оплаты
+ - R-APP-PAY-02 [draft] Аннулирование счёта за книги возвращает заявку в ожидание счёта
+-- R-APP-PAY-03 [draft] Только полная оплата счёта за книги открывает выдачу
++- R-APP-PAY-03 [draft] Выдачу открывает оплата не менее половины счёта за книги
+ - R-APP-REVIEW-01 [draft] Отправка на проверку фиксирует начало проверки один раз
+ - R-APP-REVIEW-02 [draft] Проверяющего назначают только до прохождения проверки
+ - R-APP-REVIEW-03 [draft] Подтверждает или возвращает заявку только назначенный проверяющий
+@@ -93,6 +93,6 @@
+ - R-APP-VENUE-CHANGE-03 [draft] Смена площадки переназначает проверяющего оператора и запускает реакции billing, scheduling и chat
+ - R-BILL-CANCEL-03 [draft] Аннулирование счёта за книги возвращает заявку в «Ожидает счёта»
+ - R-BILL-INVOICE-08 [verified] Выставление счёта за книги переводит заявку в «Ожидает оплаты»
+-- R-BILL-PROCESS-01 [draft] Полная оплата счёта за книги открывает выдачу и закрывает дубли
++- R-BILL-PROCESS-01 [draft] Оплата половины счёта за книги открывает выдачу и закрывает дубли
+ - R-SCHED-ISSUE-03 [draft] После выдачи — запись выполнена, книги откреплены, ссылка на сдачу, этап «Книги у клиента»
+ - R-SCHEMA-APP-01 [draft] Оператора заявки переназначить нельзя
+diff --git a/docs/entities/applications.attempts.md b/docs/entities/applications.attempts.md
+index b77801d..542003c 100644
+--- a/docs/entities/applications.attempts.md
++++ b/docs/entities/applications.attempts.md
+@@ -30,7 +30,7 @@
+ ## Правила
+ - R-APP-ACCESS-01 [draft] Оператор работает только со своими заявками
+ - R-APP-ARCHIVE-01 [draft] Заявка, застрявшая на проверке или доработке дольше REVIEW_ARCHIVE_DAYS, уходит в архив
+-- R-APP-ARCHIVE-02 [draft] Платная заявка без полной оплаты дольше PAYMENT_ARCHIVE_DAYS уходит в архив
++- R-APP-ARCHIVE-02 [draft] Платная заявка, оплаченная меньше чем на половину, дольше PAYMENT_ARCHIVE_DAYS уходит в архив
+ - R-APP-ARCHIVE-03 [draft] Ручной архив и его последствия — закрытие попытки, сброс записей, сообщение в чат
+ - R-APP-CREATE-01 [draft] Вид заявки определяется при создании по флагу «социальная» и признаку долга представителя
+ - R-APP-CREATE-02 [draft] Сфера заявки должна быть активна на площадке
+diff --git a/docs/events.md b/docs/events.md
+index c9993e8..e1897fb 100644
+--- a/docs/events.md
++++ b/docs/events.md
+@@ -126,7 +126,9 @@ flowchart LR
+     partners_request_submitted([partners.request_submitted])
+     payment_fully_paid([payment.fully_paid])
+     service_billing --> payment_fully_paid
+-    payment_fully_paid --> service_applications
++    payment_issue_share_paid([payment.issue_share_paid])
++    service_billing --> payment_issue_share_paid
++    payment_issue_share_paid --> service_applications
+     payment_linked([payment.linked])
+     service_billing --> payment_linked
+     payment_linked --> service_chat
+@@ -235,7 +237,8 @@ flowchart LR
+ | `partners.request_closed_duplicate` | [`service.py::close_duplicates`](../services/partners/service.py#L57) | — | inn, request_id, superseded_by | — |
+ | `partners.request_rejected` | [`service.py::reject_request`](../services/partners/service.py#L130) | — | reason, request_id | — |
+ | `partners.request_submitted` | [`service.py::submit_request`](../services/partners/service.py#L76) | — | inn, request_id | — |
+-| `payment.fully_paid` | [`service.py::link_payment`](../services/billing/service.py#L98) | [`consumers.py::on_fully_paid`](../services/applications/consumers.py#L31) | application_id, invoice_id, invoice_kind | — |
++| `payment.fully_paid` | [`service.py::link_payment`](../services/billing/service.py#L98) | — | application_id, invoice_id, invoice_kind | — |
++| `payment.issue_share_paid` | [`service.py::link_payment`](../services/billing/service.py#L98) | [`consumers.py::on_issue_share_paid`](../services/applications/consumers.py#L31) | application_id, invoice_id | — |
+ | `payment.linked` | [`service.py::link_payment`](../services/billing/service.py#L98) | [`consumers.py::_handler`](../services/chat/consumers.py#L23) | amount, application_id, invoice_id | effect:chat.event_log |
+ | `payment.refunded` | [`service.py::refund_payment`](../services/billing/service.py#L143) | [`consumers.py::on_payment_refunded`](../services/applications/consumers.py#L73) | application_id, invoice_id, invoice_kind, reason | — |
+ | `reports.definition_deactivated` | [`service.py::deactivate_definition`](../services/reports/service.py#L166) | [`consumers.py::on_definition_deactivated`](../services/reports/consumers.py#L44) | code, definition_id | — |
+diff --git a/docs/process.md b/docs/process.md
+index 78ab9c1..f4f8f7e 100644
+--- a/docs/process.md
++++ b/docs/process.md
+@@ -40,7 +40,7 @@ stateDiagram-v2
+     awaiting_issue --> closed_duplicate: system
+     awaiting_payment --> archived: system [paid]; operator
+     awaiting_payment --> awaiting_invoice: system [paid]
+-    awaiting_payment --> awaiting_issue: system [paid] guard fully_paid
++    awaiting_payment --> awaiting_issue: system [paid] guard issue_share_paid
+     awaiting_payment --> closed_duplicate: system
+     awaiting_payment --> on_review: system
+     books_out --> closed: site_checker guard settled
+@@ -73,7 +73,7 @@ stateDiagram-v2
+ | [`awaiting_issue->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+ | [`awaiting_payment->archived`](../bpm/application_process.yaml#L38) | system [paid]; operator | [`service.py::archive`](../services/applications/service.py#L246) |
+ | [`awaiting_payment->awaiting_invoice`](../bpm/application_process.yaml#L28) | system [paid] | [`consumers.py::on_invoice_cancelled`](../services/applications/consumers.py#L22) |
+-| [`awaiting_payment->awaiting_issue`](../bpm/application_process.yaml#L29) | system [paid] guard fully_paid | [`consumers.py::on_fully_paid`](../services/applications/consumers.py#L31) |
++| [`awaiting_payment->awaiting_issue`](../bpm/application_process.yaml#L29) | system [paid] guard issue_share_paid | [`consumers.py::on_issue_share_paid`](../services/applications/consumers.py#L31) |
+ | [`awaiting_payment->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+ | [`awaiting_payment->on_review`](../bpm/application_process.yaml#L32) | system | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L51) |
+ | [`books_out->closed`](../bpm/application_process.yaml#L35) | site_checker guard settled | [`service.py::close`](../services/applications/service.py#L307) |
+@@ -92,6 +92,6 @@ stateDiagram-v2
+ 
+ ## Условия переходов (guard)
+ 
+-- `guard:fully_paid` → [`services/billing/guards.py::fully_paid`](../services/billing/guards.py#L10)
++- `guard:issue_share_paid` → [`services/billing/guards.py::issue_share_paid`](../services/billing/guards.py#L10)
+ - `guard:has_active_invoice` → [`services/billing/guards.py::has_active_invoice`](../services/billing/guards.py#L16)
+ - `guard:settled` → [`services/applications/guards.py::settled`](../services/applications/guards.py#L10) — Все книги возвращены или списаны, штрафы погашены.
+diff --git a/docs/reconciliation.md b/docs/reconciliation.md
+index 2cd6fe9..2aea151 100644
+--- a/docs/reconciliation.md
++++ b/docs/reconciliation.md
+@@ -9,7 +9,7 @@
+ 
+ | ID | Важность | Расхождение | Схема | Код / БД | Правила | Вопрос |
+ |---|---|---|---|---|---|---|
+-| D-01 | high | Дедупликация закрывает заявку, которая уже дошла до записи | §6: остаётся та заявка, что первой дошла до записи (платная — при полной оплате, в долг — при прохождении проверки) | services/applications/dedup.py::OPEN_STAGES:10 включает awaiting_issue; dedup.py::close_duplicates:25 вызывается из consumers.py::on_review_passed:43 и on_fully_paid:31 без проверки, что у других заявок booking_reached_at пуст<br>БД: ix_applications_client_sphere — обычный индекс, не уникальный | R-APP-DEDUP-01, R-APP-DEDUP-02, R-BILL-PROCESS-01 | Если у клиента уже есть оплаченная заявка на «Ожидает выдачи», должна ли более поздняя заявка в долг закрыться сама как дубль, а не закрывать оплаченную? |
++| D-01 | high | Дедупликация закрывает заявку, которая уже дошла до записи | §6: остаётся та заявка, что первой дошла до записи (платная — при оплате не менее половины счёта за книги, в долг — при прохождении проверки) | services/applications/dedup.py::OPEN_STAGES:10 включает awaiting_issue; dedup.py::close_duplicates:25 вызывается из consumers.py::on_review_passed:43 и on_issue_share_paid:31 без проверки, что у других заявок booking_reached_at пуст<br>БД: ix_applications_client_sphere — обычный индекс, не уникальный | R-APP-DEDUP-01, R-APP-DEDUP-02, R-BILL-PROCESS-01 | Если у клиента уже есть оплаченная заявка на «Ожидает выдачи», должна ли более поздняя заявка в долг закрыться сама как дубль, а не закрывать оплаченную? |
+ | D-02 | high | Ссылка на запись нигде не отправляется клиенту | §13: ссылка формируется и уходит на «Ожидает выдачи» и когда книги у клиента; §1: клиент работает только по ссылке из письма | services/scheduling/consumers.py::on_ready_for_booking:12 и scheduling/service.py::issue_books:223 создают ссылку; notifications подписан только на booking.created и booking.cancelled (notifications/consumers.py:9,20)<br>БД: emails_type_check, templates_type_check — только booking и cancel | R-SCHEMA-NOTIF-01, R-SCHEMA-NOTIF-02, R-SCHED-LINK-01, R-NOTIF-TYPES-01, R-NOTIF-RENDER-02 | Как клиент получает токен ссылки — нужен ли тип письма «ссылка на запись» (за книгами и на сдачу), в том числе после смены площадки? |
+ | D-03 | high | Роли и закрепление сотрудников в большинстве действий не проверяются | §2, §3, §17: проверяющего назначает только руководитель проверяющих; привязку, отвязку и возврат платежа выполняет только главный бухгалтер; аннулирует счёт закреплённый бухгалтер; данные клиента обновляет проверяющий | applications/service.py::assign_reviewer:122 (без исполнителя); update_client:131 (без source_application_id проверки нет); billing/service.py::link_payment:98 (chief_id из тела запроса), unlink_payment:132, refund_payment:143, cancel_invoice:75 (без исполнителя); chat/api.py::list_:35 (role из query) | R-APP-REVIEW-02, R-APP-CLIENT-01, R-BILL-PAYMENT-03, R-BILL-REFUND-01, R-BILL-UNLINK-01, R-BILL-CANCEL-02, R-CHAT-AUTH-01, R-SCHEMA-ROLE-01 | Где должна проверяться роль — в сервисах (тогда нужен справочник сотрудников) или во внешнем шлюзе аутентификации, которому сервисы доверяют? |
+ | D-04 | high | Ограничение «за два дня» и признак оператора обходятся параметром запроса | §2 Клиент, §13: менее чем за два дня переносит или отменяет только оператор; оператор записывает в системе, клиент и представитель — по ссылке | services/scheduling/api.py::cancel:41 — by из query; scheduling/service.py::cancel_booking:193 доверяет by; api.py::book:35 — booked_by=operator принимается от любого обладателя токена<br>БД: bookings_booked_by_check — только допустимые значения, не источник | R-SCHED-CANCEL-02, R-SCHED-BOOK-03, R-SCHED-RESCHEDULE-01 | Нужно ли закрыть публичным эндпоинтам значения by и booked_by, отличные от client и representative, и пускать оператора только через book_by_operator с проверкой закрепления? |
+@@ -174,7 +174,7 @@
+ - R-BILL-REFUND-01: Схема: возврат оформляет только главный бухгалтер. Код не проверяет роль, повторный возврат и возврат отвязанного платежа. Статус штрафа (paid) при возврате платежа по счёту на штраф обратно не меняется.
+ - R-BILL-UNARCHIVE-01: Решение «сумма изменилась» принимает публикатор (флаг amount_changed), billing сумму не пересчитывает. Если amount_changed=true, а по счёту есть частичная оплата, cancel_invoice поднимет DomainError внутри обработчика события.
+ - R-BILL-UNLINK-01: Код не проверяет роль главного бухгалтера и не публикует событие. Если отвязать платёж после полной оплаты, заявка остаётся в «Ожидает выдачи», а оплаченный по нему штраф — в статусе paid. Повторная отвязка перезаписывает unlinked_at и причину.
+-- R-BILL-VENUE-CHANGE-01: Схема: после оплаты площадку меняют только через возврат платежа. Код: счёт с частичной оплатой подписчик не аннулирует и ошибку не поднимает. Если смена площадки прошла (запрет в applications рассчитан на полную оплату), счёт остаётся на реквизитах и цене старой площадки. Счета на штрафы при смене площадки не трогаются.
++- R-BILL-VENUE-CHANGE-01: Схема: после оплаты площадку меняют только через возврат платежа. Код: счёт с частичной оплатой подписчик не аннулирует и ошибку не поднимает. Если смена площадки прошла (запрет в applications действует с этапа «Ожидает выдачи», то есть с оплаты половины счёта), счёт остаётся на реквизитах и цене старой площадки. Счета на штрафы при смене площадки не трогаются.
+ - R-CHAT-AUTH-01: Схема: доступ к чату определяется ролью сотрудника и закреплением за заявкой. Код: роль приходит от клиента API — если передать role=admin, проверка участника для чтения отключается.
+ - R-CHAT-EVENTS-06: Схема называет перенос и неявку отдельными событиями чата. Код: перенос не отличить от отмены с новой записью, неявка показывается кодом причины «no_show» внутри текста об отмене.
+ - R-CHAT-EVENTS-07: Схема: в чат автоматически попадают все события заявки, включая назначения и платежи. Код: назначения, возврат и отвязка платежа, порча и утеря книг в чате не фиксируются.
+diff --git a/docs/roles.md b/docs/roles.md
+index 0f69d8d..a8ac972 100644
+--- a/docs/roles.md
++++ b/docs/roles.md
+@@ -100,7 +100,7 @@
+ - R-BILL-PAYMENT-01 [draft] Платёж нельзя привязать к аннулированному счёту
+ - R-BILL-PAYMENT-03 [verified] Привязка платежа фиксирует, кто привязал; переплата помечается флагом
+ - R-BILL-PAYMENT-04 [draft] Полная оплата публикуется один раз — когда сумма впервые достигает суммы счёта
+-- R-BILL-PROCESS-01 [draft] Полная оплата счёта за книги открывает выдачу и закрывает дубли
++- R-BILL-PROCESS-01 [draft] Оплата половины счёта за книги открывает выдачу и закрывает дубли
+ - R-BILL-REFUND-01 [verified] Возврат платежа требует причины и исключает платёж из оплаченной суммы
+ - R-BILL-UNLINK-01 [draft] Отвязка платежа требует причины
+ - R-BILL-FINE-PAY-01 [draft] Полная оплата счёта на штраф гасит штраф
+@@ -218,9 +218,9 @@
+ - R-APP-CLIENT-02 [draft] Изменение ФИО, паспорта или даты рождения клиента публикует client.updated (слушатель ORM)
+ - R-APP-CLIENT-03 [draft] Обновление клиента возвращает его заявки из ожидания счёта или оплаты на проверку
+ - R-APP-PAY-02 [draft] Аннулирование счёта за книги возвращает заявку в ожидание счёта
+-- R-APP-PAY-03 [draft] Только полная оплата счёта за книги открывает выдачу
++- R-APP-PAY-03 [draft] Выдачу открывает оплата не менее половины счёта за книги
+ - R-APP-ARCHIVE-01 [draft] Заявка, застрявшая на проверке или доработке дольше REVIEW_ARCHIVE_DAYS, уходит в архив
+-- R-APP-ARCHIVE-02 [draft] Платная заявка без полной оплаты дольше PAYMENT_ARCHIVE_DAYS уходит в архив
++- R-APP-ARCHIVE-02 [draft] Платная заявка, оплаченная меньше чем на половину, дольше PAYMENT_ARCHIVE_DAYS уходит в архив
+ - R-APP-ARCHIVE-03 [draft] Ручной архив и его последствия — закрытие попытки, сброс записей, сообщение в чат
+ - R-APP-DEDUP-01 [draft] Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
+ - R-APP-DEDUP-02 [draft] Закрытие дубля аннулирует его неоплаченные счета и сбрасывает записи
+@@ -233,7 +233,7 @@
+ - R-BILL-DUPLICATE-01 [draft] Закрытие заявки как дубля аннулирует все её неоплаченные счета
+ - R-BILL-ARCHIVE-01 [draft] Неоплаченная платная заявка уходит в архив через PAYMENT_ARCHIVE_DAYS от начала отсчёта оплаты
+ - R-BILL-PAYMENT-02 [draft] Оплаченная сумма — сумма действующих платежей без отвязанных и возвращённых
+-- R-BILL-PROCESS-02 [verified] Guard fully_paid: действующий счёт за книги оплачен полностью
++- R-BILL-PROCESS-02 [draft] Guard issue_share_paid: действующий счёт за книги оплачен не менее чем на половину
+ - R-BILL-FINE-01 [draft] Просрочка, утеря и порча книги автоматически создают штраф
+ - R-BILL-FINE-02 [draft] Размер штрафа берётся из ставки по представителю, площадке и виду
+ - R-BILL-FINE-03 [draft] Штраф бывает только «открыт» или «оплачен»
+diff --git a/docs/rules/applications.md b/docs/rules/applications.md
+index 50fc264..d2ce6ea 100644
+--- a/docs/rules/applications.md
++++ b/docs/rules/applications.md
+@@ -205,14 +205,15 @@
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-APP-PAY-01, R-APP-VENUE-CHANGE-03
+ 
+-## R-APP-PAY-03 — Только полная оплата счёта за книги открывает выдачу
++## R-APP-PAY-03 — Выдачу открывает оплата не менее половины счёта за книги
+ 
+ `draft` · effect · §9 Виды заявок — Платная
+ 
+-По payment.fully_paid (invoice_kind=books) заявка в awaiting_payment переводится в awaiting_issue при выполнении guard fully_paid, отмечается готовой к записи и закрывает дубли клиента по сфере. Частичная оплата этап не меняет.
++По payment.issue_share_paid (публикуется, когда оплата счёта за книги впервые достигает BOOKS_ISSUE_SHARE = 50% его суммы) заявка в awaiting_payment переводится в awaiting_issue при выполнении guard issue_share_paid, отмечается готовой к записи (booking_reached_at, ссылка на запись) и закрывает дубли клиента по сфере. Оплата меньше половины этап не меняет; доплата остатка после перехода тоже. Счета на штрафы этим правилом не затрагиваются — они гасятся только полной оплатой (R-BILL-FINE-PAY-01).
+ 
+-- Реализация: [`services/applications/consumers.py::on_fully_paid:32-39`](../../services/applications/consumers.py#L32), [`awaiting_payment->awaiting_issue`](../../bpm/application_process.yaml#L29), [`guard:fully_paid`](../../bpm/application_process.yaml)
+-- Тесты: `tests/test_paid_flow.py::test_partial_payment_does_not_open_issue`, `tests/test_paid_flow.py::test_paid_application_full_path`
++- Реализация: [`services/applications/consumers.py::on_issue_share_paid:31-37`](../../services/applications/consumers.py#L31), [`awaiting_payment->awaiting_issue`](../../bpm/application_process.yaml#L29), [`guard:issue_share_paid`](../../bpm/application_process.yaml)
++- Настройки: `services/billing/settings.py::BOOKS_ISSUE_SHARE`
++- Тесты: `tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue`, `tests/test_paid_flow.py::test_half_payment_opens_issue`, `tests/test_paid_flow.py::test_paid_application_full_path`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-APP-BOOKING-01, R-APP-DEDUP-01
+ 
+@@ -302,16 +303,16 @@
+ - Связанные: R-APP-REVIEW-01, R-APP-ARCHIVE-03, R-APP-CLIENT-03
+ - ⚠ Расхождение со схемой: Схема: месяц. Код: фиксированные 30 дней из настройки. Схема §9 (платная): уходит в архив, если за месяц не получены данные для счёта — заявки на awaiting_invoice (без выставленного счёта) задача не архивирует никогда.
+ 
+-## R-APP-ARCHIVE-02 — Платная заявка без полной оплаты дольше PAYMENT_ARCHIVE_DAYS уходит в архив
++## R-APP-ARCHIVE-02 — Платная заявка, оплаченная меньше чем на половину, дольше PAYMENT_ARCHIVE_DAYS уходит в архив
+ 
+ `draft` · timer · §5 Архив и попытки
+ 
+-archive_stale архивирует платные заявки на awaiting_payment, если действующий счёт за книги оплачен не полностью и payment_clock_started_at старше PAYMENT_ARCHIVE_DAYS (30 дней); outcome=unpaid, actor system. Отсчёт идёт от выставления счёта или от возврата из архива.
++archive_stale архивирует платные заявки на awaiting_payment, если действующий счёт за книги оплачен меньше чем на BOOKS_ISSUE_SHARE (50%) и payment_clock_started_at старше PAYMENT_ARCHIVE_DAYS (30 дней); outcome=unpaid, actor system. Отсчёт идёт от выставления счёта или от возврата из архива.
+ 
+ - Реализация: [`services/applications/jobs.py::archive_stale:29-40`](../../services/applications/jobs.py#L29), [`awaiting_payment->archived`](../../bpm/application_process.yaml#L38)
+ - БД: [`attempts_outcome_check`](../../migrations/versions/0001_initial.py#L108)
+-- Настройки: `libs/settings.py::PAYMENT_ARCHIVE_DAYS`
+-- Тесты: `tests/test_archive.py::test_unpaid_invoice_goes_to_archive_after_month`
++- Настройки: `libs/settings.py::PAYMENT_ARCHIVE_DAYS`, `services/billing/settings.py::BOOKS_ISSUE_SHARE`
++- Тесты: `tests/test_archive.py::test_unpaid_invoice_goes_to_archive_after_month`, `tests/test_archive.py::test_invoice_paid_below_half_goes_to_archive_after_month`, `tests/test_archive.py::test_half_paid_invoice_is_not_archived`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-APP-ARCHIVE-03, R-APP-UNARCHIVE-03
+ - ⚠ Расхождение со схемой: Код архивирует и частично оплаченные заявки (paid_amount < amount) как unpaid; возврат поступившей части платежа при этом не инициируется — схема этот случай не описывает.
+@@ -368,7 +369,7 @@ unarchive сравнивает стоимость книг по прайсу п
+ 
+ close_duplicates вызывается при полной оплате платной заявки и при прохождении проверки заявки в долг (подписчик application.review_passed с kind=debt). Все другие заявки клиента по той же сфере на этапах OPEN_STAGES (включая awaiting_issue и archived) того же трека (не-social с не-social) переводятся в closed_duplicate; незакрытая попытка закрывается с outcome=duplicate.
+ 
+-- Реализация: [`services/applications/dedup.py::close_duplicates:26-50`](../../services/applications/dedup.py#L26), [`services/applications/dedup.py::_same_track:22-22`](../../services/applications/dedup.py#L22), [`services/applications/consumers.py::on_review_passed:44-47`](../../services/applications/consumers.py#L44), [`services/applications/consumers.py::on_fully_paid:39-39`](../../services/applications/consumers.py#L39), [`awaiting_issue->closed_duplicate`](../../bpm/application_process.yaml#L43)
++- Реализация: [`services/applications/dedup.py::close_duplicates:26-50`](../../services/applications/dedup.py#L26), [`services/applications/dedup.py::_same_track:22-22`](../../services/applications/dedup.py#L22), [`services/applications/consumers.py::on_review_passed:44-47`](../../services/applications/consumers.py#L44), [`services/applications/consumers.py::on_issue_share_paid:37-37`](../../services/applications/consumers.py#L37), [`awaiting_issue->closed_duplicate`](../../bpm/application_process.yaml#L43)
+ - БД: [`ix_applications_client_sphere`](../../migrations/versions/0001_initial.py#L94), [`attempts_outcome_check`](../../migrations/versions/0001_initial.py#L108)
+ - Настройки: `services/applications/dedup.py::OPEN_STAGES`
+ - Роли: Система (события и фоновые задачи)
+diff --git a/docs/rules/billing.md b/docs/rules/billing.md
+index f8af2c4..22d9dd7 100644
+--- a/docs/rules/billing.md
++++ b/docs/rules/billing.md
+@@ -181,7 +181,7 @@ cancel_invoice публикует invoice.cancelled. Подписчик applicat
+ - Тесты: `tests/test_venue_change.py::test_venue_change_before_payment_reissues_invoice`
+ - Роли: Оператор
+ - Связанные: R-BILL-CANCEL-03, R-BILL-CANCEL-01
+-- ⚠ Расхождение со схемой: Схема: после оплаты площадку меняют только через возврат платежа. Код: счёт с частичной оплатой подписчик не аннулирует и ошибку не поднимает. Если смена площадки прошла (запрет в applications рассчитан на полную оплату), счёт остаётся на реквизитах и цене старой площадки. Счета на штрафы при смене площадки не трогаются.
++- ⚠ Расхождение со схемой: Схема: после оплаты площадку меняют только через возврат платежа. Код: счёт с частичной оплатой подписчик не аннулирует и ошибку не поднимает. Если смена площадки прошла (запрет в applications действует с этапа «Ожидает выдачи», то есть с оплаты половины счёта), счёт остаётся на реквизитах и цене старой площадки. Счета на штрафы при смене площадки не трогаются.
+ 
+ ## R-BILL-DUPLICATE-01 — Закрытие заявки как дубля аннулирует все её неоплаченные счета
+ 
+@@ -238,7 +238,7 @@ paid_amount суммирует платежи счёта, у которых unli
+ 
+ - Реализация: [`services/billing/public.py::paid_amount:22-28`](../../services/billing/public.py#L22)
+ - БД: [`forbid_cancel_paid_invoice`](../../migrations/versions/0001_initial.py#L201)
+-- Тесты: `tests/test_paid_flow.py::test_partial_payment_does_not_open_issue`
++- Тесты: `tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-BILL-CANCEL-01, R-BILL-PROCESS-01
+ 
+@@ -261,30 +261,35 @@ link_payment сохраняет платёж с linked_at и linked_by (chief_id
+ 
+ link_payment публикует payment.fully_paid, только если до платежа оплачено меньше суммы счёта, а после — не меньше (before < amount <= after). Частичная оплата событие не порождает. Повторные платежи после полной оплаты тоже не порождают.
+ 
+-- Реализация: [`services/billing/service.py::link_payment:116-128`](../../services/billing/service.py#L116)
+-- Тесты: `tests/test_paid_flow.py::test_partial_payment_does_not_open_issue`
++По счёту за книги link_payment дополнительно публикует payment.issue_share_paid — один раз, когда оплата впервые достигает доли BOOKS_ISSUE_SHARE (50%) суммы счёта: before < amount × BOOKS_ISSUE_SHARE <= after. Если один платёж покрывает сразу и половину, и весь счёт, публикуются оба события. По счёту на штраф payment.issue_share_paid не публикуется.
++
++- Реализация: [`services/billing/service.py::link_payment:98`](../../services/billing/service.py#L98), [`services/billing/public.py::issue_threshold`](../../services/billing/public.py#L23)
++- Настройки: `services/billing/settings.py::BOOKS_ISSUE_SHARE`
++- Тесты: `tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue`, `tests/test_paid_flow.py::test_half_payment_opens_issue`
+ - Роли: Главный бухгалтер
+ - Связанные: R-BILL-PROCESS-01, R-BILL-FINE-PAY-01
+ 
+-## R-BILL-PROCESS-01 — Полная оплата счёта за книги открывает выдачу и закрывает дубли
++## R-BILL-PROCESS-01 — Оплата половины счёта за книги открывает выдачу и закрывает дубли
+ 
+ `draft` · effect · §6 Клиент и проверка данных
+ 
+-Подписчик applications on_fully_paid для счёта books переводит заявку из awaiting_payment в awaiting_issue (actor system), формирует ссылку на запись (mark_ready_for_booking) и закрывает заявки-дубли клиента по той же сфере (dedup.close_duplicates). Переход awaiting_payment->awaiting_issue защищён guard'ом fully_paid.
++Подписчик applications on_issue_share_paid (событие payment.issue_share_paid, публикуется только по счёту books) переводит заявку из awaiting_payment в awaiting_issue (actor system), формирует ссылку на запись (mark_ready_for_booking) и закрывает заявки-дубли клиента по той же сфере (dedup.close_duplicates). Это происходит в момент, когда привязанные платежи впервые покрывают не менее BOOKS_ISSUE_SHARE (50%) суммы счёта; доплата остатка этап не меняет. Переход awaiting_payment->awaiting_issue защищён guard'ом issue_share_paid. Полная оплата счёта за книги (payment.fully_paid) подписчиков в applications больше не имеет.
+ 
+-- Реализация: [`services/applications/consumers.py::on_fully_paid:31-39`](../../services/applications/consumers.py#L31), [`awaiting_payment->awaiting_issue`](../../bpm/application_process.yaml#L29), [`guard:fully_paid`](../../bpm/application_process.yaml)
+-- Тесты: `tests/test_paid_flow.py::test_paid_application_full_path`, `tests/test_paid_flow.py::test_partial_payment_does_not_open_issue`
++- Реализация: [`services/applications/consumers.py::on_issue_share_paid:31-37`](../../services/applications/consumers.py#L31), [`awaiting_payment->awaiting_issue`](../../bpm/application_process.yaml#L29), [`guard:issue_share_paid`](../../bpm/application_process.yaml)
++- Настройки: `services/billing/settings.py::BOOKS_ISSUE_SHARE`
++- Тесты: `tests/test_paid_flow.py::test_paid_application_full_path`, `tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue`, `tests/test_paid_flow.py::test_half_payment_opens_issue`, `tests/test_paid_flow.py::test_half_payment_closes_duplicates`
+ - Роли: Главный бухгалтер
+ - Связанные: R-BILL-PAYMENT-04, R-BILL-PROCESS-02, R-BILL-DUPLICATE-01
+ 
+-## R-BILL-PROCESS-02 — Guard fully_paid: действующий счёт за книги оплачен полностью
++## R-BILL-PROCESS-02 — Guard issue_share_paid: действующий счёт за книги оплачен не менее чем на половину
+ 
+-`verified` · guard · §9 Виды заявок / Платная
++`draft` · guard · §9 Виды заявок / Платная
+ 
+-Guard fully_paid истинен, если у заявки есть действующий счёт за книги и paid_amount не меньше его суммы. Им защищён переход awaiting_payment->awaiting_issue.
++Guard issue_share_paid истинен, если у заявки есть действующий счёт за книги и paid_amount не меньше amount × BOOKS_ISSUE_SHARE (50%, без округления). Им защищён переход awaiting_payment->awaiting_issue.
+ 
+-- Реализация: [`services/billing/guards.py::fully_paid:10-12`](../../services/billing/guards.py#L10), [`guard:fully_paid`](../../bpm/application_process.yaml), [`awaiting_payment->awaiting_issue`](../../bpm/application_process.yaml#L29)
+-- Тесты: `tests/test_paid_flow.py::test_partial_payment_does_not_open_issue`
++- Реализация: [`services/billing/guards.py::issue_share_paid:10-12`](../../services/billing/guards.py#L10), [`services/billing/public.py::issue_threshold`](../../services/billing/public.py#L23), [`guard:issue_share_paid`](../../bpm/application_process.yaml), [`awaiting_payment->awaiting_issue`](../../bpm/application_process.yaml#L29)
++- Настройки: `services/billing/settings.py::BOOKS_ISSUE_SHARE`
++- Тесты: `tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue`, `tests/test_paid_flow.py::test_half_payment_opens_issue`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-BILL-PROCESS-01, R-BILL-PAYMENT-02
+ 
+diff --git a/docs/rules/scheduling.md b/docs/rules/scheduling.md
+index 5697d25..161a3cb 100644
+--- a/docs/rules/scheduling.md
++++ b/docs/rules/scheduling.md
+@@ -86,7 +86,7 @@ reduce_capacity принимает только значение строго м
+ 
+ `draft` · effect · §13 Запись на визит и письма
+ 
+-На событие application.ready_for_booking (публикует mark_ready_for_booking при переходе в «Ожидает выдачи»: после проверки для debt/social, после полной оплаты для paid) модуль выпускает ссылку с purpose=issue.
++На событие application.ready_for_booking (публикует mark_ready_for_booking при переходе в «Ожидает выдачи»: после проверки для debt/social, после оплаты не менее половины счёта за книги для paid) модуль выпускает ссылку с purpose=issue.
+ 
+ - Реализация: [`services/scheduling/consumers.py::on_ready_for_booking:12-13`](../../services/scheduling/consumers.py#L12), [`services/scheduling/service.py::issue_link:79-86`](../../services/scheduling/service.py#L79)
+ - Тесты: `tests/test_paid_flow.py::test_paid_application_full_path`
+diff --git a/services/applications/consumers.py b/services/applications/consumers.py
+index 7066240..7c66c42 100644
+--- a/services/applications/consumers.py
++++ b/services/applications/consumers.py
+@@ -27,10 +27,8 @@ async def on_invoice_cancelled(session: AsyncSession, payload: dict[str, Any]) -
+         await bpm.transition(session, app, "awaiting_invoice", actor="system")
+ 
+ 
+-@subscribe("payment.fully_paid")
+-async def on_fully_paid(session: AsyncSession, payload: dict[str, Any]) -> None:
+-    if payload["invoice_kind"] != "books":
+-        return
++@subscribe("payment.issue_share_paid")
++async def on_issue_share_paid(session: AsyncSession, payload: dict[str, Any]) -> None:
+     app = await service.load(session, payload["application_id"])
+     if app.stage != "awaiting_payment":
+         return
+diff --git a/services/applications/jobs.py b/services/applications/jobs.py
+index 4ac40db..1282e89 100644
+--- a/services/applications/jobs.py
++++ b/services/applications/jobs.py
+@@ -33,7 +33,7 @@ async def archive_stale(session: AsyncSession, now: datetime) -> list[int]:
+     ).all()
+     for app in awaiting_payment:
+         invoice = await billing.active_books_invoice(session, app.id)
+-        if invoice is None or invoice.paid_amount >= invoice.amount:
++        if invoice is None or invoice.paid_amount >= billing.issue_threshold(invoice.amount):
+             continue
+         if invoice.payment_clock_started_at < now - timedelta(days=settings.PAYMENT_ARCHIVE_DAYS):
+             await service.archive(session, app.id, actor="system", outcome="unpaid")
+diff --git a/services/billing/guards.py b/services/billing/guards.py
+index f670542..9a44757 100644
+--- a/services/billing/guards.py
++++ b/services/billing/guards.py
+@@ -3,13 +3,13 @@ from typing import Any
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+ from libs.bpm import engine as bpm
+-from services.billing.public import active_books_invoice
++from services.billing.public import active_books_invoice, issue_threshold
+ 
+ 
+-@bpm.guard("fully_paid")
+-async def fully_paid(session: AsyncSession, app: Any) -> bool:
++@bpm.guard("issue_share_paid")
++async def issue_share_paid(session: AsyncSession, app: Any) -> bool:
+     invoice = await active_books_invoice(session, app.id)
+-    return invoice is not None and invoice.paid_amount >= invoice.amount
++    return invoice is not None and invoice.paid_amount >= issue_threshold(invoice.amount)
+ 
+ 
+ @bpm.guard("has_active_invoice")
+diff --git a/services/billing/public.py b/services/billing/public.py
+index 0eedbf6..157dadc 100644
+--- a/services/billing/public.py
++++ b/services/billing/public.py
+@@ -7,6 +7,7 @@ from decimal import Decimal
+ from sqlalchemy import func, select
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
++from services.billing import settings
+ from services.billing.models import AccountantAssignment, Fine, Invoice, Payment
+ 
+ 
+@@ -19,6 +20,11 @@ class InvoiceBrief:
+     payment_clock_started_at: datetime
+ 
+ 
++def issue_threshold(amount: Decimal) -> Decimal:
++    """Оплата счёта за книги, начиная с которой заявка переходит к записи на выдачу."""
++    return amount * settings.BOOKS_ISSUE_SHARE
++
++
+ async def paid_amount(session: AsyncSession, invoice_id: int) -> Decimal:
+     total = await session.scalar(
+         select(func.coalesce(func.sum(Payment.amount), 0)).where(
+diff --git a/services/billing/service.py b/services/billing/service.py
+index 9f326e3..cc21af7 100644
+--- a/services/billing/service.py
++++ b/services/billing/service.py
+@@ -9,7 +9,7 @@ from libs import clock, events
+ from libs.errors import AccessDenied, DomainError, NotFound
+ from services.applications import public as applications
+ from services.billing.models import AccountantAssignment, Fine, FineRate, Invoice, Payment
+-from services.billing.public import paid_amount
++from services.billing.public import issue_threshold, paid_amount
+ 
+ CENT = Decimal("0.01")
+ 
+@@ -113,6 +113,12 @@ async def link_payment(session: AsyncSession, invoice_id: int, amount: Decimal,
+         "payment.linked",
+         {"application_id": invoice.application_id, "invoice_id": invoice.id, "amount": str(amount)},
+     )
++    if invoice.kind == "books" and before < issue_threshold(invoice.amount) <= after:
++        events.publish(
++            session,
++            "payment.issue_share_paid",
++            {"application_id": invoice.application_id, "invoice_id": invoice.id},
++        )
+     if before < invoice.amount <= after:
+         if invoice.kind == "fine":
+             fine = await session.get(Fine, invoice.fine_id)
+diff --git a/services/billing/settings.py b/services/billing/settings.py
+new file mode 100644
+index 0000000..e2ee633
+--- /dev/null
++++ b/services/billing/settings.py
+@@ -0,0 +1,4 @@
++from decimal import Decimal
++
++# Доля счёта за книги, после оплаты которой платная заявка переходит к записи на выдачу.
++BOOKS_ISSUE_SHARE = Decimal("0.5")
+diff --git a/tests/test_archive.py b/tests/test_archive.py
+index 63aa20f..909d713 100644
+--- a/tests/test_archive.py
++++ b/tests/test_archive.py
+@@ -1,4 +1,5 @@
+ from datetime import timedelta
++from decimal import Decimal
+ 
+ import pytest
+ 
+@@ -14,6 +15,7 @@ from tests.factories import (
+     invoice,
+     new_application,
+     pass_review,
++    pay,
+     stage,
+     submit,
+     travel,
+@@ -48,6 +50,25 @@ async def test_unpaid_invoice_goes_to_archive_after_month() -> None:
+     assert (await application(app_id)).attempts[-1].outcome == "unpaid"
+ 
+ 
++async def test_invoice_paid_below_half_goes_to_archive_after_month() -> None:
++    app_id = await new_application()
++    await pass_review(app_id)
++    inv = await invoice(app_id)
++    await pay(inv, Decimal("54.99"))
++    travel(T0 + timedelta(days=31))
++    assert await run_archive_job() == [app_id]
++
++
++async def test_half_paid_invoice_is_not_archived() -> None:
++    app_id = await new_application()
++    await pass_review(app_id)
++    inv = await invoice(app_id)
++    await pay(inv, Decimal("55.00"))
++    travel(T0 + timedelta(days=31))
++    assert await run_archive_job() == []
++    assert await stage(app_id) == "awaiting_issue"
++
++
+ async def test_unarchive_starts_new_attempt_and_review() -> None:
+     app_id = await new_application()
+     await act(apps.archive, app_id, actor="operator", outcome="client_declined", operator_id=OPERATOR)
+diff --git a/tests/test_paid_flow.py b/tests/test_paid_flow.py
+index 474bbc5..0badb04 100644
+--- a/tests/test_paid_flow.py
++++ b/tests/test_paid_flow.py
+@@ -6,6 +6,7 @@ import pytest
+ from libs.errors import DomainError
+ from services.applications import service as apps
+ from services.billing import service as billing
++from services.billing.models import Fine
+ from services.scheduling import service as scheduling
+ from tests.factories import (
+     ACCOUNTANT,
+@@ -22,6 +23,7 @@ from tests.factories import (
+     paid_application,
+     pass_review,
+     pay,
++    read,
+     stage,
+     token,
+ )
+@@ -70,16 +72,56 @@ async def test_invoice_requires_venue_requisites() -> None:
+         await act(billing.issue_books_invoice, app_id, ACCOUNTANT)
+ 
+ 
+-async def test_partial_payment_does_not_open_issue() -> None:
++async def test_payment_below_half_does_not_open_issue() -> None:
+     app_id = await new_application()
+     await pass_review(app_id)
+-    inv = await invoice(app_id)
+-    await pay(inv, Decimal("50.00"))
++    inv = await invoice(app_id)  # 110.00
++    await pay(inv, Decimal("54.99"))
+     assert await stage(app_id) == "awaiting_payment"
+-    await pay(inv, Decimal("60.00"))
++    assert await token(app_id) is None
++    await pay(inv, Decimal("0.01"))
++    assert await stage(app_id) == "awaiting_issue"
++    assert await token(app_id) is not None
++
++
++async def test_half_payment_opens_issue() -> None:
++    app_id = await new_application()
++    await pass_review(app_id)
++    inv = await invoice(app_id)
++    await pay(inv, Decimal("55.00"))
++    assert await stage(app_id) == "awaiting_issue"
++    assert await token(app_id) is not None
++    assert (await application(app_id)).booking_reached_at is not None
++
++    # Доплата остатка ничего не меняет.
++    await pay(inv, Decimal("55.00"))
+     assert await stage(app_id) == "awaiting_issue"
+ 
+ 
++async def test_half_payment_closes_duplicates() -> None:
++    first = await new_application()
++    second = await new_application()
++    await pass_review(first)
++    inv = await invoice(first)
++    await pay(inv, Decimal("55.00"))
++    assert await stage(first) == "awaiting_issue"
++    assert await stage(second) == "closed_duplicate"
++
++
++async def test_fine_invoice_needs_full_payment() -> None:
++    app_id, _ = await paid_application()
++    fine = await act(billing.create_fine, app_id, None, "damaged")
++    fine_inv = await act(billing.issue_fine_invoice, fine.id, ACCOUNTANT)
++    await pay(fine_inv, fine_inv.amount / 2)
++    assert (await read(_fine, fine.id)).status == "open"
++    await pay(fine_inv, fine_inv.amount / 2)
++    assert (await read(_fine, fine.id)).status == "paid"
++
++
++async def _fine(session, fine_id: int) -> Fine:
++    return await session.get(Fine, fine_id)
++
++
+ async def test_issue_only_on_booked_date() -> None:
+     app_id, _ = await paid_application()
+     from tests.factories import book, slot, travel

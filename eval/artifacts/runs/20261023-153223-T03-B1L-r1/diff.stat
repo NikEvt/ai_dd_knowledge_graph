@@ -1,0 +1,22 @@
+ bpm/application_process.yaml               |  2 +-
+ docs/config.md                             | 17 +++---
+ docs/entities/applications.applications.md |  6 +--
+ docs/entities/applications.attempts.md     |  2 +-
+ docs/entities/billing.invoices.md          |  2 +
+ docs/entities/billing.payments.md          |  1 +
+ docs/events.md                             | 11 ++--
+ docs/process.md                            |  6 +--
+ docs/reconciliation.md                     | 14 ++---
+ docs/roles.md                              | 13 ++---
+ docs/rules/applications.md                 | 23 ++++----
+ docs/rules/billing.md                      | 85 ++++++++++++++++++------------
+ docs/rules/chat.md                         |  2 +-
+ docs/rules/scheduling.md                   |  2 +-
+ libs/settings.py                           |  3 ++
+ services/applications/consumers.py         |  4 +-
+ services/applications/jobs.py              |  2 +-
+ services/billing/guards.py                 |  6 +--
+ services/billing/public.py                 | 10 ++++
+ services/billing/service.py                | 12 ++++-
+ tests/test_paid_flow.py                    | 43 +++++++++++++++
+ 21 files changed, 179 insertions(+), 87 deletions(-)

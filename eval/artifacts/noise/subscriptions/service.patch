@@ -1,0 +1,1660 @@
+diff --git a/migrations/noise/subscriptions.sql b/migrations/noise/subscriptions.sql
+new file mode 100644
+index 0000000..846728e
+--- /dev/null
++++ b/migrations/noise/subscriptions.sql
+@@ -0,0 +1,171 @@
++-- Абонементы читателей: тарифы, абонементы, счета за месяц и платежи по ним.
++CREATE SCHEMA subscriptions;
++
++CREATE TABLE subscriptions.plans (
++    id          serial PRIMARY KEY,
++    code        varchar(32)   NOT NULL,
++    name        varchar(200)  NOT NULL,
++    kind        varchar(16)   NOT NULL,
++    monthly_fee numeric(12,2) NOT NULL,
++    max_books   integer       NOT NULL DEFAULT 5,
++    archived    boolean       NOT NULL DEFAULT false,
++    CONSTRAINT uq_plans_code UNIQUE (code),
++    CONSTRAINT ck_plans_kind CHECK (kind IN ('regular', 'social', 'corporate')),
++    CONSTRAINT ck_plans_fee CHECK (monthly_fee > 0),
++    CONSTRAINT ck_plans_max_books CHECK (max_books BETWEEN 1 AND 50)
++);
++
++CREATE TABLE subscriptions.subscriptions (
++    id           serial PRIMARY KEY,
++    client_ref   varchar(64)  NOT NULL,
++    plan_id      integer      NOT NULL REFERENCES subscriptions.plans (id),
++    status       varchar(20)  NOT NULL DEFAULT 'pending',
++    holder_name  varchar(200) NOT NULL,
++    passport     varchar(20),
++    birth_date   date,
++    holder_check varchar(16)  NOT NULL DEFAULT 'pending',
++    employer_ref varchar(64),
++    paid_until   date,
++    reminded_for date,
++    created_at   timestamptz  NOT NULL,
++    activated_at timestamptz,
++    closed_at    timestamptz,
++    CONSTRAINT ck_subscriptions_status
++        CHECK (status IN ('pending', 'active', 'grace', 'expired', 'closed_duplicate')),
++    CONSTRAINT ck_subscriptions_holder_check CHECK (holder_check IN ('pending', 'verified', 'rejected')),
++    CONSTRAINT ck_subscriptions_paid_until CHECK (status IN ('pending', 'expired', 'closed_duplicate')
++        OR paid_until IS NOT NULL),
++    CONSTRAINT ck_subscriptions_closed CHECK ((status IN ('expired', 'closed_duplicate')) = (closed_at IS NOT NULL))
++);
++
++CREATE UNIQUE INDEX uq_subscriptions_one_active
++    ON subscriptions.subscriptions (client_ref, plan_id)
++    WHERE status IN ('active', 'grace');
++
++CREATE INDEX ix_subscriptions_client ON subscriptions.subscriptions (client_ref);
++
++CREATE TABLE subscriptions.invoices (
++    id              serial PRIMARY KEY,
++    subscription_id integer       NOT NULL REFERENCES subscriptions.subscriptions (id),
++    period_start    date          NOT NULL,
++    period_end      date          NOT NULL,
++    amount          numeric(12,2) NOT NULL,
++    paid_total      numeric(12,2) NOT NULL DEFAULT 0,
++    status          varchar(8)    NOT NULL DEFAULT 'open',
++    issued_at       timestamptz   NOT NULL,
++    CONSTRAINT uq_invoices_period UNIQUE (subscription_id, period_start),
++    CONSTRAINT ck_invoices_period CHECK (period_end > period_start),
++    CONSTRAINT ck_invoices_amount CHECK (amount > 0),
++    CONSTRAINT ck_invoices_paid_total CHECK (paid_total >= 0 AND paid_total <= amount),
++    CONSTRAINT ck_invoices_status CHECK (status IN ('open', 'paid', 'void'))
++);
++
++CREATE UNIQUE INDEX uq_invoices_one_open
++    ON subscriptions.invoices (subscription_id)
++    WHERE status = 'open';
++
++CREATE TABLE subscriptions.payments (
++    id           serial PRIMARY KEY,
++    invoice_id   integer       NOT NULL REFERENCES subscriptions.invoices (id),
++    amount       numeric(12,2) NOT NULL,
++    external_ref varchar(64),
++    paid_at      timestamptz   NOT NULL,
++    CONSTRAINT ck_payments_amount CHECK (amount > 0)
++);
++
++CREATE UNIQUE INDEX uq_payments_external_ref
++    ON subscriptions.payments (external_ref)
++    WHERE external_ref IS NOT NULL;
++
++CREATE TABLE subscriptions.refunds (
++    id              serial PRIMARY KEY,
++    subscription_id integer       NOT NULL REFERENCES subscriptions.subscriptions (id),
++    invoice_id      integer       NOT NULL REFERENCES subscriptions.invoices (id),
++    amount          numeric(12,2) NOT NULL,
++    status          varchar(8)    NOT NULL DEFAULT 'pending',
++    created_at      timestamptz   NOT NULL,
++    done_at         timestamptz,
++    CONSTRAINT uq_refunds_invoice UNIQUE (invoice_id),
++    CONSTRAINT ck_refunds_amount CHECK (amount > 0),
++    CONSTRAINT ck_refunds_status CHECK (status IN ('pending', 'done')),
++    CONSTRAINT ck_refunds_done CHECK ((status = 'done') = (done_at IS NOT NULL))
++);
++
++CREATE INDEX ix_refunds_pending ON subscriptions.refunds (created_at) WHERE status = 'pending';
++
++CREATE TABLE subscriptions.status_history (
++    id              bigserial PRIMARY KEY,
++    subscription_id integer     NOT NULL REFERENCES subscriptions.subscriptions (id),
++    old_status      varchar(20) NOT NULL,
++    new_status      varchar(20) NOT NULL,
++    changed_at      timestamptz NOT NULL DEFAULT now()
++);
++
++CREATE TABLE subscriptions.notices (
++    id              bigserial PRIMARY KEY,
++    subscription_id integer     NOT NULL REFERENCES subscriptions.subscriptions (id),
++    kind            varchar(32) NOT NULL,
++    body            text        NOT NULL,
++    created_at      timestamptz NOT NULL
++);
++
++-- Платёж принимается только в открытый счёт и не больше остатка по нему.
++CREATE FUNCTION subscriptions.payments_guard() RETURNS trigger AS $$
++DECLARE
++    inv subscriptions.invoices%ROWTYPE;
++BEGIN
++    SELECT * INTO inv FROM subscriptions.invoices WHERE id = NEW.invoice_id FOR UPDATE;
++    IF inv.status <> 'open' THEN
++        RAISE EXCEPTION 'invoice % is not open', NEW.invoice_id;
++    END IF;
++    IF inv.paid_total + NEW.amount > inv.amount THEN
++        RAISE EXCEPTION 'payment exceeds invoice % balance', NEW.invoice_id;
++    END IF;
++    RETURN NEW;
++END;
++$$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_payments_guard
++    BEFORE INSERT ON subscriptions.payments
++    FOR EACH ROW EXECUTE FUNCTION subscriptions.payments_guard();
++
++CREATE FUNCTION subscriptions.payments_apply() RETURNS trigger AS $$
++BEGIN
++    UPDATE subscriptions.invoices
++       SET paid_total = paid_total + NEW.amount
++     WHERE id = NEW.invoice_id;
++    RETURN NULL;
++END;
++$$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_payments_apply
++    AFTER INSERT ON subscriptions.payments
++    FOR EACH ROW EXECUTE FUNCTION subscriptions.payments_apply();
++
++-- Закрытый абонемент не возвращается в работу: клиент оформляет новый.
++CREATE FUNCTION subscriptions.subscriptions_terminal_guard() RETURNS trigger AS $$
++BEGIN
++    IF OLD.status IN ('expired', 'closed_duplicate') AND NEW.status <> OLD.status THEN
++        RAISE EXCEPTION 'subscription % is closed (%)', OLD.id, OLD.status;
++    END IF;
++    RETURN NEW;
++END;
++$$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_subscriptions_terminal_guard
++    BEFORE UPDATE OF status ON subscriptions.subscriptions
++    FOR EACH ROW EXECUTE FUNCTION subscriptions.subscriptions_terminal_guard();
++
++CREATE FUNCTION subscriptions.subscriptions_log_status() RETURNS trigger AS $$
++BEGIN
++    IF NEW.status IS DISTINCT FROM OLD.status THEN
++        INSERT INTO subscriptions.status_history (subscription_id, old_status, new_status)
++        VALUES (NEW.id, OLD.status, NEW.status);
++    END IF;
++    RETURN NULL;
++END;
++$$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_subscriptions_log_status
++    AFTER UPDATE OF status ON subscriptions.subscriptions
++    FOR EACH ROW EXECUTE FUNCTION subscriptions.subscriptions_log_status();
+diff --git a/services/subscriptions/__init__.py b/services/subscriptions/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/services/subscriptions/api.py b/services/subscriptions/api.py
+new file mode 100644
+index 0000000..cd26875
+--- /dev/null
++++ b/services/subscriptions/api.py
+@@ -0,0 +1,105 @@
++from datetime import date
++from decimal import Decimal
++from typing import Annotated
++
++from fastapi import APIRouter, Depends
++from pydantic import BaseModel
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs.web import session
++from services.subscriptions import service
++from services.subscriptions.models import Subscription
++
++router = APIRouter(tags=["subscriptions"])
++Session = Annotated[AsyncSession, Depends(session)]
++
++
++class PlanOut(BaseModel):
++    id: int
++    code: str
++    name: str
++    kind: str
++    monthly_fee: Decimal
++    max_books: int
++
++
++class SubscriptionIn(BaseModel):
++    client_ref: str
++    plan_id: int
++    holder_name: str
++    passport: str | None = None
++    birth_date: date | None = None
++    employer_ref: str | None = None
++
++
++class SubscriptionOut(BaseModel):
++    id: int
++    client_ref: str
++    plan_id: int
++    status: str
++    holder_name: str
++    holder_check: str
++    paid_until: date | None
++
++    @classmethod
++    def of(cls, sub: Subscription) -> SubscriptionOut:
++        return cls(
++            id=sub.id,
++            client_ref=sub.client_ref,
++            plan_id=sub.plan_id,
++            status=sub.status,
++            holder_name=sub.holder_name,
++            holder_check=sub.holder_check,
++            paid_until=sub.paid_until,
++        )
++
++
++class HolderIn(BaseModel):
++    client_ref: str
++    holder_name: str | None = None
++    passport: str | None = None
++    birth_date: date | None = None
++
++
++class PaymentIn(BaseModel):
++    amount: Decimal
++    external_ref: str | None = None
++
++
++@router.get("/plans")
++async def plans(s: Session) -> list[PlanOut]:
++    return [
++        PlanOut(
++            id=p.id, code=p.code, name=p.name, kind=p.kind, monthly_fee=p.monthly_fee, max_books=p.max_books
++        )
++        for p in await service.list_plans(s)
++    ]
++
++
++@router.post("/subscriptions", status_code=201)
++async def create(body: SubscriptionIn, s: Session) -> dict[str, int]:
++    sub = await service.create_subscription(s, **body.model_dump())
++    invoice = await service.open_invoice(s, sub.id)
++    return {"subscription_id": sub.id, "invoice_id": invoice.id}
++
++
++@router.get("/subscriptions/{subscription_id}")
++async def get(subscription_id: int, s: Session) -> SubscriptionOut:
++    return SubscriptionOut.of(await service.get_subscription(s, subscription_id))
++
++
++@router.get("/clients/{client_ref}/subscriptions")
++async def by_client(client_ref: str, s: Session) -> list[SubscriptionOut]:
++    return [SubscriptionOut.of(x) for x in await service.client_subscriptions(s, client_ref)]
++
++
++@router.put("/subscriptions/{subscription_id}/holder")
++async def update_holder(subscription_id: int, body: HolderIn, s: Session) -> SubscriptionOut:
++    sub = await service.update_holder(s, subscription_id, **body.model_dump())
++    return SubscriptionOut.of(sub)
++
++
++@router.post("/invoices/{invoice_id}/payments", status_code=201)
++async def pay(invoice_id: int, body: PaymentIn, s: Session) -> dict[str, int]:
++    payment = await service.record_payment(s, invoice_id, body.amount, external_ref=body.external_ref)
++    return {"payment_id": payment.id}
+diff --git a/services/subscriptions/app.py b/services/subscriptions/app.py
+new file mode 100644
+index 0000000..70fdedb
+--- /dev/null
++++ b/services/subscriptions/app.py
+@@ -0,0 +1,10 @@
++from fastapi import FastAPI
++
++from libs.web import install_error_handlers
++from services import wiring
++from services.subscriptions.api import router
++
++wiring.load()
++app = FastAPI(title="subscriptions")
++app.include_router(router)
++install_error_handlers(app)
+diff --git a/services/subscriptions/consumers.py b/services/subscriptions/consumers.py
+new file mode 100644
+index 0000000..1de0ebc
+--- /dev/null
++++ b/services/subscriptions/consumers.py
+@@ -0,0 +1,92 @@
++from typing import Any
++
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs.events import subscribe
++from services.subscriptions import service
++
++
++@subscribe("subscriptions.created")
++async def on_created(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.recheck_holder(session, payload["subscription_id"])
++
++
++@subscribe("subscriptions.holder_updated")
++async def on_holder_updated(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.recheck_holder(session, payload["subscription_id"])
++
++
++@subscribe("subscriptions.holder_rejected")
++async def on_holder_rejected(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.add_notice(
++        session,
++        payload["subscription_id"],
++        "holder_rejected",
++        f"Данные держателя не подтверждены: {payload['reason']}. Обновите их в личном кабинете.",
++    )
++
++
++@subscribe("subscriptions.invoice_issued")
++async def on_invoice_issued(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.add_notice(
++        session,
++        payload["subscription_id"],
++        "invoice",
++        f"Выставлен счёт на {payload['amount']} ₽ за месяц с {payload['period_start']}.",
++    )
++
++
++@subscribe("subscriptions.payment_completed")
++async def on_payment_completed(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.apply_payment(session, payload["subscription_id"], payload["invoice_id"])
++
++
++@subscribe("subscriptions.activated")
++async def on_activated(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.add_notice(
++        session, payload["subscription_id"], "activated", f"Абонемент действует до {payload['paid_until']}."
++    )
++
++
++@subscribe("subscriptions.renewed")
++async def on_renewed(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.add_notice(
++        session, payload["subscription_id"], "renewed", f"Абонемент продлён до {payload['paid_until']}."
++    )
++
++
++@subscribe("subscriptions.closed_duplicate")
++async def on_closed_duplicate(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.void_open_invoices(session, payload["subscription_id"])
++    await service.add_notice(
++        session,
++        payload["subscription_id"],
++        "closed_duplicate",
++        f"Абонемент закрыт: у вас действует абонемент №{payload['kept_id']}.",
++    )
++
++
++@subscribe("subscriptions.grace_started")
++async def on_grace_started(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.add_notice(
++        session,
++        payload["subscription_id"],
++        "grace",
++        f"Оплаченный месяц закончился. Абонемент действует до {payload['grace_until']}, оплатите продление.",
++    )
++
++
++@subscribe("subscriptions.expired")
++async def on_expired(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.void_open_invoices(session, payload["subscription_id"])
++    await service.add_notice(session, payload["subscription_id"], "expired", "Абонемент закрыт: не оплачен.")
++
++
++@subscribe("subscriptions.refund_required")
++async def on_refund_required(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.add_notice(
++        session,
++        payload["subscription_id"],
++        "refund",
++        f"Оплата {payload['amount']} ₽ по счёту №{payload['invoice_id']} будет возвращена.",
++    )
+diff --git a/services/subscriptions/jobs.py b/services/subscriptions/jobs.py
+new file mode 100644
+index 0000000..4a4a52b
+--- /dev/null
++++ b/services/subscriptions/jobs.py
+@@ -0,0 +1,84 @@
++from datetime import datetime, timedelta
++
++from sqlalchemy import select
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs import events
++from services.subscriptions import service, settings
++from services.subscriptions.models import Invoice, Subscription
++
++
++async def expire_overdue(session: AsyncSession, now: datetime) -> dict[str, list[int]]:
++    """Конец оплаченного месяца переводит абонемент в grace, конец льготного периода — в expired."""
++    today = now.date()
++    expired = (
++        await session.scalars(
++            select(Subscription)
++            .where(
++                Subscription.status.in_(service.LIVE),
++                Subscription.paid_until + timedelta(days=30) < today,
++            )
++            .order_by(Subscription.id)
++        )
++    ).all()
++    for sub in expired:
++        sub.status = "expired"
++        sub.closed_at = now
++        events.publish(session, "subscriptions.expired", {"subscription_id": sub.id, "reason": "unpaid"})
++    await session.flush()
++
++    overdue = (
++        await session.scalars(
++            select(Subscription)
++            .where(Subscription.status == "active", Subscription.paid_until < today)
++            .order_by(Subscription.id)
++        )
++    ).all()
++    for sub in overdue:
++        sub.status = "grace"
++        grace_until = sub.paid_until + timedelta(days=settings.GRACE_DAYS)
++        events.publish(
++            session,
++            "subscriptions.grace_started",
++            {"subscription_id": sub.id, "grace_until": grace_until.isoformat()},
++        )
++    return {"expired": [s.id for s in expired], "grace": [s.id for s in overdue]}
++
++
++async def expire_stale_pending(session: AsyncSession, now: datetime) -> list[int]:
++    stale = (
++        await session.scalars(
++            select(Subscription)
++            .where(
++                Subscription.status == "pending",
++                Subscription.created_at < now - timedelta(days=settings.PENDING_TTL_DAYS),
++            )
++            .order_by(Subscription.id)
++        )
++    ).all()
++    for sub in stale:
++        sub.status = "expired"
++        sub.closed_at = now
++        events.publish(session, "subscriptions.expired", {"subscription_id": sub.id, "reason": "not_paid"})
++    return [s.id for s in stale]
++
++
++async def issue_renewal_invoices(session: AsyncSession, now: datetime) -> list[int]:
++    horizon = now.date() + timedelta(days=settings.RENEWAL_INVOICE_DAYS)
++    has_open = select(Invoice.id).where(Invoice.subscription_id == Subscription.id, Invoice.status == "open")
++    subs = (
++        await session.scalars(
++            select(Subscription)
++            .where(
++                Subscription.status.in_(service.LIVE),
++                Subscription.paid_until <= horizon,
++                ~has_open.exists(),
++            )
++            .order_by(Subscription.id)
++        )
++    ).all()
++    issued = []
++    for sub in subs:
++        invoice = await service.issue_invoice(session, sub, sub.paid_until + timedelta(days=1))
++        issued.append(invoice.id)
++    return issued
+diff --git a/services/subscriptions/models.py b/services/subscriptions/models.py
+new file mode 100644
+index 0000000..5f57996
+--- /dev/null
++++ b/services/subscriptions/models.py
+@@ -0,0 +1,111 @@
++from datetime import date, datetime
++from decimal import Decimal
++
++from sqlalchemy import BigInteger, ForeignKey
++from sqlalchemy.orm import Mapped, mapped_column
++
++from libs.db import Base
++
++SCHEMA = {"schema": "subscriptions"}
++
++
++class Plan(Base):
++    __tablename__ = "plans"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    code: Mapped[str]
++    name: Mapped[str]
++    kind: Mapped[str]
++    monthly_fee: Mapped[Decimal]
++    max_books: Mapped[int] = mapped_column(default=5)
++    archived: Mapped[bool] = mapped_column(default=False)
++
++
++class Subscription(Base):
++    __tablename__ = "subscriptions"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    client_ref: Mapped[str]
++    plan_id: Mapped[int] = mapped_column(ForeignKey("subscriptions.plans.id"))
++    status: Mapped[str] = mapped_column(default="pending")
++    holder_name: Mapped[str]
++    passport: Mapped[str | None]
++    birth_date: Mapped[date | None]
++    holder_check: Mapped[str] = mapped_column(default="pending")
++    employer_ref: Mapped[str | None]
++    paid_until: Mapped[date | None]
++    # paid_until, для которого уже отправлено напоминание о конце льготного периода
++    reminded_for: Mapped[date | None]
++    created_at: Mapped[datetime]
++    activated_at: Mapped[datetime | None]
++    closed_at: Mapped[datetime | None]
++
++
++class Invoice(Base):
++    __tablename__ = "invoices"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    subscription_id: Mapped[int] = mapped_column(ForeignKey("subscriptions.subscriptions.id"))
++    period_start: Mapped[date]
++    period_end: Mapped[date]
++    amount: Mapped[Decimal]
++    paid_total: Mapped[Decimal] = mapped_column(default=Decimal(0))
++    status: Mapped[str] = mapped_column(default="open")
++    issued_at: Mapped[datetime]
++
++
++class Payment(Base):
++    """Платёж по счёту. Остаток счёта (paid_total) пересчитывает триггер в БД."""
++
++    __tablename__ = "payments"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    invoice_id: Mapped[int] = mapped_column(ForeignKey("subscriptions.invoices.id"))
++    amount: Mapped[Decimal]
++    external_ref: Mapped[str | None]
++    paid_at: Mapped[datetime]
++
++
++class Refund(Base):
++    """Возврат денег по счёту закрытого абонемента; проводит бухгалтерия."""
++
++    __tablename__ = "refunds"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    subscription_id: Mapped[int] = mapped_column(ForeignKey("subscriptions.subscriptions.id"))
++    invoice_id: Mapped[int] = mapped_column(ForeignKey("subscriptions.invoices.id"))
++    amount: Mapped[Decimal]
++    status: Mapped[str] = mapped_column(default="pending")
++    created_at: Mapped[datetime]
++    done_at: Mapped[datetime | None]
++
++
++class StatusChange(Base):
++    """Журнал смены статусов; пишется триггером, из кода только читается."""
++
++    __tablename__ = "status_history"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
++    subscription_id: Mapped[int] = mapped_column(ForeignKey("subscriptions.subscriptions.id"))
++    old_status: Mapped[str]
++    new_status: Mapped[str]
++    changed_at: Mapped[datetime]
++
++
++class Notice(Base):
++    """Уведомление держателю абонемента (рассылает отдельный воркер)."""
++
++    __tablename__ = "notices"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
++    subscription_id: Mapped[int] = mapped_column(ForeignKey("subscriptions.subscriptions.id"))
++    kind: Mapped[str]
++    body: Mapped[str]
++    created_at: Mapped[datetime]
+diff --git a/services/subscriptions/service.py b/services/subscriptions/service.py
+new file mode 100644
+index 0000000..0a987f6
+--- /dev/null
++++ b/services/subscriptions/service.py
+@@ -0,0 +1,405 @@
++"""Абонементы читателей: оформление, счета за месяц, оплата, активация и данные держателя."""
++
++import re
++from calendar import monthrange
++from datetime import date, timedelta
++from decimal import Decimal
++
++from sqlalchemy import func, select
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs import clock, events
++from libs.errors import AccessDenied, DomainError, NotFound
++from services.subscriptions import settings
++from services.subscriptions.models import Invoice, Notice, Payment, Plan, Subscription
++
++PLAN_KINDS = ("regular", "social", "corporate")
++LIVE = ("active", "grace")
++OPEN = ("pending", "active", "grace")
++CLOSED = ("expired", "closed_duplicate")
++HOLDER_FIELDS = ("holder_name", "passport", "birth_date")
++
++PASSPORT_RE = re.compile(r"^\d{4} \d{6}$")
++
++
++def add_months(day: date, months: int) -> date:
++    year, month = divmod(day.month - 1 + months, 12)
++    year += day.year
++    month += 1
++    return date(year, month, min(day.day, monthrange(year, month)[1]))
++
++
++def period_for(start: date) -> tuple[date, date]:
++    """Оплачиваемый месяц: с start по тот же день следующего месяца не включительно."""
++    return start, add_months(start, 1) - timedelta(days=1)
++
++
++def age_on(birth_date: date, day: date) -> int:
++    return day.year - birth_date.year - ((day.month, day.day) < (birth_date.month, birth_date.day))
++
++
++def fully_paid(invoice: Invoice) -> bool:
++    return invoice.paid_total >= invoice.amount
++
++
++def _same_track(a: Plan, b: Plan) -> bool:
++    # Социальный абонемент и платный (обычный или корпоративный) могут действовать одновременно.
++    return (a.kind == "social") == (b.kind == "social")
++
++
++# --- тарифы ---
++
++
++async def create_plan(
++    session: AsyncSession, *, code: str, name: str, kind: str, monthly_fee: Decimal, max_books: int = 5
++) -> Plan:
++    if kind not in PLAN_KINDS:
++        raise DomainError(f"неизвестный вид тарифа: {kind}")
++    if monthly_fee <= 0:
++        raise DomainError("стоимость тарифа должна быть больше нуля")
++    if await session.scalar(select(Plan.id).where(Plan.code == code)) is not None:
++        raise DomainError(f"тариф с кодом {code} уже есть")
++    plan = Plan(code=code, name=name, kind=kind, monthly_fee=monthly_fee, max_books=max_books)
++    session.add(plan)
++    await session.flush()
++    return plan
++
++
++async def archive_plan(session: AsyncSession, plan_id: int) -> Plan:
++    plan = await get_plan(session, plan_id)
++    plan.archived = True
++    return plan
++
++
++async def get_plan(session: AsyncSession, plan_id: int) -> Plan:
++    plan = await session.get(Plan, plan_id)
++    if plan is None:
++        raise NotFound(f"тариф {plan_id}")
++    return plan
++
++
++async def list_plans(session: AsyncSession) -> list[Plan]:
++    rows = await session.scalars(select(Plan).where(Plan.archived.is_(False)).order_by(Plan.monthly_fee))
++    return list(rows.all())
++
++
++# --- абонементы ---
++
++
++async def get_subscription(session: AsyncSession, subscription_id: int) -> Subscription:
++    sub = await session.get(Subscription, subscription_id)
++    if sub is None:
++        raise NotFound(f"абонемент {subscription_id}")
++    return sub
++
++
++async def client_subscriptions(session: AsyncSession, client_ref: str) -> list[Subscription]:
++    rows = await session.scalars(
++        select(Subscription).where(Subscription.client_ref == client_ref).order_by(Subscription.id)
++    )
++    return list(rows.all())
++
++
++def _validate_holder(
++    plan: Plan, holder_name: str, passport: str | None, birth_date: date | None, today: date
++) -> None:
++    if not holder_name.strip():
++        raise DomainError("не указано имя держателя абонемента")
++    if passport is not None and not PASSPORT_RE.match(passport):
++        raise DomainError("паспорт указывается в формате «1234 567890»")
++    if birth_date is not None:
++        if birth_date >= today:
++            raise DomainError("дата рождения должна быть в прошлом")
++        if age_on(birth_date, today) < settings.MIN_HOLDER_AGE:
++            raise DomainError(f"абонемент оформляется с {settings.MIN_HOLDER_AGE} лет")
++    if plan.kind == "social" and (passport is None or birth_date is None):
++        raise DomainError("для социального тарифа нужны паспорт и дата рождения")
++
++
++def _social_eligible(birth_date: date, today: date) -> bool:
++    age = age_on(birth_date, today)
++    return age <= settings.SOCIAL_MAX_STUDENT_AGE or age >= settings.SOCIAL_MIN_SENIOR_AGE
++
++
++async def create_subscription(
++    session: AsyncSession,
++    *,
++    client_ref: str,
++    plan_id: int,
++    holder_name: str,
++    passport: str | None = None,
++    birth_date: date | None = None,
++    employer_ref: str | None = None,
++) -> Subscription:
++    plan = await get_plan(session, plan_id)
++    if plan.archived:
++        raise DomainError("тариф больше не продаётся")
++    if plan.kind == "corporate" and not employer_ref:
++        raise DomainError("для корпоративного тарифа нужна организация-работодатель")
++    if plan.kind != "corporate" and employer_ref:
++        raise DomainError("организация указывается только для корпоративного тарифа")
++    today = clock.now().date()
++    _validate_holder(plan, holder_name, passport, birth_date, today)
++    # Право на социальный тариф при изменении данных проверяет сверка держателя (recheck_holder).
++    if plan.kind == "social" and not _social_eligible(birth_date, today):
++        raise DomainError("социальный тариф доступен студентам и пенсионерам")
++
++    existing = await session.scalar(
++        select(Subscription.id).where(
++            Subscription.client_ref == client_ref,
++            Subscription.plan_id == plan_id,
++            Subscription.status.in_(LIVE),
++        )
++    )
++    if existing is not None:
++        raise DomainError("у клиента уже есть действующий абонемент на этот тариф — его можно продлить")
++    pending = await session.scalar(
++        select(func.count()).where(Subscription.client_ref == client_ref, Subscription.status == "pending")
++    )
++    if pending >= settings.MAX_PENDING_PER_CLIENT:
++        raise DomainError("у клиента слишком много неоплаченных абонементов")
++
++    sub = Subscription(
++        client_ref=client_ref,
++        plan_id=plan_id,
++        holder_name=holder_name.strip(),
++        passport=passport,
++        birth_date=birth_date,
++        employer_ref=employer_ref,
++        created_at=clock.now(),
++    )
++    session.add(sub)
++    await session.flush()
++    await issue_invoice(session, sub, today)
++    events.publish(
++        session,
++        "subscriptions.created",
++        {"subscription_id": sub.id, "client_ref": client_ref, "plan_id": plan_id},
++    )
++    return sub
++
++
++async def update_holder(
++    session: AsyncSession,
++    subscription_id: int,
++    *,
++    client_ref: str,
++    holder_name: str | None = None,
++    passport: str | None = None,
++    birth_date: date | None = None,
++) -> Subscription:
++    sub = await get_subscription(session, subscription_id)
++    if sub.client_ref != client_ref:
++        raise AccessDenied("абонемент оформлен на другого клиента")
++    if sub.status in CLOSED:
++        raise DomainError("абонемент закрыт, данные держателя не меняются")
++    plan = await get_plan(session, sub.plan_id)
++
++    new = {
++        "holder_name": holder_name.strip() if holder_name is not None else sub.holder_name,
++        "passport": passport if passport is not None else sub.passport,
++        "birth_date": birth_date if birth_date is not None else sub.birth_date,
++    }
++    _validate_holder(plan, new["holder_name"], new["passport"], new["birth_date"], clock.now().date())
++    changed = [f for f in HOLDER_FIELDS if getattr(sub, f) != new[f]]
++    if not changed:
++        return sub
++    for field in changed:
++        setattr(sub, field, new[field])
++    sub.holder_check = "pending"
++    events.publish(
++        session, "subscriptions.holder_updated", {"subscription_id": sub.id, "changed": changed}
++    )
++    return sub
++
++
++async def recheck_holder(session: AsyncSession, subscription_id: int) -> Subscription:
++    """Сверка данных держателя. Без паспорта и даты рождения абонемент не подтверждается."""
++    sub = await get_subscription(session, subscription_id)
++    if sub.status in CLOSED or sub.holder_check != "pending":
++        return sub
++    plan = await get_plan(session, sub.plan_id)
++    today = clock.now().date()
++    reason = None
++    if sub.passport is None or sub.birth_date is None:
++        reason = "не хватает паспорта или даты рождения"
++    elif plan.kind == "social" and not _social_eligible(sub.birth_date, today):
++        reason = "держатель не подходит под условия социального тарифа"
++    if reason is None:
++        sub.holder_check = "verified"
++        return sub
++    sub.holder_check = "rejected"
++    events.publish(session, "subscriptions.holder_rejected", {"subscription_id": sub.id, "reason": reason})
++    return sub
++
++
++# --- счета и платежи ---
++
++
++async def open_invoice(session: AsyncSession, subscription_id: int) -> Invoice | None:
++    return await session.scalar(
++        select(Invoice).where(Invoice.subscription_id == subscription_id, Invoice.status == "open")
++    )
++
++
++async def issue_invoice(session: AsyncSession, sub: Subscription, period_start: date) -> Invoice:
++    if await open_invoice(session, sub.id) is not None:
++        raise DomainError("по абонементу уже есть неоплаченный счёт")
++    plan = await get_plan(session, sub.plan_id)
++    start, end = period_for(period_start)
++    invoice = Invoice(
++        subscription_id=sub.id,
++        period_start=start,
++        period_end=end,
++        amount=plan.monthly_fee,
++        issued_at=clock.now(),
++    )
++    session.add(invoice)
++    await session.flush()
++    events.publish(
++        session,
++        "subscriptions.invoice_issued",
++        {
++            "subscription_id": sub.id,
++            "invoice_id": invoice.id,
++            "amount": str(invoice.amount),
++            "period_start": start.isoformat(),
++        },
++    )
++    return invoice
++
++
++async def record_payment(
++    session: AsyncSession, invoice_id: int, amount: Decimal, *, external_ref: str | None = None
++) -> Payment:
++    invoice = await session.get(Invoice, invoice_id, with_for_update=True)
++    if invoice is None:
++        raise NotFound(f"счёт {invoice_id}")
++    if invoice.status != "open":
++        raise DomainError("счёт уже оплачен или аннулирован")
++    if amount <= 0:
++        raise DomainError("сумма платежа должна быть больше нуля")
++    if amount > invoice.amount - invoice.paid_total:
++        raise DomainError("сумма больше остатка по счёту")
++    if external_ref is not None:
++        seen = await session.scalar(select(Payment.id).where(Payment.external_ref == external_ref))
++        if seen is not None:
++            raise DomainError(f"платёж {external_ref} уже учтён")
++
++    payment = Payment(invoice_id=invoice.id, amount=amount, external_ref=external_ref, paid_at=clock.now())
++    session.add(payment)
++    await session.flush()
++    await session.refresh(invoice, ["paid_total"])
++    if fully_paid(invoice):
++        invoice.status = "paid"
++        events.publish(
++            session,
++            "subscriptions.payment_completed",
++            {"subscription_id": invoice.subscription_id, "invoice_id": invoice.id},
++        )
++    return payment
++
++
++async def void_open_invoices(session: AsyncSession, subscription_id: int) -> list[Invoice]:
++    invoices = (
++        await session.scalars(
++            select(Invoice).where(Invoice.subscription_id == subscription_id, Invoice.status == "open")
++        )
++    ).all()
++    for invoice in invoices:
++        invoice.status = "void"
++        if invoice.paid_total > 0:
++            events.publish(
++                session,
++                "subscriptions.refund_required",
++                {
++                    "subscription_id": subscription_id,
++                    "invoice_id": invoice.id,
++                    "amount": str(invoice.paid_total),
++                },
++            )
++    return list(invoices)
++
++
++# --- жизненный цикл ---
++
++
++async def close_duplicates(session: AsyncSession, sub: Subscription) -> list[int]:
++    """Закрывает другие открытые абонементы клиента того же направления (платное или социальное)."""
++    plan = await get_plan(session, sub.plan_id)
++    rows = (
++        await session.execute(
++            select(Subscription, Plan)
++            .join(Plan, Plan.id == Subscription.plan_id)
++            .where(
++                Subscription.client_ref == sub.client_ref,
++                Subscription.id != sub.id,
++                Subscription.status.in_(OPEN),
++            )
++            .order_by(Subscription.id)
++        )
++    ).all()
++    closed = []
++    for other, other_plan in rows:
++        if not _same_track(plan, other_plan):
++            continue
++        other.status = "closed_duplicate"
++        other.closed_at = clock.now()
++        closed.append(other.id)
++        events.publish(
++            session,
++            "subscriptions.closed_duplicate",
++            {"subscription_id": other.id, "kept_id": sub.id, "client_ref": sub.client_ref},
++        )
++    await session.flush()
++    return closed
++
++
++async def apply_payment(session: AsyncSession, subscription_id: int, invoice_id: int) -> Subscription:
++    sub = await get_subscription(session, subscription_id)
++    invoice = await session.get(Invoice, invoice_id)
++    if invoice is None or not fully_paid(invoice):
++        raise DomainError("счёт не оплачен полностью")
++
++    if sub.status in CLOSED:
++        # Деньги пришли на уже закрытый абонемент — возвращаем клиенту.
++        events.publish(
++            session,
++            "subscriptions.refund_required",
++            {"subscription_id": sub.id, "invoice_id": invoice.id, "amount": str(invoice.paid_total)},
++        )
++        return sub
++
++    if sub.status == "pending":
++        await close_duplicates(session, sub)
++        sub.status = "active"
++        sub.activated_at = clock.now()
++        sub.paid_until = invoice.period_end
++        events.publish(
++            session,
++            "subscriptions.activated",
++            {"subscription_id": sub.id, "paid_until": sub.paid_until.isoformat()},
++        )
++        return sub
++
++    sub.status = "active"
++    sub.paid_until = max(sub.paid_until, invoice.period_end)
++    events.publish(
++        session,
++        "subscriptions.renewed",
++        {"subscription_id": sub.id, "paid_until": sub.paid_until.isoformat()},
++    )
++    return sub
++
++
++async def add_notice(session: AsyncSession, subscription_id: int, kind: str, body: str) -> Notice:
++    notice = Notice(subscription_id=subscription_id, kind=kind, body=body, created_at=clock.now())
++    session.add(notice)
++    return notice
++
++
++async def notices(session: AsyncSession, subscription_id: int) -> list[Notice]:
++    rows = await session.scalars(
++        select(Notice).where(Notice.subscription_id == subscription_id).order_by(Notice.id)
++    )
++    return list(rows.all())
+diff --git a/services/subscriptions/settings.py b/services/subscriptions/settings.py
+new file mode 100644
+index 0000000..bd74a09
+--- /dev/null
++++ b/services/subscriptions/settings.py
+@@ -0,0 +1,17 @@
++"""Сроки и лимиты абонементов."""
++
++# Сколько дней после окончания оплаченного месяца абонемент ещё действует (статус grace).
++GRACE_DAYS = 30
++# За сколько дней до конца льготного периода напомнить об оплате.
++GRACE_REMINDER_DAYS = 5
++# Неоплаченный новый абонемент закрывается через столько дней.
++PENDING_TTL_DAYS = 14
++# Счёт на следующий месяц выставляется за столько дней до конца оплаченного.
++RENEWAL_INVOICE_DAYS = 7
++# Минимальный возраст держателя абонемента.
++MIN_HOLDER_AGE = 14
++# Социальный тариф оформляется с этого возраста (пенсионный) или до SOCIAL_MAX_STUDENT_AGE.
++SOCIAL_MIN_SENIOR_AGE = 60
++SOCIAL_MAX_STUDENT_AGE = 23
++# Сколько неоплаченных абонементов клиент может держать одновременно.
++MAX_PENDING_PER_CLIENT = 3
+diff --git a/tests/subscriptions_factories.py b/tests/subscriptions_factories.py
+new file mode 100644
+index 0000000..4703341
+--- /dev/null
++++ b/tests/subscriptions_factories.py
+@@ -0,0 +1,101 @@
++"""Тарифы, абонементы и оплата для тестов сервиса абонементов."""
++
++from datetime import date
++from decimal import Decimal
++
++from sqlalchemy import select
++
++from services.subscriptions import service
++from services.subscriptions.models import Invoice, Notice, Payment, StatusChange
++from tests.factories import act, read
++
++CLIENT_1, CLIENT_2 = "client-1", "client-2"
++PASSPORT = "4510 123456"
++ADULT = date(1990, 5, 1)
++STUDENT = date(2006, 9, 15)
++SENIOR = date(1958, 1, 20)
++
++
++async def plans() -> dict[str, int]:
++    created = {}
++    for code, name, kind, fee in (
++        ("std", "Обычный", "regular", Decimal(600)),
++        ("soc", "Социальный", "social", Decimal(150)),
++        ("corp", "Корпоративный", "corporate", Decimal(450)),
++        ("std-plus", "Обычный плюс", "regular", Decimal(900)),
++    ):
++        plan = await act(service.create_plan, code=code, name=name, kind=kind, monthly_fee=fee)
++        created[code] = plan.id
++    return created
++
++
++async def subscribe(
++    plan_id: int,
++    *,
++    client: str = CLIENT_1,
++    holder_name: str = "Анна Петрова",
++    passport: str | None = PASSPORT,
++    birth_date: date | None = ADULT,
++    employer_ref: str | None = None,
++) -> int:
++    sub = await act(
++        service.create_subscription,
++        client_ref=client,
++        plan_id=plan_id,
++        holder_name=holder_name,
++        passport=passport,
++        birth_date=birth_date,
++        employer_ref=employer_ref,
++    )
++    return sub.id
++
++
++async def subscription(sub_id: int):
++    return await read(service.get_subscription, sub_id)
++
++
++async def status(sub_id: int) -> str:
++    return (await subscription(sub_id)).status
++
++
++async def open_invoice(sub_id: int) -> Invoice | None:
++    return await read(service.open_invoice, sub_id)
++
++
++async def pay(sub_id: int, amount: Decimal | None = None, external_ref: str | None = None) -> Payment:
++    invoice = await open_invoice(sub_id)
++    assert invoice is not None, f"у абонемента {sub_id} нет открытого счёта"
++    due = invoice.amount - invoice.paid_total if amount is None else amount
++    return await act(service.record_payment, invoice.id, due, external_ref=external_ref)
++
++
++async def active(plan_id: int, **kwargs) -> int:
++    sub_id = await subscribe(plan_id, **kwargs)
++    await pay(sub_id)
++    return sub_id
++
++
++async def invoices(sub_id: int) -> list[Invoice]:
++    async def _load(s):
++        rows = await s.scalars(select(Invoice).where(Invoice.subscription_id == sub_id).order_by(Invoice.id))
++        return list(rows.all())
++
++    return await read(_load)
++
++
++async def notice_kinds(sub_id: int) -> list[str]:
++    return [n.kind for n in await read(service.notices, sub_id)]
++
++
++async def all_notices(sub_id: int) -> list[Notice]:
++    return await read(service.notices, sub_id)
++
++
++async def history(sub_id: int) -> list[tuple[str, str]]:
++    async def _load(s):
++        rows = await s.scalars(
++            select(StatusChange).where(StatusChange.subscription_id == sub_id).order_by(StatusChange.id)
++        )
++        return [(r.old_status, r.new_status) for r in rows.all()]
++
++    return await read(_load)
+diff --git a/tests/test_subscriptions_activation.py b/tests/test_subscriptions_activation.py
+new file mode 100644
+index 0000000..d5df982
+--- /dev/null
++++ b/tests/test_subscriptions_activation.py
+@@ -0,0 +1,197 @@
++from datetime import date
++from decimal import Decimal
++
++import pytest
++from sqlalchemy.exc import DBAPIError, IntegrityError
++
++from libs import clock, db
++from libs.errors import DomainError
++from libs.events import dispatch_pending
++from services.subscriptions import service
++from services.subscriptions.models import Payment, Subscription
++from tests.factories import T0, act
++from tests.subscriptions_factories import (
++    CLIENT_1,
++    CLIENT_2,
++    STUDENT,
++    active,
++    history,
++    invoices,
++    notice_kinds,
++    open_invoice,
++    pay,
++    plans,
++    status,
++    subscribe,
++    subscription,
++)
++
++
++async def test_activation_only_after_full_payment() -> None:
++    p = await plans()
++    sub_id = await subscribe(p["std"])
++    await pay(sub_id, Decimal(200))
++    assert await status(sub_id) == "pending"
++    invoice = await open_invoice(sub_id)
++    assert invoice.paid_total == Decimal(200)
++
++    await pay(sub_id)
++    sub = await subscription(sub_id)
++    assert sub.status == "active"
++    assert sub.activated_at == T0
++    assert sub.paid_until == date(2026, 4, 1)
++    assert await open_invoice(sub_id) is None
++    assert [i.status for i in await invoices(sub_id)] == ["paid"]
++    assert "activated" in await notice_kinds(sub_id)
++
++
++async def test_overpayment_rejected() -> None:
++    p = await plans()
++    sub_id = await subscribe(p["std"])
++    with pytest.raises(DomainError, match="больше остатка"):
++        await pay(sub_id, Decimal(601))
++    assert await status(sub_id) == "pending"
++
++
++async def test_paid_invoice_does_not_take_payments() -> None:
++    p = await plans()
++    sub_id = await active(p["std"])
++    invoice = (await invoices(sub_id))[0]
++    with pytest.raises(DomainError, match="уже оплачен"):
++        await act(service.record_payment, invoice.id, Decimal(10))
++
++
++async def test_same_external_payment_counted_once() -> None:
++    p = await plans()
++    sub_id = await subscribe(p["std"])
++    await pay(sub_id, Decimal(100), external_ref="bank-77")
++    with pytest.raises(DomainError, match="уже учтён"):
++        await pay(sub_id, Decimal(100), external_ref="bank-77")
++    assert (await open_invoice(sub_id)).paid_total == Decimal(100)
++
++
++async def test_paid_subscription_closes_pending_duplicate() -> None:
++    p = await plans()
++    first = await subscribe(p["std"])
++    second = await subscribe(p["std"])
++    await pay(second)
++
++    assert await status(second) == "active"
++    dup = await subscription(first)
++    assert dup.status == "closed_duplicate"
++    assert dup.closed_at == T0
++    assert [i.status for i in await invoices(first)] == ["void"]
++    assert "closed_duplicate" in await notice_kinds(first)
++
++
++async def test_switching_paid_plan_closes_previous_one() -> None:
++    p = await plans()
++    old = await active(p["std"])
++    new = await active(p["std-plus"])
++    assert await status(new) == "active"
++    assert await status(old) == "closed_duplicate"
++
++
++async def test_corporate_and_regular_are_the_same_track() -> None:
++    p = await plans()
++    regular = await active(p["std"])
++    corp = await active(p["corp"], employer_ref="org-15")
++    assert await status(corp) == "active"
++    assert await status(regular) == "closed_duplicate"
++
++
++async def test_social_and_paid_plans_live_together() -> None:
++    p = await plans()
++    paid = await active(p["std"], birth_date=STUDENT)
++    social = await active(p["soc"], birth_date=STUDENT)
++    assert await status(paid) == "active"
++    assert await status(social) == "active"
++
++
++async def test_other_clients_are_not_duplicates() -> None:
++    p = await plans()
++    mine = await active(p["std"])
++    theirs = await active(p["std"], client=CLIENT_2)
++    assert await status(mine) == "active"
++    assert await status(theirs) == "active"
++
++
++async def test_partly_paid_duplicate_is_refunded() -> None:
++    p = await plans()
++    first = await subscribe(p["std"])
++    await pay(first, Decimal(250))
++    second = await active(p["std"])
++
++    assert await status(second) == "active"
++    assert [i.status for i in await invoices(first)] == ["void"]
++    assert "refund" in await notice_kinds(first)
++
++
++async def test_payment_for_closed_duplicate_is_refunded() -> None:
++    p = await plans()
++    first = await subscribe(p["std"])
++    second = await subscribe(p["std"])
++    first_invoice = await open_invoice(first)
++    second_invoice = await open_invoice(second)
++
++    # Оба счёта оплачены до того, как воркер обработал события.
++    async with db.sessionmaker().begin() as s:
++        await service.record_payment(s, first_invoice.id, first_invoice.amount)
++        await service.record_payment(s, second_invoice.id, second_invoice.amount)
++    await dispatch_pending()
++
++    assert await status(first) == "active"
++    assert await status(second) == "closed_duplicate"
++    assert "refund" in await notice_kinds(second)
++
++
++async def test_second_subscription_on_live_plan_rejected() -> None:
++    p = await plans()
++    await active(p["std"])
++    with pytest.raises(DomainError, match="уже есть действующий"):
++        await subscribe(p["std"])
++
++
++async def test_database_keeps_one_live_subscription_per_plan() -> None:
++    p = await plans()
++    await active(p["std"])
++    with pytest.raises(IntegrityError, match="uq_subscriptions_one_active"):
++        async with db.sessionmaker().begin() as s:
++            s.add(
++                Subscription(
++                    client_ref=CLIENT_1,
++                    plan_id=p["std"],
++                    status="grace",
++                    holder_name="Анна Петрова",
++                    paid_until=date(2026, 3, 31),
++                    created_at=clock.now(),
++                )
++            )
++
++
++async def test_status_changes_are_logged() -> None:
++    p = await plans()
++    first = await subscribe(p["std"])
++    second = await active(p["std"])
++    assert await history(second) == [("pending", "active")]
++    assert await history(first) == [("pending", "closed_duplicate")]
++
++
++async def test_closed_subscription_cannot_be_reopened() -> None:
++    p = await plans()
++    first = await subscribe(p["std"])
++    await active(p["std"])
++    with pytest.raises(DBAPIError, match="is closed"):
++        async with db.sessionmaker().begin() as s:
++            sub = await s.get(Subscription, first)
++            sub.status = "pending"
++            sub.closed_at = None
++
++
++async def test_database_rejects_payment_above_balance() -> None:
++    p = await plans()
++    sub_id = await subscribe(p["std"])
++    invoice = await open_invoice(sub_id)
++    with pytest.raises(DBAPIError, match="exceeds invoice"):
++        async with db.sessionmaker().begin() as s:
++            s.add(Payment(invoice_id=invoice.id, amount=Decimal(700), paid_at=clock.now()))
+diff --git a/tests/test_subscriptions_api.py b/tests/test_subscriptions_api.py
+new file mode 100644
+index 0000000..fee1187
+--- /dev/null
++++ b/tests/test_subscriptions_api.py
+@@ -0,0 +1,61 @@
++import httpx
++import pytest
++
++from libs.events import dispatch_pending
++from services.subscriptions.app import app
++from tests.subscriptions_factories import CLIENT_1, CLIENT_2, PASSPORT, plans
++
++
++@pytest.fixture
++async def client():
++    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://subs") as c:
++        yield c
++
++
++async def test_subscribe_and_pay_over_api(client: httpx.AsyncClient) -> None:
++    p = await plans()
++    r = await client.get("/plans")
++    assert [x["code"] for x in r.json()] == ["soc", "corp", "std", "std-plus"]
++
++    r = await client.post(
++        "/subscriptions",
++        json={
++            "client_ref": CLIENT_1,
++            "plan_id": p["std"],
++            "holder_name": "Анна Петрова",
++            "passport": PASSPORT,
++            "birth_date": "1990-05-01",
++        },
++    )
++    assert r.status_code == 201
++    sub_id, invoice_id = r.json()["subscription_id"], r.json()["invoice_id"]
++
++    r = await client.post(f"/invoices/{invoice_id}/payments", json={"amount": "600.00"})
++    assert r.status_code == 201
++    await dispatch_pending()
++
++    r = await client.get(f"/subscriptions/{sub_id}")
++    assert r.json()["status"] == "active"
++    assert r.json()["paid_until"] == "2026-04-01"
++    assert r.json()["holder_check"] == "verified"
++
++    r = await client.get(f"/clients/{CLIENT_1}/subscriptions")
++    assert [x["id"] for x in r.json()] == [sub_id]
++
++
++async def test_api_maps_domain_errors(client: httpx.AsyncClient) -> None:
++    p = await plans()
++    r = await client.post(
++        "/subscriptions", json={"client_ref": CLIENT_1, "plan_id": p["std"], "holder_name": "Анна"}
++    )
++    sub_id, invoice_id = r.json()["subscription_id"], r.json()["invoice_id"]
++
++    r = await client.put(f"/subscriptions/{sub_id}/holder", json={"client_ref": CLIENT_2, "holder_name": "X"})
++    assert r.status_code == 403
++
++    r = await client.post(f"/invoices/{invoice_id}/payments", json={"amount": "1000"})
++    assert r.status_code == 409
++    assert "остатка" in r.json()["detail"]
++
++    r = await client.get("/subscriptions/999")
++    assert r.status_code == 404
+diff --git a/tests/test_subscriptions_holder.py b/tests/test_subscriptions_holder.py
+new file mode 100644
+index 0000000..0e423b9
+--- /dev/null
++++ b/tests/test_subscriptions_holder.py
+@@ -0,0 +1,103 @@
++from datetime import UTC, date, datetime
++
++import pytest
++
++from libs.errors import AccessDenied, DomainError
++from services.subscriptions import service
++from tests.factories import act, travel
++from tests.subscriptions_factories import (
++    CLIENT_2,
++    PASSPORT,
++    SENIOR,
++    active,
++    all_notices,
++    notice_kinds,
++    plans,
++    subscribe,
++    subscription,
++)
++
++
++async def test_complete_holder_is_verified() -> None:
++    p = await plans()
++    sub_id = await subscribe(p["std"])
++    assert (await subscription(sub_id)).holder_check == "verified"
++
++
++async def test_holder_without_passport_is_rejected() -> None:
++    p = await plans()
++    sub_id = await subscribe(p["std"], passport=None)
++    assert (await subscription(sub_id)).holder_check == "rejected"
++    rejected = [n for n in await all_notices(sub_id) if n.kind == "holder_rejected"]
++    assert "паспорта" in rejected[0].body
++
++
++async def test_holder_update_sends_subscription_to_recheck() -> None:
++    p = await plans()
++    sub_id = await active(p["std"], passport=None)
++    assert (await subscription(sub_id)).holder_check == "rejected"
++
++    await act(service.update_holder, sub_id, client_ref="client-1", passport=PASSPORT)
++    sub = await subscription(sub_id)
++    assert sub.passport == PASSPORT
++    assert sub.holder_check == "verified"
++    assert sub.status == "active"
++
++
++async def test_unchanged_holder_data_is_not_rechecked() -> None:
++    p = await plans()
++    sub_id = await subscribe(p["std"], passport=None)
++    await act(service.update_holder, sub_id, client_ref="client-1", holder_name="Анна Петрова")
++    assert await notice_kinds(sub_id) == ["invoice", "holder_rejected"]
++
++
++async def test_holder_updated_only_by_owner() -> None:
++    p = await plans()
++    sub_id = await subscribe(p["std"])
++    with pytest.raises(AccessDenied):
++        await act(service.update_holder, sub_id, client_ref=CLIENT_2, holder_name="Чужой")
++
++
++async def test_closed_subscription_holder_is_frozen() -> None:
++    p = await plans()
++    first = await subscribe(p["std"])
++    await active(p["std"])
++    with pytest.raises(DomainError, match="закрыт"):
++        await act(service.update_holder, first, client_ref="client-1", holder_name="Анна П.")
++
++
++async def test_social_plan_needs_eligible_holder() -> None:
++    p = await plans()
++    with pytest.raises(DomainError, match="студентам и пенсионерам"):
++        await subscribe(p["soc"])
++    with pytest.raises(DomainError, match="паспорт и дата рождения"):
++        await subscribe(p["soc"], passport=None, birth_date=SENIOR)
++    assert await subscribe(p["soc"], birth_date=SENIOR)
++
++
++async def test_student_social_plan_rejected_on_recheck_after_birthday() -> None:
++    p = await plans()
++    sub_id = await active(p["soc"], birth_date=date(2002, 3, 10))
++    assert (await subscription(sub_id)).holder_check == "verified"
++
++    travel(datetime(2026, 3, 11, 9, 0, tzinfo=UTC))
++    await act(service.update_holder, sub_id, client_ref="client-1", holder_name="Анна Сергеевна Петрова")
++    sub = await subscription(sub_id)
++    assert sub.holder_check == "rejected"
++    rejected = [n for n in await all_notices(sub_id) if n.kind == "holder_rejected"]
++    assert "социального тарифа" in rejected[0].body
++
++
++async def test_corporate_plan_requires_employer() -> None:
++    p = await plans()
++    with pytest.raises(DomainError, match="работодатель"):
++        await subscribe(p["corp"])
++    with pytest.raises(DomainError, match="только для корпоративного"):
++        await subscribe(p["std"], employer_ref="org-15")
++
++
++async def test_archived_plan_not_sold() -> None:
++    p = await plans()
++    await act(service.archive_plan, p["std-plus"])
++    with pytest.raises(DomainError, match="не продаётся"):
++        await subscribe(p["std-plus"])
+diff --git a/tests/test_subscriptions_lifecycle.py b/tests/test_subscriptions_lifecycle.py
+new file mode 100644
+index 0000000..7c68535
+--- /dev/null
++++ b/tests/test_subscriptions_lifecycle.py
+@@ -0,0 +1,122 @@
++from datetime import UTC, date, datetime, timedelta
++
++from services.subscriptions import jobs
++from tests.factories import T0, act, travel
++from tests.subscriptions_factories import (
++    active,
++    all_notices,
++    invoices,
++    notice_kinds,
++    open_invoice,
++    pay,
++    plans,
++    status,
++    subscribe,
++    subscription,
++)
++
++
++def at(day: date) -> datetime:
++    return datetime(day.year, day.month, day.day, 3, 0, tzinfo=UTC)
++
++
++async def run(job, now: datetime):
++    travel(now)
++    return await act(job, now=now)
++
++
++async def test_unpaid_month_moves_to_grace() -> None:
++    p = await plans()
++    sub_id = await active(p["std"])
++
++    result = await run(jobs.expire_overdue, at(date(2026, 4, 1)))
++    assert result["grace"] == []
++    assert await status(sub_id) == "active"
++
++    result = await run(jobs.expire_overdue, at(date(2026, 4, 2)))
++    assert result["grace"] == [sub_id]
++    assert await status(sub_id) == "grace"
++    grace = [n for n in await all_notices(sub_id) if n.kind == "grace"]
++    assert "2026-05-01" in grace[0].body
++
++
++async def test_grace_ends_after_thirty_days() -> None:
++    p = await plans()
++    sub_id = await active(p["std"])
++    await run(jobs.expire_overdue, at(date(2026, 4, 2)))
++
++    await run(jobs.expire_overdue, at(date(2026, 5, 1)))
++    assert await status(sub_id) == "grace"
++
++    result = await run(jobs.expire_overdue, at(date(2026, 5, 2)))
++    assert result["expired"] == [sub_id]
++    sub = await subscription(sub_id)
++    assert sub.status == "expired"
++    assert sub.closed_at == at(date(2026, 5, 2))
++    assert "expired" in await notice_kinds(sub_id)
++
++
++async def test_forgotten_active_subscription_expires_directly() -> None:
++    p = await plans()
++    sub_id = await active(p["std"])
++    result = await run(jobs.expire_overdue, at(date(2026, 6, 1)))
++    assert result == {"expired": [sub_id], "grace": []}
++    assert await status(sub_id) == "expired"
++
++
++async def test_renewal_invoice_issued_week_before_end() -> None:
++    p = await plans()
++    sub_id = await active(p["std"])
++
++    assert await run(jobs.issue_renewal_invoices, at(date(2026, 3, 24))) == []
++    issued = await run(jobs.issue_renewal_invoices, at(date(2026, 3, 25)))
++    assert len(issued) == 1
++    invoice = await open_invoice(sub_id)
++    assert (invoice.period_start, invoice.period_end) == (date(2026, 4, 2), date(2026, 5, 1))
++
++    assert await run(jobs.issue_renewal_invoices, at(date(2026, 3, 26))) == []
++
++
++async def test_paying_renewal_extends_subscription() -> None:
++    p = await plans()
++    sub_id = await active(p["std"])
++    await run(jobs.issue_renewal_invoices, at(date(2026, 3, 28)))
++    await pay(sub_id)
++
++    sub = await subscription(sub_id)
++    assert sub.status == "active"
++    assert sub.paid_until == date(2026, 5, 1)
++    assert "renewed" in await notice_kinds(sub_id)
++
++
++async def test_grace_subscription_returns_to_active_after_payment() -> None:
++    p = await plans()
++    sub_id = await active(p["std"])
++    await run(jobs.issue_renewal_invoices, at(date(2026, 3, 28)))
++    await run(jobs.expire_overdue, at(date(2026, 4, 10)))
++    assert await status(sub_id) == "grace"
++
++    await pay(sub_id)
++    sub = await subscription(sub_id)
++    assert sub.status == "active"
++    assert sub.paid_until == date(2026, 5, 1)
++
++
++async def test_expired_subscription_voids_open_invoice() -> None:
++    p = await plans()
++    sub_id = await active(p["std"])
++    await run(jobs.issue_renewal_invoices, at(date(2026, 3, 28)))
++    await run(jobs.expire_overdue, at(date(2026, 5, 10)))
++
++    assert await status(sub_id) == "expired"
++    assert [i.status for i in await invoices(sub_id)] == ["paid", "void"]
++
++
++async def test_unpaid_new_subscription_expires() -> None:
++    p = await plans()
++    sub_id = await subscribe(p["std"])
++
++    assert await run(jobs.expire_stale_pending, T0 + timedelta(days=14)) == []
++    assert await run(jobs.expire_stale_pending, T0 + timedelta(days=14, minutes=1)) == [sub_id]
++    assert await status(sub_id) == "expired"
++    assert [i.status for i in await invoices(sub_id)] == ["void"]

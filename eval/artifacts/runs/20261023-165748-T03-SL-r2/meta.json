@@ -1,0 +1,2 @@
+{"run_id": "20261023-165748-T03-SL-r2", "task_id": "T03", "variant": "SL", "repeat": 2,
+ "worker_model": "claude-opus-5-5", "effort": "medium", "base": "325ba87cd72eedacd54b5e768da7c3fbf45a5d99", "workdir": "~/work/ai-dd/wt/20261023-165748-T03-SL-r2", "series": ""}

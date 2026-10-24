@@ -1,0 +1,34 @@
+Transformers.js loaded: Xenova/all-MiniLM-L6-v2
+[WARN] 1 entries are in ~/work/ai-dd/wt/20261023-041917-T08-SMB-r0/.swarm/agentdb-memory.db and were not read here. Read them with --path ~/work/ai-dd/wt/20261023-041917-T08-SMB-r0/.swarm/agentdb-memory.db.
+
+Memory Statistics
+
+Overview
++---------------+--------------------------------+
+| Metric        |                          Value |
++---------------+--------------------------------+
+| Backend       | sqlite (bridge, brute-force... |
+| Version       |                        unknown |
+| Total Entries |                              1 |
+| Total Storage |                       475136 B |
+| Location      | ~/work/ai-d... |
++---------------+--------------------------------+
+
+Timeline
++--------------+--------------------------+
+| Metric       |                    Value |
++--------------+--------------------------+
+| Oldest Entry | 2026-10-23T01:20:57.716Z |
+| Newest Entry | 2026-10-23T01:20:57.716Z |
++--------------+--------------------------+
+Transformers.js loaded: Xenova/all-MiniLM-L6-v2
+
+Embedding
++-----------------+-------------------------+
+| Metric          |                   Value |
++-----------------+-------------------------+
+| Provider        | Xenova/all-MiniLM-L6-v2 |
+| Dimensions      |                     384 |
+| Semantic Search |                     yes |
+| HNSW Index      |              not active |
++-----------------+-------------------------+

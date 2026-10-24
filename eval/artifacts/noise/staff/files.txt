@@ -1,0 +1,14 @@
+migrations/noise/staff.sql
+services/staff/__init__.py
+services/staff/api.py
+services/staff/app.py
+services/staff/consumers.py
+services/staff/jobs.py
+services/staff/listeners.py
+services/staff/models.py
+services/staff/service.py
+services/staff/settings.py
+tests/staff_factories.py
+tests/test_staff_employees.py
+tests/test_staff_events.py
+tests/test_staff_shifts.py

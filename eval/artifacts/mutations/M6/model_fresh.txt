@@ -1,0 +1,68 @@
+diff --git a/knowledge/model/code.json b/knowledge/model/code.json
+index 6cfd29f..e6b8601 100644
+--- a/knowledge/model/code.json
++++ b/knowledge/model/code.json
+@@ -2752,10 +2752,10 @@
+   {
+    "dst": "scheduling.loans",
+    "lines": [
+-    13,
+-    14,
+     15,
+-    16
++    16,
++    17,
++    18
+    ],
+    "src": "services/scheduling/jobs.py::flag_overdue",
+    "type": "reads"
+@@ -3110,7 +3110,7 @@
+    "dst": "libs/settings.py::LOAN_PERIOD_DAYS",
+    "inferred": "литерал 30 вместо настройки",
+    "lines": [
+-    16
++    18
+    ],
+    "src": "services/scheduling/jobs.py::flag_overdue",
+    "type": "reads_config"
+@@ -4616,7 +4616,7 @@
+    ],
+    "dst": "scheduling.loans",
+    "lines": [
+-    21
++    23
+    ],
+    "src": "services/scheduling/jobs.py::flag_overdue",
+    "type": "writes"
+@@ -4766,7 +4766,7 @@
+     "libs/settings.py::PAYMENT_ARCHIVE_DAYS"
+    ],
+    "likely": "libs/settings.py::LOAN_PERIOD_DAYS",
+-   "line": 16,
++   "line": 18,
+    "symbol": "services/scheduling/jobs.py::flag_overdue",
+    "value": 30
+   }
+@@ -5070,7 +5070,8 @@
+    "type": "job"
+   },
+   {
+-   "end_line": 27,
++   "doc": "Отмечает просроченные выдачи и публикует loan.overdue.",
++   "end_line": 29,
+    "hash": "60a1ef28c116",
+    "hash_own": "40a8df8b7358",
+    "id": "services/scheduling/jobs.py::flag_overdue",
+diff --git a/knowledge/model/events.json b/knowledge/model/events.json
+index e8a40c7..7e86832 100644
+--- a/knowledge/model/events.json
++++ b/knowledge/model/events.json
+@@ -746,7 +746,7 @@
+   {
+    "dst": "loan.overdue",
+    "lines": [
+-    22
++    24
+    ],
+    "src": "services/scheduling/jobs.py::flag_overdue",
+    "type": "publishes"

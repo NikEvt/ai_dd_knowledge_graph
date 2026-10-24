@@ -1,0 +1,14 @@
+migrations/noise/inventory.sql
+services/inventory/__init__.py
+services/inventory/api.py
+services/inventory/app.py
+services/inventory/consumers.py
+services/inventory/jobs.py
+services/inventory/models.py
+services/inventory/service.py
+services/inventory/settings.py
+tests/inventory_factories.py
+tests/test_inventory_api.py
+tests/test_inventory_copies.py
+tests/test_inventory_ill.py
+tests/test_inventory_transfers.py

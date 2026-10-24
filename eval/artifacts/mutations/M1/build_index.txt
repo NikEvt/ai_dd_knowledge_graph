@@ -1,0 +1,2 @@
+knowledge/model/db.json: 75 nodes, 69 edges
+knowledge/index.sqlite: 562 nodes, 2099 edges

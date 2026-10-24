@@ -1,0 +1,10 @@
+ docs/config.md                     |  2 +-
+ docs/coverage.md                   |  3 +-
+ docs/events.md                     |  2 +-
+ docs/process.md                    | 14 ++++-----
+ docs/reconciliation.md             |  7 ++---
+ docs/rules/applications.md         |  7 +++--
+ services/applications/consumers.py |  2 +-
+ services/applications/dedup.py     |  6 ----
+ tests/test_dedup.py                | 58 ++++++++++++++++++++++++++++++++++++++
+ 9 files changed, 76 insertions(+), 25 deletions(-)

@@ -1,0 +1,69 @@
+diff --git a/knowledge/model/code.json b/knowledge/model/code.json
+index 6cfd29f..d5157b0 100644
+--- a/knowledge/model/code.json
++++ b/knowledge/model/code.json
+@@ -5685,7 +5685,7 @@
+   },
+   {
+    "end_line": 39,
+-   "hash": "ea8e31c2634d",
++   "hash": "f660ff962d25",
+    "hash_own": "d114c5c4709b",
+    "id": "services/applications/consumers.py::on_fully_paid",
+    "kind": "consumer",
+@@ -5737,7 +5737,7 @@
+   },
+   {
+    "end_line": 47,
+-   "hash": "3695aacda943",
++   "hash": "140467ee60e6",
+    "hash_own": "4932444042cf",
+    "id": "services/applications/consumers.py::on_review_passed",
+    "kind": "consumer",
+@@ -5763,8 +5763,8 @@
+   },
+   {
+    "end_line": 51,
+-   "hash": "2a2e785b5324",
+-   "hash_own": "d4e68f242423",
++   "hash": "a47de258e5ee",
++   "hash_own": "23f70cd34c44",
+    "id": "services/applications/dedup.py::close_duplicates",
+    "kind": "function",
+    "line": 25,
+diff --git a/knowledge/model/events.json b/knowledge/model/events.json
+index e8a40c7..d35a699 100644
+--- a/knowledge/model/events.json
++++ b/knowledge/model/events.json
+@@ -526,7 +526,7 @@
+    "type": "publishes"
+   },
+   {
+-   "dst": "application.closed_duplicate",
++   "dst": "application.duplicate_closed",
+    "src": "service:applications",
+    "type": "publishes"
+   },
+@@ -629,7 +629,7 @@
+    "type": "publishes"
+   },
+   {
+-   "dst": "application.closed_duplicate",
++   "dst": "application.duplicate_closed",
+    "lines": [
+     45
+    ],
+@@ -852,6 +852,13 @@
+    ],
+    "id": "application.closed_duplicate",
+    "name": "application.closed_duplicate",
++   "orphan": "нет публикаторов",
++   "type": "event"
++  },
++  {
++   "id": "application.duplicate_closed",
++   "name": "application.duplicate_closed",
++   "orphan": "нет подписчиков",
+    "payload": [
+     "application_id",
+     "winner_id"

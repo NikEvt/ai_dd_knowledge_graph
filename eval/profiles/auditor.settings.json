@@ -1,0 +1,9 @@
+{
+  "claudeMdExcludes": [
+    "/Users/<you>/.claude/CLAUDE.md",
+    "**/CLAUDE.md",
+    "**/AGENTS.md"
+  ],
+  "autoMemoryEnabled": false,
+  "disableAllHooks": true
+}

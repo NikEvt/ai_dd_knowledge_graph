@@ -1,0 +1,11 @@
+ docs/config.md                    |  6 +++---
+ docs/coverage.md                  |  5 ++---
+ docs/entities/scheduling.loans.md |  2 +-
+ docs/reconciliation.md            |  9 ++++-----
+ docs/roles.md                     |  2 +-
+ docs/rules/chat.md                |  2 +-
+ docs/rules/scheduling.md          | 11 ++++++-----
+ libs/settings.py                  |  2 +-
+ services/scheduling/jobs.py       |  4 ++--
+ tests/test_scheduling.py          | 40 +++++++++++++++++++++++++++++++++++++++
+ 10 files changed, 61 insertions(+), 22 deletions(-)

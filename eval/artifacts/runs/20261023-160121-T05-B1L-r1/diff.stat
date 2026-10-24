@@ -1,0 +1,14 @@
+ docs/config.md                             |  6 +++---
+ docs/coverage.md                           |  6 ++----
+ docs/entities/applications.applications.md |  2 +-
+ docs/entities/applications.clients.md      |  3 ++-
+ docs/roles.md                              |  4 ++--
+ docs/rules/applications.md                 | 12 +++++++-----
+ migrations/versions/0002_client_snils.py   | 20 ++++++++++++++++++++
+ services/applications/listeners.py         |  2 +-
+ services/applications/models.py            |  1 +
+ services/applications/review.py            |  2 +-
+ services/applications/service.py           |  2 +-
+ tests/factories.py                         |  3 +++
+ tests/test_review.py                       | 21 +++++++++++++++++++++
+ 13 files changed, 65 insertions(+), 19 deletions(-)

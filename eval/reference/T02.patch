@@ -1,0 +1,35 @@
+diff --git a/libs/settings.py b/libs/settings.py
+index e4debd2..ebc7031 100644
+--- a/libs/settings.py
++++ b/libs/settings.py
+@@ -5,7 +5,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL", f"postgresql+asyncpg://erp:erp@loc
+ REDIS_URL = os.environ.get("REDIS_URL", f"redis://localhost:{os.environ.get('REDIS_PORT', '56379')}/0")
+ 
+ # Срок пользования книгами с даты выдачи.
+-LOAN_PERIOD_DAYS = 30
++LOAN_PERIOD_DAYS = 21
+ # Заявка уходит в архив, если с начала проверки прошло столько дней, а данные не получены.
+ REVIEW_ARCHIVE_DAYS = 30
+ # Платная заявка уходит в архив, если счёт не оплачен за столько дней.
+diff --git a/services/scheduling/jobs.py b/services/scheduling/jobs.py
+index e275da8..a968c63 100644
+--- a/services/scheduling/jobs.py
++++ b/services/scheduling/jobs.py
+@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
+ from sqlalchemy import select
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+-from libs import events
++from libs import events, settings
+ from services.scheduling.models import Loan
+ 
+ 
+@@ -13,7 +13,7 @@ async def flag_overdue(session: AsyncSession, now: datetime) -> list[int]:
+             select(Loan).where(
+                 Loan.status == "out",
+                 Loan.overdue_flagged.is_(False),
+-                Loan.issued_at < now - timedelta(days=30),
++                Loan.issued_at < now - timedelta(days=settings.LOAN_PERIOD_DAYS),
+             )
+         )
+     ).all()

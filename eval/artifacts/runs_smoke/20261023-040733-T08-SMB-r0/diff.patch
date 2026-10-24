@@ -1,0 +1,864 @@
+diff --git a/.claude-flow/harness-active-policy.json b/.claude-flow/harness-active-policy.json
+new file mode 100644
+index 0000000..8ffa14c
+--- /dev/null
++++ b/.claude-flow/harness-active-policy.json
+@@ -0,0 +1,14 @@
++{
++  "championId": "sha256:6141a8ea990c5063b77e090ae8f37f9c539d8aa8f58dcceb30f3a82f97e57319",
++  "provenanceTier": "oracle:test-exec",
++  "layer": "framework/node-cli",
++  "appliedAt": 1792717674107,
++  "previous": "",
++  "params": {
++    "alpha": 0.3,
++    "subjectWeight": 1,
++    "mmrLambda": 0.5,
++    "bodyWeight": 1.5,
++    "typePenaltyFactor": 0.5
++  }
++}
+\ No newline at end of file
+diff --git a/.claude-flow/policy/state.json b/.claude-flow/policy/state.json
+new file mode 100644
+index 0000000..fb9c293
+--- /dev/null
++++ b/.claude-flow/policy/state.json
+@@ -0,0 +1,11 @@
++{
++  "version": 2,
++  "mode": "legacy",
++  "migratedFrom": "pre-ADR-324; capabilities=none-detected",
++  "migratedAt": 1792717674048,
++  "rules": [],
++  "budgets": [],
++  "usage": [],
++  "approvals": [],
++  "receipts": []
++}
+diff --git a/.claude/.proven-config-version b/.claude/.proven-config-version
+new file mode 100644
+index 0000000..dbdc100
+--- /dev/null
++++ b/.claude/.proven-config-version
+@@ -0,0 +1 @@
++sha256:6141a8ea990c5063b77e090ae8f37f9c539d8aa8f58dcceb30f3a82f97e57319
+\ No newline at end of file
+diff --git a/.claude/helpers/.helpers-version b/.claude/helpers/.helpers-version
+index c119839..a4be2d4 100644
+--- a/.claude/helpers/.helpers-version
++++ b/.claude/helpers/.helpers-version
+@@ -1 +1 @@
+-3.57.1
+\ No newline at end of file
++3.59.17
+\ No newline at end of file
+diff --git a/.claude/helpers/helpers.manifest.json b/.claude/helpers/helpers.manifest.json
+index 4f875d6..be5094a 100644
+--- a/.claude/helpers/helpers.manifest.json
++++ b/.claude/helpers/helpers.manifest.json
+@@ -1,14 +1,14 @@
+ {
+   "manifest": {
+-    "version": "3.59.7",
++    "version": "3.59.17",
+     "files": {
+       "auto-memory-hook.mjs": "631fac9d518835e2852a406888316bbbddddb49e7ed8e406d2e971f46833df9a",
+-      "hook-handler.cjs": "bc12b3cae92d5a7c8deef699fa00d0ef07b57625c18dbeac4387f15725b8e09f",
++      "hook-handler.cjs": "24502a3bcb78770971147940515c992e35b6736ae14ee2dc54e07d4cdef6a1d8",
+       "intelligence.cjs": "1d981d6c6a35d70a66450e96458e26169e0cede11523ea246a2c129c197a5b4e",
+       "statusline.cjs": "d72417ecb38634011a19f095a30e07b9929e6f97663520172ece9be7491b2eaa",
+       "router.cjs": "16648b3c0d73b6681ac2d8d13def6a68286c57f5a11004de5b19a0fa088c833d"
+     }
+   },
+-  "signature": "8aoMXxJUC+or7fz7rHV3Hj7sHSywbc/LGznl7g0509tiesaM6qPM5G17S2RY1RXKtr+JDi6YTcIRmJbdzXtgBw==",
++  "signature": "WEe3Qca2Em0MEclN+uTae/yTPDwdrLx3HpKW6F3c2v1kA01PUCqSWtMBErDztcgdXum4tg8EGQGxFnU1VYh7Aw==",
+   "algorithm": "ed25519"
+ }
+diff --git a/.claude/helpers/hook-handler.cjs b/.claude/helpers/hook-handler.cjs
+index 0cfe3d9..2b25605 100755
+--- a/.claude/helpers/hook-handler.cjs
++++ b/.claude/helpers/hook-handler.cjs
+@@ -24,9 +24,10 @@ const helpersDir = __dirname;
+ const helperRoot = path.resolve(helpersDir, '..', '..');
+ 
+ // Resolve an installed @claude-flow/cli (or ruflo) bin — mirrors
+-// statusline-generator.ts's resolveCliBin() candidate list. Used only to
+-// spawn the detached funnel-refresh helper below; failures are silent (no
+-// candidate found just means the refresh never fires this session).
++// statusline-generator.ts's resolveCliBin() candidate list, then looks for a
++// global install (resolveGlobalCliBin() below, #3368). Used only to spawn the
++// detached funnel-refresh helper below; failures are silent (no candidate
++// found just means the refresh falls back to npx).
+ //
+ // Verifies dist/src/index.js exists alongside bin/cli.js, not just the bin
+ // itself — Claude Code's own plugin marketplace mechanism installs by
+@@ -39,7 +40,17 @@ const helperRoot = path.resolve(helpersDir, '..', '..');
+ // first every time and spawnDetachedFunnelRefresh() below had no fallback,
+ // so the promo/disclosure row could never populate for any marketplace
+ // install, on any OS.
++// session-restore asks up to three times (first-run enable, then the two
++// refreshes). The answer cannot change inside one short-lived hook process,
++// so resolve once: `undefined` means "not looked up yet", null means "no
++// local or global CLI — use npx".
++let cliBinCache;
+ function resolveCliBinForHook() {
++  if (cliBinCache === undefined) cliBinCache = resolveCliBinUncached();
++  return cliBinCache;
++}
++
++function resolveCliBinUncached() {
+   try {
+     const home = os.homedir();
+     const candidates = [
+@@ -53,16 +64,219 @@ function resolveCliBinForHook() {
+       path.join(helpersDir, '..', '..', 'bin', 'cli.js'),
+     ];
+     for (const p of candidates) {
+-      try {
+-        if (fs.existsSync(p) && fs.existsSync(path.join(path.dirname(p), '..', 'dist', 'src', 'index.js'))) {
+-          return p;
+-        }
+-      } catch (e) { /* try next candidate */ }
++      if (isRunnableCli(p)) return p;
+     }
++    return resolveGlobalCliBin();
+   } catch (e) { /* ignore */ }
+   return null;
+ }
+ 
++function isRunnableCli(p) {
++  try {
++    return fs.existsSync(p) && fs.existsSync(path.join(path.dirname(p), '..', 'dist', 'src', 'index.js'));
++  } catch (e) { return false; }
++}
++
++// #3368: a global install — the README's `npm install -g ruflo@latest` — keeps
++// the CLI at <prefix>/lib/node_modules/ruflo/node_modules/@claude-flow/cli,
++// which none of the project-relative candidates above cover, so on those
++// machines every refresh fell back to npx: a second, separately cached copy
++// of the CLI that follows the registry's latest rather than the version the
++// user pinned (the same npx-cache skew as #3306), and that cannot start
++// offline on a cold cache.
++//
++// Three lookups, fs calls only (no child process), reached only after every
++// candidate above missed:
++//   1. npm's global prefix, resolved the way npm resolves it
++//      (npmGlobalPrefix() below). First because it does not depend on PATH:
++//      a hook inherits the host process's PATH, which need not contain the
++//      prefix's bin/ even when the user's interactive shell does (observed:
++//      the Claude Code process spawning hooks lacked ~/.npm-global/bin while
++//      a login zsh on the same machine had it).
++//   2. `ruflo`, then `claude-flow`, on PATH — the order plugins/ruflo-core/
++//      scripts/ruflo-hook.cjs uses — for globals npm did not install (yarn
++//      classic, bun). Only a symlinked bin counts, and only when it lands in
++//      a package that declares one of the three known names, so a wrapper
++//      script or a version-manager shim (Volta) is never mistaken for an
++//      install. The <dir>/node_modules/<name> layout npm uses on Windows,
++//      where ruflo.cmd sits beside node_modules\ruflo (what resolveNpmShim()
++//      in ruflo-hook.cjs maps), is only consulted on win32: on POSIX every
++//      manager symlinks, and probing it there would follow a Windows install
++//      exposed to WSL through the appended Windows PATH.
++//      Relative PATH entries (`.` or an empty entry) are skipped, so a bare
++//      `./ruflo` in the working directory is never picked up.
++//   3. ~/.npm-global, npm's documented no-sudo prefix, when 1 and 2 both
++//      missed: the prefix setting may live where this hook's node never
++//      reads it, and a wrapper script on PATH is skipped by 2.
++// `env`/`platform`/`execPath` are parameters so any layout is testable
++// from any OS.
++function resolveGlobalCliBin(env = process.env, platform = process.platform, execPath = process.execPath) {
++  const prefix = npmGlobalPrefix(env, platform, execPath);
++  if (prefix) {
++    const hit = cliUnderPrefix(prefix, platform);
++    if (hit) return hit;
++  }
++  const dirs = String(env.PATH || env.Path || '').split(platform === 'win32' ? ';' : ':');
++  const exts = platform === 'win32' ? ['.cmd', ''] : [''];
++  for (const name of ['ruflo', 'claude-flow']) {
++    for (const dir of dirs) {
++      if (!dir || !path.isAbsolute(dir)) continue;
++      for (const ext of exts) {
++        const shim = path.join(dir, name + ext);
++        if (!fs.existsSync(shim)) continue;
++        const roots = [];
++        try {
++          if (fs.lstatSync(shim).isSymbolicLink()) {
++            const root = path.dirname(path.dirname(fs.realpathSync(shim)));
++            if (isKnownPackageRoot(root)) roots.push(root);
++          }
++        } catch (e) { /* unreadable link — fall back to the layout roots */ }
++        if (platform === 'win32') {
++          roots.push(path.join(dir, 'node_modules', name));
++          if (name === 'claude-flow') roots.push(path.join(dir, 'node_modules', '@claude-flow', 'cli'));
++        }
++        for (const root of roots) {
++          const hit = cliInPackage(root);
++          if (hit) return hit;
++        }
++      }
++    }
++  }
++  // Last resort: ~/.npm-global, the prefix npm's own docs recommend for
++  // global installs without sudo ("Resolving EACCES permissions errors").
++  // The setting that points npm there can live where this hook's node never
++  // looks (another node's builtin npmrc, or a wrapper script that sets it
++  // per call), and a `ruflo` wrapper script on PATH is skipped above by
++  // design. Without this, such a machine fell back to npx @latest on every
++  // hook. Checked only after the configured prefix and PATH both miss, so it
++  // can never override either.
++  const home = env.HOME || env.USERPROFILE;
++  if (home && path.isAbsolute(home)) {
++    const hit = cliUnderPrefix(path.join(home, '.npm-global'), platform);
++    if (hit) return hit;
++  }
++  return null;
++}
++
++// The CLI of a global install under an npm prefix: <prefix>/lib/node_modules
++// on POSIX, <prefix>\node_modules on Windows, trying the three published
++// package names in order.
++function cliUnderPrefix(prefix, platform) {
++  const modules = platform === 'win32'
++    ? path.join(prefix, 'node_modules')
++    : path.join(prefix, 'lib', 'node_modules');
++  for (const pkg of ['ruflo', 'claude-flow', path.join('@claude-flow', 'cli')]) {
++    const hit = cliInPackage(path.join(modules, pkg));
++    if (hit) return hit;
++  }
++  return null;
++}
++
++// A bin on PATH only counts as an install when the package it points into
++// declares one of the three published names. This is a narrower check than
++// resolveNpmShim() in ruflo-hook.cjs, which never reads `name`: that one takes
++// the package name from the shim's own filename, then validates package.json's
++// `bin` entry and that its realpath stays inside the package. Here the bin has
++// already been resolved to a package root, so the manifest `name` is what
++// identifies it.
++function isKnownPackageRoot(root) {
++  try {
++    const name = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf-8')).name;
++    return name === 'ruflo' || name === 'claude-flow' || name === '@claude-flow/cli';
++  } catch (e) { return false; }
++}
++
++// Map an installed ruflo / claude-flow / @claude-flow/cli package root to the
++// CLI it runs: <root>/bin/cli.js (@claude-flow/cli itself),
++// <root>/v3/@claude-flow/cli/bin/cli.js (the claude-flow umbrella bundles
++// it), or @claude-flow/cli in the node_modules npm nests inside <root> —
++// or, for the flat layout yarn classic and bun use, in the node_modules
++// folder that holds <root> itself. That is the dependency edge
++// ruflo/bin/ruflo.js's findCliPath() follows. The search stops at that one
++// enclosing node_modules: walking further up would reach unrelated trees,
++// such as a stray ~/node_modules left by an `npm i` in a home directory.
++// Every hit must still pass isRunnableCli().
++function cliInPackage(root) {
++  if (!fs.existsSync(root)) return null;
++  const candidates = [
++    path.join(root, 'bin', 'cli.js'),
++    path.join(root, 'v3', '@claude-flow', 'cli', 'bin', 'cli.js'),
++    path.join(root, 'node_modules', '@claude-flow', 'cli', 'bin', 'cli.js'),
++  ];
++  for (let dir = path.dirname(root), i = 0; i < 4 && dir !== path.dirname(dir); i++, dir = path.dirname(dir)) {
++    if (path.basename(dir) === 'node_modules') {
++      candidates.push(path.join(dir, '@claude-flow', 'cli', 'bin', 'cli.js'));
++      break;
++    }
++  }
++  return candidates.find(isRunnableCli) || null;
++}
++
++// npm's global prefix without spawning npm (`npm prefix -g` measured 70-80 ms
++// per call, paid on every SessionStart that gets this far). Same precedence
++// npm applies:
++//   1. npm_config_prefix in the environment (npm accepts either case);
++//   2. `prefix=` in the user npmrc ($npm_config_userconfig, else ~/.npmrc),
++//      where `npm config set prefix ~/.npm-global` (the npm docs' fix for
++//      EACCES on global installs) writes it;
++//   3. `prefix=` in npm's builtin npmrc (<npm package>/npmrc), found through
++//      the `npm` link beside node: Homebrew writes `prefix = /opt/homebrew`
++//      there (its process.execPath is the Cellar path, so step 4 alone would
++//      be wrong), and the Node.js Windows installer ships
++//      `prefix=${APPDATA}\npm`;
++//   4. npm's default: $PREFIX, else the directory above node's bin/ (POSIX)
++//      or node.exe's own directory (Windows).
++// Values follow npm's ini handling for the cases that decide a path: a
++// quoted value is taken literally, an unquoted `;`/`#` starts a comment,
++// keys below a `[section]` header are ignored, `${VAR}` expands when the
++// variable is set (and `${VAR?}` to empty when it is not) but otherwise
++// stays literal like npm — which leaves the value relative, so the
++// isAbsolute() check below rejects it instead of pointing at the drive root.
++// Not emulated: escaped characters and npm's other ini corner cases; each of
++// those produces a miss, never a wrong CLI. The npmrc is read into memory,
++// but only the value of its last top-level `prefix =` line is kept: no other
++// line (an `_authToken`, say) is returned, stored or logged.
++function npmGlobalPrefix(env = process.env, platform = process.platform, execPath = process.execPath) {
++  const home = (platform === 'win32' ? env.USERPROFILE : env.HOME) || os.homedir();
++  const readPrefix = (file) => {
++    let value = null;
++    try {
++      for (const line of fs.readFileSync(file, 'utf-8').split(/\r?\n/)) {
++        if (/^\s*\[/.test(line)) break; // only the top-level section applies
++        const m = /^\s*prefix\s*=\s*(.*?)\s*$/.exec(line);
++        if (m) value = m[1]; // last one wins, as in npm's ini parser
++      }
++    } catch (e) { /* no such npmrc */ }
++    return value;
++  };
++  const nodeDir = path.dirname(execPath);
++  // npm's builtin npmrc sits in npm's own package dir. On Windows that is
++  // node_modules\npm beside node.exe; elsewhere follow the `npm` link beside
++  // node (<npm>/bin/npm-cli.js) — on Homebrew it points out of the node keg
++  // to /opt/homebrew/lib/node_modules/npm.
++  let builtinRc = path.join(nodeDir, 'node_modules', 'npm', 'npmrc');
++  if (platform !== 'win32') {
++    try {
++      builtinRc = path.join(path.dirname(path.dirname(fs.realpathSync(path.join(nodeDir, 'npm')))), 'npmrc');
++    } catch (e) { /* no npm beside node */ }
++  }
++  const raw = env.npm_config_prefix || env.NPM_CONFIG_PREFIX
++    || readPrefix(env.npm_config_userconfig || env.NPM_CONFIG_USERCONFIG || path.join(home, '.npmrc'))
++    || readPrefix(builtinRc)
++    || env.PREFIX
++    || (platform === 'win32' ? nodeDir : path.dirname(nodeDir));
++  let value = String(raw).trim();
++  const quoted = /^(["'])([\s\S]*)\1$/.exec(value);
++  if (quoted) value = quoted[2];
++  else value = value.replace(/(^|[^\\])[;#].*$/, '$1').trim();
++  value = value
++    .replace(/\$\{([^}?]+)(\?)?\}/g, (whole, name, optional) => (
++      env[name] !== undefined ? env[name] : (optional ? '' : whole)
++    ))
++    .replace(/^~(?=$|[\\/])/, home);
++  return path.isAbsolute(value) ? path.resolve(value) : null;
++}
++
+ // Fire-and-forget doesn't work when the CALLER is itself a short-lived
+ // subprocess (confirmed live: two consecutive statusline renders 5s apart
+ // both saw an empty funnel-messages-cache, because the async HTTPS fetch
+@@ -74,8 +288,8 @@ function resolveCliBinForHook() {
+ // chance to write the cache. Never awaited here — must not add to
+ // SessionStart's own timeout budget.
+ //
+-// No usable local candidate (resolveCliBinForHook() returned null) falls
+-// back to npx: this call is detached/unref'd, so a slower npx cold-start
++// No usable local or global candidate (resolveCliBinForHook() returned null)
++// falls back to npx: this call is detached/unref'd, so a slower npx cold-start
+ // costs nothing perceptible — unlike the statusline's own synchronous
+ // render path, where local-first exists purely for per-render latency.
+ // `--prefer-offline` avoids a registry round trip for the tarball when
+@@ -1060,4 +1274,7 @@ if (require.main === module) {
+ // Which sibling helpers loaded (all CommonJS, shipped as .cjs — #3555).
+ const loadedHelpers = { router: !!router, session: !!session, memory: !!memory, intelligence: !!intelligence };
+ 
+-module.exports = { runWithTimeout, INTELLIGENCE_TIMEOUT_MS, loadedHelpers, ownedByMod, MOD_OWNABLE_EVENTS, resolveCliBinForHook, cliSpawnArgs, helperRoot, scanSessionStartSettingsForRisk, srFormatRiskFindingsForAutomaticBoot, srScanSettingsForRisk, srScanCommandStringForRisk, srScanAllowRuleForRisk, SR_DANGEROUS_COMMAND_WORDS, SR_SHELL_EXEC_WORDS, SR_DOWNLOADER_WORDS, SR_STANDALONE_RISK_PATTERNS };
++// resolveGlobalCliBin/npmGlobalPrefix are exported for
++// hook-handler-global-cli.test.ts; resolveCliBinForHook for anyone checking
++// what a given machine resolves to without running a hook (#3368).
++module.exports = { runWithTimeout, INTELLIGENCE_TIMEOUT_MS, loadedHelpers, ownedByMod, MOD_OWNABLE_EVENTS, resolveCliBinForHook, resolveGlobalCliBin, npmGlobalPrefix, cliSpawnArgs, helperRoot, scanSessionStartSettingsForRisk, srFormatRiskFindingsForAutomaticBoot, srScanSettingsForRisk, srScanCommandStringForRisk, srScanAllowRuleForRisk, SR_DANGEROUS_COMMAND_WORDS, SR_SHELL_EXEC_WORDS, SR_DOWNLOADER_WORDS, SR_STANDALONE_RISK_PATTERNS };
+diff --git a/.claude/helpers/statusline.cjs b/.claude/helpers/statusline.cjs
+index 4d563fa..811b304 100755
+--- a/.claude/helpers/statusline.cjs
++++ b/.claude/helpers/statusline.cjs
+@@ -50,7 +50,7 @@ const HELPER_ROOT = path.resolve(__dirname, '..', '..');
+ // Replaced by statusline-generator with the package root of the CLI that
+ // installed this helper. This survives custom npm prefixes and bundled Node
+ // runtimes whose process.execPath belongs to a different tree (#2811).
+-const BAKED_INSTALL_ROOT = "~/work/ai-dd/wt/smbbuild/node_modules/@claude-flow/cli";
++const BAKED_INSTALL_ROOT = "";
+ 
+ // ─── Delegation cache ───────────────────────────────────────────
+ // Cache the CLI JSON result so rapid prompt re-renders (Claude Code
+@@ -909,7 +909,7 @@ function getPkgVersion() {
+   // version (see generateStatuslineScript()'s doc comment) — correct even
+   // when this renders via a pure npx invocation with no local install for
+   // the candidate scan below to find.
+-  let ver = "3.59.7";
++  let ver = "3.32.8";
+   try {
+     const home = os.homedir();
+     const pkgPaths = [
+diff --git a/.claude/proven-config.json b/.claude/proven-config.json
+new file mode 100644
+index 0000000..a803057
+--- /dev/null
++++ b/.claude/proven-config.json
+@@ -0,0 +1,42 @@
++{
++  "adoptedAt": 1792717674107,
++  "championId": "sha256:6141a8ea990c5063b77e090ae8f37f9c539d8aa8f58dcceb30f3a82f97e57319",
++  "manifest": {
++    "schema": "ruflo.proven-config/v1",
++    "policy": {
++      "ref": "sha256:6141a8ea990c5063b77e090ae8f37f9c539d8aa8f58dcceb30f3a82f97e57319",
++      "value": {
++        "alpha": 0.3,
++        "subjectWeight": 1,
++        "mmrLambda": 0.5,
++        "bodyWeight": 1.5,
++        "typePenaltyFactor": 0.5
++      }
++    },
++    "layer": "framework/node-cli",
++    "compatibility": {
++      "ruflo": ">=3.24.0"
++    },
++    "benchmark": {
++      "corpus": "ADR-081-labelled-v1",
++      "corpusHash": "sha256:2f700b5c363e20a3bd88ce2bc9b87bbbbaa61732c6177894c6ec37890f888982"
++    },
++    "receipt": {
++      "heldOutDelta": 0.07381404928570845,
++      "redblue": "PASS",
++      "drift": 0,
++      "canary": {
++        "rollbackRate": 0,
++        "latencyP95": 244.612458000076,
++        "costPerTask": 0
++      },
++      "receiptCoverage": 1
++    },
++    "platform": [
++      "linux",
++      "macOS",
++      "windows"
++    ]
++  },
++  "previous": ""
++}
+\ No newline at end of file
+diff --git a/AGENTS.md b/AGENTS.md
+index 3bbfa78..eafae29 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -101,7 +101,7 @@ args = ["run", "--quiet", "python", "mcp/knowledge_server.py"]
+ 
+ События: `application.archived`, `application.closed_duplicate`, `application.ready_for_booking`, `application.review_passed`, `application.stage_changed`, `application.unarchived`, `application.venue_changed`, `booking.cancelled`, `booking.created`, `books.issued`, `client.updated`, `invoice.cancelled`, `invoice.issued`, `loan.damaged`, `loan.lost`, `loan.overdue`, `payment.fully_paid`, `payment.linked`, `payment.refunded`, `venue.settings_changed`.
+ 
+-Правил в модели: 162 (draft: 140, verified: 22).
++Правил в модели: 162 (draft: 137, suspect: 3, verified: 22).
+ <!-- END L0 -->
+ 
+ 
+diff --git a/docs/README.md b/docs/README.md
+index b1bc15a..1489294 100644
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -34,6 +34,6 @@
+ | status | 10 |
+ | symbol | 181 |
+ | table | 25 |
+-| test | 46 |
++| test | 47 |
+ 
+-Правила по статусу: draft — 140, verified — 22
++Правила по статусу: draft — 137, suspect — 3, verified — 22
+diff --git a/docs/coverage.md b/docs/coverage.md
+index 20ffe7e..4780e47 100644
+--- a/docs/coverage.md
++++ b/docs/coverage.md
+@@ -5,13 +5,15 @@
+ - Правил: 162; verified: 22
+ - Без реализации (implemented_by / enforced_by_db): 7
+ - Без тестов (tested_by): 82
+-- suspect: 0
++- suspect: 3
+ - Ограничения БД без правил: 0
+ - Проверки в коде без правил: 0
+ 
+-## suspect (0)
++## suspect (3)
+ 
+-- нет
++- R-CHAT-POST-02 (с 2026-10-23) Писать в чат могут только закреплённые за заявкой сотрудники
++- R-CHAT-READ-02 (с 2026-10-23) Чат видят участники заявки и администратор
++- R-CHAT-AUTH-01 (с 2026-10-23) Личность и роль в API чата берутся из параметров запроса без проверки
+ 
+ ## Правила без реализации (7)
+ 
+diff --git a/docs/entities/chat.messages.md b/docs/entities/chat.messages.md
+index 504f5e3..cb975b5 100644
+--- a/docs/entities/chat.messages.md
++++ b/docs/entities/chat.messages.md
+@@ -29,6 +29,6 @@
+ - R-CHAT-EVENTS-01 [verified] 11 топиков из EVENT_TEXT автоматически пишутся в чат системными сообщениями
+ - R-CHAT-EVENTS-05 [draft] События пишутся в чат и после закрытия заявки
+ - R-CHAT-POST-01 [verified] После закрытия заявки писать в чат нельзя
+-- R-CHAT-POST-02 [draft] Писать в чат могут только закреплённые за заявкой сотрудники
++- R-CHAT-POST-02 [suspect] Писать в чат могут только закреплённые за заявкой сотрудники
+ - R-CHAT-POST-03 [draft] Сообщение сотрудника записывается как обычное, с автором и временем
+ - R-CHAT-READ-04 [draft] Администратор чат только читает
+diff --git a/docs/roles.md b/docs/roles.md
+index 966da33..e2b8128 100644
+--- a/docs/roles.md
++++ b/docs/roles.md
+@@ -25,9 +25,9 @@
+ - R-BILL-FINE-OUTSIDE-01 [verified] Штраф по заявке в долг гасит закреплённый оператор вне системы
+ - R-CHAT-PARTICIPANTS-01 [draft] Участники чата — оператор, проверяющий оператор, проверяющий и бухгалтер заявки
+ - R-CHAT-POST-01 [verified] После закрытия заявки писать в чат нельзя
+-- R-CHAT-POST-02 [draft] Писать в чат могут только закреплённые за заявкой сотрудники
++- R-CHAT-POST-02 [suspect] Писать в чат могут только закреплённые за заявкой сотрудники
+ - R-CHAT-POST-03 [draft] Сообщение сотрудника записывается как обычное, с автором и временем
+-- R-CHAT-READ-02 [draft] Чат видят участники заявки и администратор
++- R-CHAT-READ-02 [suspect] Чат видят участники заявки и администратор
+ - R-NOTIF-BOOKING-01 [draft] При записи на визит отправляется письмо о записи
+ - R-NOTIF-CANCEL-01 [draft] Любая отмена записи даёт письмо об отмене
+ - R-NOTIF-RESCHEDULE-01 [draft] Перенос даёт письмо об отмене и письмо о новой записи
+@@ -64,9 +64,9 @@
+ - R-CHAT-PARTICIPANTS-01 [draft] Участники чата — оператор, проверяющий оператор, проверяющий и бухгалтер заявки
+ - R-CHAT-PARTICIPANTS-02 [draft] Доступ к чату следует за текущим закреплением сотрудника
+ - R-CHAT-POST-01 [verified] После закрытия заявки писать в чат нельзя
+-- R-CHAT-POST-02 [draft] Писать в чат могут только закреплённые за заявкой сотрудники
++- R-CHAT-POST-02 [suspect] Писать в чат могут только закреплённые за заявкой сотрудники
+ - R-CHAT-POST-03 [draft] Сообщение сотрудника записывается как обычное, с автором и временем
+-- R-CHAT-READ-02 [draft] Чат видят участники заявки и администратор
++- R-CHAT-READ-02 [suspect] Чат видят участники заявки и администратор
+ 
+ ### Бухгалтер (`accountant`)
+ 
+@@ -88,9 +88,9 @@
+ - R-CHAT-PARTICIPANTS-01 [draft] Участники чата — оператор, проверяющий оператор, проверяющий и бухгалтер заявки
+ - R-CHAT-PARTICIPANTS-02 [draft] Доступ к чату следует за текущим закреплением сотрудника
+ - R-CHAT-POST-01 [verified] После закрытия заявки писать в чат нельзя
+-- R-CHAT-POST-02 [draft] Писать в чат могут только закреплённые за заявкой сотрудники
++- R-CHAT-POST-02 [suspect] Писать в чат могут только закреплённые за заявкой сотрудники
+ - R-CHAT-POST-03 [draft] Сообщение сотрудника записывается как обычное, с автором и временем
+-- R-CHAT-READ-02 [draft] Чат видят участники заявки и администратор
++- R-CHAT-READ-02 [suspect] Чат видят участники заявки и администратор
+ 
+ ### Главный бухгалтер (`chief_accountant`)
+ 
+@@ -114,9 +114,9 @@
+ - R-BILL-FINE-SETTLED-01 [draft] Заявку нельзя закрыть, пока есть открытые штрафы
+ - R-CHAT-PARTICIPANTS-01 [draft] Участники чата — оператор, проверяющий оператор, проверяющий и бухгалтер заявки
+ - R-CHAT-POST-01 [verified] После закрытия заявки писать в чат нельзя
+-- R-CHAT-POST-02 [draft] Писать в чат могут только закреплённые за заявкой сотрудники
++- R-CHAT-POST-02 [suspect] Писать в чат могут только закреплённые за заявкой сотрудники
+ - R-CHAT-POST-03 [draft] Сообщение сотрудника записывается как обычное, с автором и временем
+-- R-CHAT-READ-02 [draft] Чат видят участники заявки и администратор
++- R-CHAT-READ-02 [suspect] Чат видят участники заявки и администратор
+ - R-NOTIF-CANCEL-01 [draft] Любая отмена записи даёт письмо об отмене
+ - R-NOTIF-NOSHOW-01 [verified] Неявка отправляет письмо об отмене
+ - R-NOTIF-SLOT-01 [verified] Удаление окна с записями рассылает письма об отмене
+@@ -144,7 +144,7 @@
+ - R-APP-ADMIN-03 [draft] Максимум мест в окне площадки положителен и передаётся в scheduling событием
+ - R-APP-ADMIN-04 [draft] Отключение сферы на площадке запрещает новые заявки, действующие доводятся до конца
+ - R-BILL-FINE-02 [draft] Размер штрафа берётся из ставки по представителю, площадке и виду
+-- R-CHAT-READ-02 [draft] Чат видят участники заявки и администратор
++- R-CHAT-READ-02 [suspect] Чат видят участники заявки и администратор
+ - R-CHAT-READ-04 [draft] Администратор чат только читает
+ - R-NOTIF-TEMPLATE-04 [draft] Один шаблон на площадку, группу и тип письма
+ - R-NOTIF-TEMPLATE-05 [draft] Допустимые группы шаблонов — paid и social, типы — booking и cancel
+diff --git a/docs/rules/README.md b/docs/rules/README.md
+index ea21dc4..f74a44c 100644
+--- a/docs/rules/README.md
++++ b/docs/rules/README.md
+@@ -6,7 +6,7 @@
+ |---|---|---|---|---|
+ | [applications](applications.md) | 40 | 5 | 35 | 0 |
+ | [billing](billing.md) | 36 | 6 | 30 | 0 |
+-| [chat](chat.md) | 22 | 5 | 17 | 0 |
++| [chat](chat.md) | 22 | 5 | 14 | 3 |
+ | [notifications](notifications.md) | 21 | 4 | 17 | 0 |
+ | [scheduling](scheduling.md) | 31 | 2 | 29 | 0 |
+ | [schema](schema.md) | 12 | 0 | 12 | 0 |
+diff --git a/docs/rules/chat.md b/docs/rules/chat.md
+index 87b77ab..f822315 100644
+--- a/docs/rules/chat.md
++++ b/docs/rules/chat.md
+@@ -37,7 +37,7 @@
+ 
+ ## R-CHAT-POST-02 — Писать в чат могут только закреплённые за заявкой сотрудники
+ 
+-`draft` · permission · §17 Сводная таблица: кто что может
++`suspect` · permission · §17 Сводная таблица: кто что может
+ 
+ post_message пропускает сообщение, только если author_id входит в участники заявки. В остальных случаях — AccessDenied «писать в чат могут только закреплённые за заявкой сотрудники» (HTTP 403). Поэтому администратор, главный бухгалтер, руководитель проверяющих, а также клиент и представитель писать в чат не могут.
+ 
+@@ -73,7 +73,7 @@ list_messages сразу отклоняет роли из NO_CHAT_ROLES (chief_a
+ 
+ ## R-CHAT-READ-02 — Чат видят участники заявки и администратор
+ 
+-`draft` · permission · §15 Чат заявки
++`suspect` · permission · §15 Чат заявки
+ 
+ Читать чат может роль admin (по любой заявке, проверки участника нет) или сотрудник, чей viewer_id входит в участники заявки. Остальным — AccessDenied «чат видят только закреплённые сотрудники и администратор». Клиент и представитель в чат не попадают, потому что их нет среди участников.
+ 
+@@ -105,7 +105,7 @@ list_messages сразу отклоняет роли из NO_CHAT_ROLES (chief_a
+ 
+ ## R-CHAT-AUTH-01 — Личность и роль в API чата берутся из параметров запроса без проверки
+ 
+-`draft` · permission
++`suspect` · permission
+ 
+ GET принимает viewer_id и role как query-параметры, POST принимает author_id в теле. Сервис чата не сверяет их с аутентифицированным пользователем и с реальной ролью сотрудника: проверки прав в list_messages и post_message доверяют переданным значениям.
+ 
+diff --git a/knowledge/model/code.json b/knowledge/model/code.json
+index 6cfd29f..e2d5696 100644
+--- a/knowledge/model/code.json
++++ b/knowledge/model/code.json
+@@ -3484,6 +3484,11 @@
+    "src": "services/applications/service.py::create_application",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_chat_api.py::test_post_with_old_body_field_rejected",
++   "src": "services/applications/service.py::create_application",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_chat_api.py::test_stage_changes_appear_in_chat",
+    "src": "services/applications/service.py::create_application",
+@@ -7080,8 +7085,8 @@
+   },
+   {
+    "end_line": 17,
+-   "hash": "0675899ed381",
+-   "hash_own": "0675899ed381",
++   "hash": "ffa0fce214aa",
++   "hash_own": "ffa0fce214aa",
+    "id": "services/chat/api.py::MessageIn",
+    "kind": "class",
+    "line": 15,
+@@ -7092,8 +7097,8 @@
+   },
+   {
+    "end_line": 25,
+-   "hash": "14802783d883",
+-   "hash_own": "14802783d883",
++   "hash": "910c2b28ce4f",
++   "hash_own": "910c2b28ce4f",
+    "id": "services/chat/api.py::MessageOut",
+    "kind": "class",
+    "line": 20,
+@@ -7104,8 +7109,8 @@
+   },
+   {
+    "end_line": 31,
+-   "hash": "cfa89d14fb5f",
+-   "hash_own": "44891c27521e",
++   "hash": "250965a1526e",
++   "hash_own": "4adb5dd1dba1",
+    "id": "services/chat/api.py::_out",
+    "kind": "function",
+    "line": 28,
+@@ -7117,7 +7122,7 @@
+   },
+   {
+    "end_line": 36,
+-   "hash": "2389c489fff6",
++   "hash": "65ce98e93dbf",
+    "hash_own": "2175aadaa99d",
+    "id": "services/chat/api.py::list_",
+    "kind": "route",
+@@ -7131,8 +7136,8 @@
+   },
+   {
+    "end_line": 41,
+-   "hash": "ecd0dec2ae00",
+-   "hash_own": "c169cff3a6a9",
++   "hash": "6dfded2866cc",
++   "hash_own": "53c119a75851",
+    "id": "services/chat/api.py::post",
+    "kind": "route",
+    "line": 40,
+@@ -7140,7 +7145,7 @@
+    "path": "services/chat/api.py",
+    "route": "POST /applications/{application_id}/messages",
+    "service": "chat",
+-   "signature": "(application_id, body, s)",
++   "signature": "(application_id, msg, s)",
+    "type": "symbol"
+   },
+   {
+@@ -8192,17 +8197,17 @@
+    "type": "test"
+   },
+   {
+-   "end_line": 44,
++   "end_line": 45,
+    "id": "tests/test_chat_api.py::test_admin_reads_chief_accountant_does_not",
+    "kind": "test",
+-   "line": 37,
++   "line": 38,
+    "name": "test_admin_reads_chief_accountant_does_not",
+    "path": "tests/test_chat_api.py",
+    "signature": "(client)",
+    "type": "test"
+   },
+   {
+-   "end_line": 23,
++   "end_line": 24,
+    "id": "tests/test_chat_api.py::test_operator_posts_and_reads",
+    "kind": "test",
+    "line": 14,
+@@ -8212,20 +8217,30 @@
+    "type": "test"
+   },
+   {
+-   "end_line": 50,
++   "end_line": 51,
+    "id": "tests/test_chat_api.py::test_outsider_cannot_post",
+    "kind": "test",
+-   "line": 47,
++   "line": 48,
+    "name": "test_outsider_cannot_post",
+    "path": "tests/test_chat_api.py",
+    "signature": "(client)",
+    "type": "test"
+   },
+   {
+-   "end_line": 34,
++   "end_line": 57,
++   "id": "tests/test_chat_api.py::test_post_with_old_body_field_rejected",
++   "kind": "test",
++   "line": 54,
++   "name": "test_post_with_old_body_field_rejected",
++   "path": "tests/test_chat_api.py",
++   "signature": "(client)",
++   "type": "test"
++  },
++  {
++   "end_line": 35,
+    "id": "tests/test_chat_api.py::test_stage_changes_appear_in_chat",
+    "kind": "test",
+-   "line": 26,
++   "line": 27,
+    "name": "test_stage_changes_appear_in_chat",
+    "path": "tests/test_chat_api.py",
+    "signature": "(client)",
+diff --git a/knowledge/rules/chat.yaml b/knowledge/rules/chat.yaml
+index 43bef1f..e6b148e 100644
+--- a/knowledge/rules/chat.yaml
++++ b/knowledge/rules/chat.yaml
+@@ -103,12 +103,13 @@ rules:
+     hash: 201ddba10869
+   - symbol: services/chat/api.py::post
+     lines: 39-41
+-    hash: ecd0dec2ae00
++    hash: 6dfded2866cc
+   tested_by:
+   - tests/test_chat_api.py::test_outsider_cannot_post
+   - tests/test_chat_api.py::test_operator_posts_and_reads
+   schema_ref: '§17 Сводная таблица: кто что может'
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-CHAT-POST-03
+   title: Сообщение сотрудника записывается как обычное, с автором и временем
+   text: >
+@@ -195,13 +196,14 @@ rules:
+     hash: cdd465085f6e
+   - symbol: services/chat/api.py::list_
+     lines: 34-36
+-    hash: 2389c489fff6
++    hash: 65ce98e93dbf
+   tested_by:
+   - tests/test_chat_api.py::test_admin_reads_chief_accountant_does_not
+   - tests/test_chat_api.py::test_operator_posts_and_reads
+   - tests/test_chat_api.py::test_stage_changes_appear_in_chat
+   schema_ref: §15 Чат заявки
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-CHAT-READ-03
+   title: Один чат на заявку, общий для всех попыток, в порядке создания
+   text: >
+@@ -266,14 +268,15 @@ rules:
+   implemented_by:
+   - symbol: services/chat/api.py::list_
+     lines: 35-36
+-    hash: 2389c489fff6
++    hash: 65ce98e93dbf
+   - symbol: services/chat/api.py::post
+     lines: 40-41
+-    hash: ecd0dec2ae00
++    hash: 6dfded2866cc
+   discrepancy: >
+     Схема: доступ к чату определяется ролью сотрудника и закреплением за заявкой. Код: роль приходит от
+     клиента API — если передать role=admin, проверка участника для чтения отключается.
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-CHAT-CONFIG-01
+   title: Список ролей без доступа к чату задан константой NO_CHAT_ROLES
+   text: >
+diff --git a/services/chat/api.py b/services/chat/api.py
+index bba0f26..cdcbcfc 100644
+--- a/services/chat/api.py
++++ b/services/chat/api.py
+@@ -14,20 +14,20 @@ Session = Annotated[AsyncSession, Depends(session)]
+ 
+ class MessageIn(BaseModel):
+     author_id: int
+-    body: str
++    text: str
+ 
+ 
+ class MessageOut(BaseModel):
+     id: int
+     author_id: int | None
+-    body: str
++    text: str
+     is_event: bool
+     created_at: datetime
+ 
+ 
+ def _out(m) -> MessageOut:
+     return MessageOut(
+-        id=m.id, author_id=m.author_id, body=m.body, is_event=m.is_event, created_at=m.created_at
++        id=m.id, author_id=m.author_id, text=m.body, is_event=m.is_event, created_at=m.created_at
+     )
+ 
+ 
+@@ -37,5 +37,5 @@ async def list_(application_id: int, viewer_id: int, role: str, s: Session) -> l
+ 
+ 
+ @router.post("", status_code=201)
+-async def post(application_id: int, body: MessageIn, s: Session) -> MessageOut:
+-    return _out(await service.post_message(s, application_id, body.author_id, body.body))
++async def post(application_id: int, msg: MessageIn, s: Session) -> MessageOut:
++    return _out(await service.post_message(s, application_id, msg.author_id, msg.text))
+diff --git a/tests/test_chat_api.py b/tests/test_chat_api.py
+index a74b55e..48a47ee 100644
+--- a/tests/test_chat_api.py
++++ b/tests/test_chat_api.py
+@@ -13,13 +13,14 @@ async def client():
+ 
+ async def test_operator_posts_and_reads(client: httpx.AsyncClient) -> None:
+     app_id = await new_application()
+-    r = await client.post(f"/applications/{app_id}/messages", json={"author_id": OPERATOR, "body": "Привет"})
++    r = await client.post(f"/applications/{app_id}/messages", json={"author_id": OPERATOR, "text": "Привет"})
+     assert r.status_code == 201
+     r = await client.get(
+         f"/applications/{app_id}/messages", params={"viewer_id": OPERATOR, "role": "operator"}
+     )
+     assert r.status_code == 200
+-    assert r.json()[-1]["body"] == "Привет"
++    assert r.json()[-1]["text"] == "Привет"
++    assert "body" not in r.json()[-1]
+     assert r.json()[-1]["is_event"] is False
+ 
+ 
+@@ -29,7 +30,7 @@ async def test_stage_changes_appear_in_chat(client: httpx.AsyncClient) -> None:
+     r = await client.get(
+         f"/applications/{app_id}/messages", params={"viewer_id": REVIEWER, "role": "reviewer"}
+     )
+-    events = [m["body"] for m in r.json() if m["is_event"]]
++    events = [m["text"] for m in r.json() if m["is_event"]]
+     assert "Этап: draft → on_review" in events
+     assert "Этап: on_review → awaiting_invoice" in events
+ 
+@@ -46,5 +47,11 @@ async def test_admin_reads_chief_accountant_does_not(client: httpx.AsyncClient)
+ 
+ async def test_outsider_cannot_post(client: httpx.AsyncClient) -> None:
+     app_id = await new_application()
+-    r = await client.post(f"/applications/{app_id}/messages", json={"author_id": 999, "body": "x"})
++    r = await client.post(f"/applications/{app_id}/messages", json={"author_id": 999, "text": "x"})
+     assert r.status_code == 403
++
++
++async def test_post_with_old_body_field_rejected(client: httpx.AsyncClient) -> None:
++    app_id = await new_application()
++    r = await client.post(f"/applications/{app_id}/messages", json={"author_id": OPERATOR, "body": "x"})
++    assert r.status_code == 422

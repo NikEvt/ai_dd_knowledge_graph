@@ -1,0 +1,1239 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 8cffa20..29baefe 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -101,5 +101,5 @@ args = ["run", "--quiet", "python", "mcp/knowledge_server.py"]
+ 
+ События: `application.archived`, `application.closed_duplicate`, `application.ready_for_booking`, `application.review_passed`, `application.stage_changed`, `application.unarchived`, `application.venue_changed`, `booking.cancelled`, `booking.created`, `books.issued`, `client.updated`, `halls.booking_cancelled`, `halls.booking_confirmed`, `halls.booking_created`, `halls.booking_held`, `halls.booking_prepaid`, `halls.invoice_issued`, `halls.payment_received`, `halls.venue_changed`, `inventory.copy_damaged`, `inventory.copy_lost`, `inventory.copy_registered`, `inventory.copy_relocated`, `inventory.copy_written_off`, `inventory.ill_issued`, `inventory.ill_overdue`, `inventory.ill_penalty_accrued`, `inventory.ill_returned`, `inventory.partner_resumed`, `inventory.partner_suspended`, `inventory.transfer_cancelled`, `inventory.transfer_received`, `inventory.transfer_shipped`, `invoice.cancelled`, `invoice.issued`, `lectures.capacity_increased`, `lectures.event_cancelled`, `lectures.event_moved`, `lectures.registration_cancelled`, `lectures.registration_created`, `lectures.seat_released`, `lectures.venue_limit_changed`, `lectures.waitlist_expired`, `lectures.waitlist_promoted`, `loan.damaged`, `loan.lost`, `loan.overdue`, `marketing.campaign_finished`, `marketing.campaign_launched`, `marketing.campaign_prepared`, `marketing.message_bounced`, `marketing.unsubscribed`, `partners.commission_accrued`, `partners.contract_activated`, `partners.contract_expired`, `partners.contract_rate_changed`, `partners.contract_resumed`, `partners.contract_suspended`, `partners.contract_terminated`, `partners.credit_overdue`, `partners.deal_cancelled`, `partners.deal_closed`, `partners.deal_created`, `partners.deal_paid`, `partners.partner_onboarded`, `partners.payout_closed`, `partners.request_approved`, `partners.request_closed_duplicate`, `partners.request_rejected`, `partners.request_submitted`, `payment.fully_paid`, `payment.linked`, `payment.refunded`, `reports.definition_deactivated`, `reports.run_cancelled`, `reports.run_completed`, `reports.run_failed`, `reports.run_requested`, `staff.clearance_expired`, `staff.clearance_granted`, `staff.clearance_revoked`, `staff.employee_dismissed`, `staff.employee_hired`, `staff.employee_transferred`, `staff.employee_updated`, `staff.shift_member_removed`, `staff.shift_understaffed`, `subscriptions.activated`, `subscriptions.closed_duplicate`, `subscriptions.created`, `subscriptions.expired`, `subscriptions.grace_started`, `subscriptions.holder_rejected`, `subscriptions.holder_updated`, `subscriptions.invoice_issued`, `subscriptions.payment_completed`, `subscriptions.refund_required`, `subscriptions.renewed`, `venue.settings_changed`.
+ 
+-Правил в модели: 478 (draft: 456, verified: 22).
++Правил в модели: 478 (draft: 453, suspect: 3, verified: 22).
+ <!-- END L0 -->
+diff --git a/docs/README.md b/docs/README.md
+index dc1a666..7ad55a3 100644
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -32,8 +32,8 @@
+ | rule | 478 |
+ | service | 5 |
+ | status | 10 |
+-| symbol | 732 |
++| symbol | 731 |
+ | table | 81 |
+-| test | 284 |
++| test | 288 |
+ 
+-Правила по статусу: draft — 456, verified — 22
++Правила по статусу: draft — 453, suspect — 3, verified — 22
+diff --git a/docs/config.md b/docs/config.md
+index a583dd7..7edeef9 100644
+--- a/docs/config.md
++++ b/docs/config.md
+@@ -15,7 +15,7 @@
+ | [`settings.py::PAYMENT_ARCHIVE_DAYS`](../libs/settings.py#L12) | `30` | Платная заявка уходит в архив, если счёт не оплачен за столько дней. | [`jobs.py::archive_stale`](../services/applications/jobs.py#L14) |
+ | [`settings.py::REDIS_URL`](../libs/settings.py#L5) | `os.environ.get('REDIS_URL', f"redis://localhost:{os.environ.get('REDIS_PORT', '…` |  | [`relay.py::consume_forever`](../libs/events/relay.py#L39)<br>[`relay.py::relay_forever`](../libs/events/relay.py#L16) |
+ | [`settings.py::REVIEW_ARCHIVE_DAYS`](../libs/settings.py#L10) | `30` | Заявка уходит в архив, если с начала проверки прошло столько дней, а данные не получены. | [`jobs.py::archive_stale`](../services/applications/jobs.py#L14) |
+-| [`dedup.py::OPEN_STAGES`](../services/applications/dedup.py#L10) | `['draft', 'on_review', 'needs_rework', 'awaiting_invoice', 'awaiting_payment', …` |  | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
++| [`dedup.py::OPEN_STAGES`](../services/applications/dedup.py#L10) | `['draft', 'on_review', 'needs_rework', 'awaiting_invoice', 'awaiting_payment', …` |  | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L22) |
+ | [`listeners.py::TRACKED_FIELDS`](../services/applications/listeners.py#L9) | `['full_name', 'passport', 'birth_date']` |  | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) |
+ | [`review.py::REQUIRED_CLIENT_FIELDS`](../services/applications/review.py#L3) | `['full_name', 'passport', 'birth_date']` |  | [`review.py::missing_client_fields`](../services/applications/review.py#L6) |
+ | [`service.py::CLIENT_EDITABLE_FIELDS`](../services/applications/service.py#L28) | `['full_name', 'passport', 'birth_date', 'email']` |  | [`service.py::update_client`](../services/applications/service.py#L131) |
+diff --git a/docs/coverage.md b/docs/coverage.md
+index 3732683..281e880 100644
+--- a/docs/coverage.md
++++ b/docs/coverage.md
+@@ -4,14 +4,16 @@
+ 
+ - Правил: 478; verified: 22
+ - Без реализации (implemented_by / enforced_by_db): 8
+-- Без тестов (tested_by): 129
+-- suspect: 0
++- Без тестов (tested_by): 128
++- suspect: 3
+ - Ограничения БД без правил: 9
+ - Проверки в коде без правил: 1
+ 
+-## suspect (0)
++## suspect (3)
+ 
+-- нет
++- R-APP-PAY-03 (с 2026-10-23) Только полная оплата счёта за книги открывает выдачу
++- R-APP-DEDUP-01 (с 2026-10-23) Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
++- R-BILL-PROCESS-01 (с 2026-10-23) Полная оплата счёта за книги открывает выдачу и закрывает дубли
+ 
+ ## Правила без реализации (8)
+ 
+@@ -24,7 +26,7 @@
+ - R-SCHEMA-ROLE-01 Один сотрудник — одна роль
+ - R-SUBSCRIPTIONS-REMIND-01 Напоминание перед концом льготного периода не реализовано
+ 
+-## Правила без тестов (129)
++## Правила без тестов (128)
+ 
+ - R-APP-CREATE-03 В заявке есть книги, и все они из сферы заявки и прайса площадки
+ - R-APP-CORE-01 Сферу и представителя заявки сменить нельзя
+@@ -34,7 +36,6 @@
+ - R-APP-PAY-04 Возврат платежа по оплаченной заявке отправляет её в архив с отметкой «возврат»
+ - R-APP-UNARCHIVE-02 При возврате из архива площадку и книги меняют, только если заявка не доходила до записи
+ - R-APP-UNARCHIVE-03 После возврата из архива счёт аннулируется при изменении суммы, иначе срок оплаты отсчитывается заново
+-- R-APP-DEDUP-01 Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
+ - R-APP-DEDUP-02 Закрытие дубля аннулирует его неоплаченные счета и сбрасывает записи
+ - R-APP-ADMIN-01 Администратор задаёт надбавку и разрешение работать в долг для представителя
+ - R-APP-ADMIN-03 Максимум мест в окне площадки положителен и передаётся в scheduling событием
+diff --git a/docs/entities/applications.applications.md b/docs/entities/applications.applications.md
+index 72629cd..7587ca5 100644
+--- a/docs/entities/applications.applications.md
++++ b/docs/entities/applications.applications.md
+@@ -74,11 +74,11 @@
+ - R-APP-CREATE-01 [draft] Вид заявки определяется при создании по флагу «социальная» и признаку долга представителя
+ - R-APP-CREATE-02 [draft] Сфера заявки должна быть активна на площадке
+ - R-APP-CREATE-04 [draft] При создании заявки закрепляется проверяющий оператор площадки и открывается первая попытка
+-- R-APP-DEDUP-01 [draft] Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
++- R-APP-DEDUP-01 [suspect] Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
+ - R-APP-ISSUE-01 [draft] Выдача книг переводит заявку в «Книги у клиента»
+ - R-APP-PAY-01 [draft] Выставление счёта за книги переводит заявку в ожидание оплаты
+ - R-APP-PAY-02 [draft] Аннулирование счёта за книги возвращает заявку в ожидание счёта
+-- R-APP-PAY-03 [draft] Только полная оплата счёта за книги открывает выдачу
++- R-APP-PAY-03 [suspect] Только полная оплата счёта за книги открывает выдачу
+ - R-APP-REVIEW-01 [draft] Отправка на проверку фиксирует начало проверки один раз
+ - R-APP-REVIEW-02 [draft] Проверяющего назначают только до прохождения проверки
+ - R-APP-REVIEW-03 [draft] Подтверждает или возвращает заявку только назначенный проверяющий
+@@ -93,6 +93,6 @@
+ - R-APP-VENUE-CHANGE-03 [draft] Смена площадки переназначает проверяющего оператора и запускает реакции billing, scheduling и chat
+ - R-BILL-CANCEL-03 [draft] Аннулирование счёта за книги возвращает заявку в «Ожидает счёта»
+ - R-BILL-INVOICE-08 [verified] Выставление счёта за книги переводит заявку в «Ожидает оплаты»
+-- R-BILL-PROCESS-01 [draft] Полная оплата счёта за книги открывает выдачу и закрывает дубли
++- R-BILL-PROCESS-01 [suspect] Полная оплата счёта за книги открывает выдачу и закрывает дубли
+ - R-SCHED-ISSUE-03 [draft] После выдачи — запись выполнена, книги откреплены, ссылка на сдачу, этап «Книги у клиента»
+ - R-SCHEMA-APP-01 [draft] Оператора заявки переназначить нельзя
+diff --git a/docs/entities/applications.attempts.md b/docs/entities/applications.attempts.md
+index b77801d..4e5fc15 100644
+--- a/docs/entities/applications.attempts.md
++++ b/docs/entities/applications.attempts.md
+@@ -35,7 +35,7 @@
+ - R-APP-CREATE-01 [draft] Вид заявки определяется при создании по флагу «социальная» и признаку долга представителя
+ - R-APP-CREATE-02 [draft] Сфера заявки должна быть активна на площадке
+ - R-APP-CREATE-04 [draft] При создании заявки закрепляется проверяющий оператор площадки и открывается первая попытка
+-- R-APP-DEDUP-01 [draft] Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
++- R-APP-DEDUP-01 [suspect] Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
+ - R-APP-PAY-04 [verified] Возврат платежа по оплаченной заявке отправляет её в архив с отметкой «возврат»
+ - R-APP-UNARCHIVE-01 [draft] Возврат из архива начинает новую попытку и новую проверку
+ - R-APP-UNARCHIVE-02 [draft] При возврате из архива площадку и книги меняют, только если заявка не доходила до записи
+diff --git a/docs/events.md b/docs/events.md
+index c9993e8..4b18cbe 100644
+--- a/docs/events.md
++++ b/docs/events.md
+@@ -166,16 +166,16 @@ flowchart LR
+ | Событие | Публикует | Обрабатывает | Данные | Эффекты |
+ |---|---|---|---|---|
+ | `application.archived` | [`service.py::archive`](../services/applications/service.py#L246) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_archived`](../services/scheduling/consumers.py#L25) | application_id, outcome | effect:chat.event_log |
+-| `application.closed_duplicate` | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) | [`consumers.py::on_closed_duplicate`](../services/billing/consumers.py#L20)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_closed_duplicate`](../services/scheduling/consumers.py#L30) | application_id, winner_id | effect:chat.event_log |
++| `application.closed_duplicate` | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L22) | [`consumers.py::on_closed_duplicate`](../services/billing/consumers.py#L20)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_closed_duplicate`](../services/scheduling/consumers.py#L30) | application_id, winner_id | effect:chat.event_log |
+ | `application.ready_for_booking` | [`service.py::mark_ready_for_booking`](../services/applications/service.py#L157) | [`consumers.py::on_ready_for_booking`](../services/scheduling/consumers.py#L12) | application_id, sphere_id, venue_id | — |
+-| `application.review_passed` | [`service.py::approve`](../services/applications/service.py#L167) | [`consumers.py::on_review_passed`](../services/applications/consumers.py#L43) | application_id, kind | — |
++| `application.review_passed` | [`service.py::approve`](../services/applications/service.py#L167) | [`consumers.py::on_review_passed`](../services/applications/consumers.py#L45) | application_id, kind | — |
+ | `application.stage_changed` | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) | [`consumers.py::_handler`](../services/chat/consumers.py#L23) | application_id, from, to | effect:chat.event_log |
+ | `application.unarchived` | [`service.py::unarchive`](../services/applications/service.py#L265) | [`consumers.py::on_unarchived`](../services/billing/consumers.py#L27)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23) | amount_changed, application_id | effect:chat.event_log |
+ | `application.venue_changed` | [`service.py::change_venue`](../services/applications/service.py#L199) | [`consumers.py::on_venue_changed`](../services/billing/consumers.py#L13)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_venue_changed`](../services/scheduling/consumers.py#L17) | application_id, kind, new_venue_id, old_venue_id, stage | effect:chat.event_log |
+ | `booking.cancelled` | [`service.py::_cancel`](../services/scheduling/service.py#L178) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_booking_cancelled`](../services/notifications/consumers.py#L21) | application_id, booking_id, reason, starts_at, venue_id | effect:chat.event_log, effect:email.cancel |
+ | `booking.created` | [`service.py::book`](../services/scheduling/service.py#L126) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_booking_created`](../services/notifications/consumers.py#L10) | application_id, booking_id, purpose, starts_at, venue_id | effect:chat.event_log, effect:email.booking |
+-| `books.issued` | [`service.py::issue_books`](../services/scheduling/service.py#L223) | [`consumers.py::on_books_issued`](../services/applications/consumers.py#L67) | application_id | — |
+-| `client.updated` | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L51) | client_id, fields, source_application_id | — |
++| `books.issued` | [`service.py::issue_books`](../services/scheduling/service.py#L223) | [`consumers.py::on_books_issued`](../services/applications/consumers.py#L69) | application_id | — |
++| `client.updated` | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L53) | client_id, fields, source_application_id | — |
+ | `halls.booking_cancelled` | [`service.py::_cancel`](../services/halls/service.py#L217) | [`consumers.py::on_booking_cancelled`](../services/halls/consumers.py#L35) | booking_id, reason, starts_at, venue_id | — |
+ | `halls.booking_confirmed` | [`service.py::apply_payments`](../services/halls/service.py#L372) | [`consumers.py::on_booking_confirmed`](../services/halls/consumers.py#L25) |  | — |
+ | `halls.booking_created` | [`service.py::create_booking`](../services/halls/service.py#L142) | — | booking_id, hall_id, starts_at, venue_id | — |
+@@ -237,7 +237,7 @@ flowchart LR
+ | `partners.request_submitted` | [`service.py::submit_request`](../services/partners/service.py#L76) | — | inn, request_id | — |
+ | `payment.fully_paid` | [`service.py::link_payment`](../services/billing/service.py#L98) | [`consumers.py::on_fully_paid`](../services/applications/consumers.py#L31) | application_id, invoice_id, invoice_kind | — |
+ | `payment.linked` | [`service.py::link_payment`](../services/billing/service.py#L98) | [`consumers.py::_handler`](../services/chat/consumers.py#L23) | amount, application_id, invoice_id | effect:chat.event_log |
+-| `payment.refunded` | [`service.py::refund_payment`](../services/billing/service.py#L143) | [`consumers.py::on_payment_refunded`](../services/applications/consumers.py#L73) | application_id, invoice_id, invoice_kind, reason | — |
++| `payment.refunded` | [`service.py::refund_payment`](../services/billing/service.py#L143) | [`consumers.py::on_payment_refunded`](../services/applications/consumers.py#L75) | application_id, invoice_id, invoice_kind, reason | — |
+ | `reports.definition_deactivated` | [`service.py::deactivate_definition`](../services/reports/service.py#L166) | [`consumers.py::on_definition_deactivated`](../services/reports/consumers.py#L44) | code, definition_id | — |
+ | `reports.run_cancelled` | [`service.py::_publish_cancelled`](../services/reports/service.py#L270) | [`consumers.py::on_run_cancelled`](../services/reports/consumers.py#L37) | definition_id, reason, run_id | — |
+ | `reports.run_completed` | [`service.py::build_run`](../services/reports/service.py#L278) | [`consumers.py::count_completed_run`](../services/reports/consumers.py#L21)<br>[`consumers.py::on_run_completed`](../services/reports/consumers.py#L16) | code, definition_id, finished_on, run_id, schedule_id | — |
+diff --git a/docs/process.md b/docs/process.md
+index 78ab9c1..dd44df3 100644
+--- a/docs/process.md
++++ b/docs/process.md
+@@ -62,32 +62,32 @@ stateDiagram-v2
+ 
+ | Переход | Исполнитель (виды, условие) | Код |
+ |---|---|---|
+-| [`archived->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
++| [`archived->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L22) |
+ | [`archived->on_review`](../bpm/application_process.yaml#L41) | operator | [`service.py::submit_for_review`](../services/applications/service.py#L113), [`service.py::unarchive`](../services/applications/service.py#L265) |
+ | [`awaiting_invoice->archived`](../bpm/application_process.yaml#L39) | operator | [`service.py::archive`](../services/applications/service.py#L246) |
+ | [`awaiting_invoice->awaiting_payment`](../bpm/application_process.yaml#L27) | accountant [paid] | [`consumers.py::on_invoice_issued`](../services/applications/consumers.py#L13) |
+-| [`awaiting_invoice->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+-| [`awaiting_invoice->on_review`](../bpm/application_process.yaml#L32) | system | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L51) |
++| [`awaiting_invoice->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L22) |
++| [`awaiting_invoice->on_review`](../bpm/application_process.yaml#L32) | system | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L53) |
+ | [`awaiting_issue->archived`](../bpm/application_process.yaml#L40) | chief_accountant [paid] | [`service.py::archive`](../services/applications/service.py#L246) |
+-| [`awaiting_issue->books_out`](../bpm/application_process.yaml#L34) | site_checker | [`consumers.py::on_books_issued`](../services/applications/consumers.py#L67) |
+-| [`awaiting_issue->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
++| [`awaiting_issue->books_out`](../bpm/application_process.yaml#L34) | site_checker | [`consumers.py::on_books_issued`](../services/applications/consumers.py#L69) |
++| [`awaiting_issue->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L22) |
+ | [`awaiting_payment->archived`](../bpm/application_process.yaml#L38) | system [paid]; operator | [`service.py::archive`](../services/applications/service.py#L246) |
+ | [`awaiting_payment->awaiting_invoice`](../bpm/application_process.yaml#L28) | system [paid] | [`consumers.py::on_invoice_cancelled`](../services/applications/consumers.py#L22) |
+ | [`awaiting_payment->awaiting_issue`](../bpm/application_process.yaml#L29) | system [paid] guard fully_paid | [`consumers.py::on_fully_paid`](../services/applications/consumers.py#L31) |
+-| [`awaiting_payment->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+-| [`awaiting_payment->on_review`](../bpm/application_process.yaml#L32) | system | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L51) |
++| [`awaiting_payment->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L22) |
++| [`awaiting_payment->on_review`](../bpm/application_process.yaml#L32) | system | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L53) |
+ | [`books_out->closed`](../bpm/application_process.yaml#L35) | site_checker guard settled | [`service.py::close`](../services/applications/service.py#L307) |
+ | [`draft->archived`](../bpm/application_process.yaml#L39) | operator | [`service.py::archive`](../services/applications/service.py#L246) |
+-| [`draft->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
++| [`draft->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L22) |
+ | [`draft->on_review`](../bpm/application_process.yaml#L20) | operator | [`service.py::submit_for_review`](../services/applications/service.py#L113), [`service.py::unarchive`](../services/applications/service.py#L265) |
+ | [`needs_rework->archived`](../bpm/application_process.yaml#L37) | system; operator | [`service.py::archive`](../services/applications/service.py#L246) |
+-| [`needs_rework->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
++| [`needs_rework->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L22) |
+ | [`needs_rework->on_review`](../bpm/application_process.yaml#L20) | operator | [`service.py::submit_for_review`](../services/applications/service.py#L113), [`service.py::unarchive`](../services/applications/service.py#L265) |
+ | [`on_review->archived`](../bpm/application_process.yaml#L37) | system; operator | [`service.py::archive`](../services/applications/service.py#L246) |
+ | [`on_review->awaiting_invoice`](../bpm/application_process.yaml#L23) | reviewer [paid] | [`service.py::approve`](../services/applications/service.py#L167) |
+ | [`on_review->awaiting_issue`](../bpm/application_process.yaml#L25) | reviewer [debt,social] | [`service.py::approve`](../services/applications/service.py#L167) |
+ | [`on_review->awaiting_payment`](../bpm/application_process.yaml#L24) | reviewer [paid] guard has_active_invoice | [`service.py::approve`](../services/applications/service.py#L167) |
+-| [`on_review->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
++| [`on_review->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L22) |
+ | [`on_review->needs_rework`](../bpm/application_process.yaml#L21) | reviewer | [`service.py::return_for_rework`](../services/applications/service.py#L189) |
+ 
+ ## Условия переходов (guard)
+diff --git a/docs/reconciliation.md b/docs/reconciliation.md
+index 2cd6fe9..b787516 100644
+--- a/docs/reconciliation.md
++++ b/docs/reconciliation.md
+@@ -160,7 +160,7 @@
+ - R-APP-BOOKS-01: Схема (§4): если после выставления счёта до оплаты меняются книги, счёт аннулируется и выставляется заново. Код: после проверки книги меняются только через архив и возврат из него (R-APP-UNARCHIVE-02); других путей смены книг нет.
+ - R-APP-CLIENT-01: Схема: данные клиента обновляет только проверяющий. Код: при вызове без source_application_id роль и закрепление не проверяются — обновить данные может кто угодно.
+ - R-APP-CLIENT-03: Схема: перепроверка не должна приводить к потере заявки. Код: review_started_at остаётся от первой проверки, поэтому возвращённая на проверку заявка, у которой проверка началась больше REVIEW_ARCHIVE_DAYS назад, при ближайшем запуске archive_stale уходит в архив с outcome=no_data.
+-- R-APP-DEDUP-01: Схема: остаётся та заявка, что первой дошла до записи. Код: OPEN_STAGES включает awaiting_issue, поэтому более поздний «победитель» (например, заявка в долг, прошедшая проверку после оплаты платной) закрывает уже дошедшую до записи и оплаченную заявку. Для социальных заявок дедупликация не запускается вообще.
++- R-APP-DEDUP-01: Схема: остаётся та заявка, что первой дошла до записи. Код: OPEN_STAGES включает awaiting_issue, поэтому более поздний «победитель» (например, заявка в долг или социальная, прошедшая проверку после оплаты платной) закрывает уже дошедшую до записи и оплаченную заявку.
+ - R-APP-REVIEW-02: Схема: назначает и переназначает только руководитель проверяющих. Код: роль вызывающего не проверяется, назначить может любой вызывающий.
+ - R-APP-UNARCHIVE-03: Схема: новый счёт выставляется после проверки, если сумма изменилась. Код: счёт аннулируется сразу при возврате из архива, до проверки; сравнивается только цена по прайсу без надбавки.
+ - R-APP-VENUE-CHANGE-02: Схема: social/debt меняют площадку только до формирования ссылки на запись. Код сервиса этого не проверяет — запрет срабатывает только в триггере БД на flush, без доменного сообщения.
+diff --git a/docs/roles.md b/docs/roles.md
+index 0f69d8d..ec36d66 100644
+--- a/docs/roles.md
++++ b/docs/roles.md
+@@ -100,7 +100,7 @@
+ - R-BILL-PAYMENT-01 [draft] Платёж нельзя привязать к аннулированному счёту
+ - R-BILL-PAYMENT-03 [verified] Привязка платежа фиксирует, кто привязал; переплата помечается флагом
+ - R-BILL-PAYMENT-04 [draft] Полная оплата публикуется один раз — когда сумма впервые достигает суммы счёта
+-- R-BILL-PROCESS-01 [draft] Полная оплата счёта за книги открывает выдачу и закрывает дубли
++- R-BILL-PROCESS-01 [suspect] Полная оплата счёта за книги открывает выдачу и закрывает дубли
+ - R-BILL-REFUND-01 [verified] Возврат платежа требует причины и исключает платёж из оплаченной суммы
+ - R-BILL-UNLINK-01 [draft] Отвязка платежа требует причины
+ - R-BILL-FINE-PAY-01 [draft] Полная оплата счёта на штраф гасит штраф
+@@ -218,11 +218,11 @@
+ - R-APP-CLIENT-02 [draft] Изменение ФИО, паспорта или даты рождения клиента публикует client.updated (слушатель ORM)
+ - R-APP-CLIENT-03 [draft] Обновление клиента возвращает его заявки из ожидания счёта или оплаты на проверку
+ - R-APP-PAY-02 [draft] Аннулирование счёта за книги возвращает заявку в ожидание счёта
+-- R-APP-PAY-03 [draft] Только полная оплата счёта за книги открывает выдачу
++- R-APP-PAY-03 [suspect] Только полная оплата счёта за книги открывает выдачу
+ - R-APP-ARCHIVE-01 [draft] Заявка, застрявшая на проверке или доработке дольше REVIEW_ARCHIVE_DAYS, уходит в архив
+ - R-APP-ARCHIVE-02 [draft] Платная заявка без полной оплаты дольше PAYMENT_ARCHIVE_DAYS уходит в архив
+ - R-APP-ARCHIVE-03 [draft] Ручной архив и его последствия — закрытие попытки, сброс записей, сообщение в чат
+-- R-APP-DEDUP-01 [draft] Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
++- R-APP-DEDUP-01 [suspect] Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
+ - R-APP-DEDUP-02 [draft] Закрытие дубля аннулирует его неоплаченные счета и сбрасывает записи
+ - R-APP-CHAT-01 [draft] Каждая смена этапа заявки пишется в чат (слушатель ORM)
+ - R-BILL-INVOICE-06 [draft] У заявки не больше одного действующего счёта за книги
+diff --git a/docs/rules/README.md b/docs/rules/README.md
+index 2073b20..4185eb6 100644
+--- a/docs/rules/README.md
++++ b/docs/rules/README.md
+@@ -4,8 +4,8 @@
+ 
+ | Модуль | Правил | verified | draft | suspect |
+ |---|---|---|---|---|
+-| [applications](applications.md) | 40 | 5 | 35 | 0 |
+-| [billing](billing.md) | 36 | 6 | 30 | 0 |
++| [applications](applications.md) | 40 | 5 | 33 | 2 |
++| [billing](billing.md) | 36 | 6 | 29 | 1 |
+ | [chat](chat.md) | 22 | 5 | 17 | 0 |
+ | [halls](halls.md) | 35 | 0 | 35 | 0 |
+ | [inventory](inventory.md) | 39 | 0 | 39 | 0 |
+diff --git a/docs/rules/applications.md b/docs/rules/applications.md
+index 50fc264..965de86 100644
+--- a/docs/rules/applications.md
++++ b/docs/rules/applications.md
+@@ -207,7 +207,7 @@
+ 
+ ## R-APP-PAY-03 — Только полная оплата счёта за книги открывает выдачу
+ 
+-`draft` · effect · §9 Виды заявок — Платная
++`suspect` · effect · §9 Виды заявок — Платная
+ 
+ По payment.fully_paid (invoice_kind=books) заявка в awaiting_payment переводится в awaiting_issue при выполнении guard fully_paid, отмечается готовой к записи и закрывает дубли клиента по сфере. Частичная оплата этап не меняет.
+ 
+@@ -364,16 +364,17 @@ unarchive сравнивает стоимость книг по прайсу п
+ 
+ ## R-APP-DEDUP-01 — Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
+ 
+-`draft` · effect · §6 Клиент и проверка данных
++`suspect` · effect · §6 Клиент и проверка данных
+ 
+-close_duplicates вызывается при полной оплате платной заявки и при прохождении проверки заявки в долг (подписчик application.review_passed с kind=debt). Все другие заявки клиента по той же сфере на этапах OPEN_STAGES (включая awaiting_issue и archived) того же трека (не-social с не-social) переводятся в closed_duplicate; незакрытая попытка закрывается с outcome=duplicate.
++close_duplicates вызывается, когда заявка доходит до записи: при полной оплате платной заявки и при прохождении проверки заявки в долг или социальной (подписчик application.review_passed с kind=debt или kind=social). Все другие заявки клиента по той же сфере на этапах OPEN_STAGES (включая awaiting_issue и archived) любого вида — платные, в долг и социальные пересекаются между собой — переводятся в closed_duplicate; незакрытая попытка закрывается с outcome=duplicate.
+ 
+-- Реализация: [`services/applications/dedup.py::close_duplicates:26-50`](../../services/applications/dedup.py#L26), [`services/applications/dedup.py::_same_track:22-22`](../../services/applications/dedup.py#L22), [`services/applications/consumers.py::on_review_passed:44-47`](../../services/applications/consumers.py#L44), [`services/applications/consumers.py::on_fully_paid:39-39`](../../services/applications/consumers.py#L39), [`awaiting_issue->closed_duplicate`](../../bpm/application_process.yaml#L43)
++- Реализация: [`services/applications/dedup.py::close_duplicates:24-46`](../../services/applications/dedup.py#L24), [`services/applications/consumers.py::on_review_passed:46-49`](../../services/applications/consumers.py#L46), [`services/applications/consumers.py::on_fully_paid:39-39`](../../services/applications/consumers.py#L39), [`awaiting_issue->closed_duplicate`](../../bpm/application_process.yaml#L43)
+ - БД: [`ix_applications_client_sphere`](../../migrations/versions/0001_initial.py#L94), [`attempts_outcome_check`](../../migrations/versions/0001_initial.py#L108)
+ - Настройки: `services/applications/dedup.py::OPEN_STAGES`
++- Тесты: `tests/test_dedup.py::test_social_review_closes_paid_of_same_sphere`, `tests/test_dedup.py::test_full_payment_closes_social_of_same_sphere`, `tests/test_dedup.py::test_debt_review_closes_social_and_social_review_closes_debt`, `tests/test_dedup.py::test_social_review_keeps_other_sphere_and_other_client`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-APP-PAY-03, R-APP-REVIEW-05, R-APP-DEDUP-02
+-- ⚠ Расхождение со схемой: Схема: остаётся та заявка, что первой дошла до записи. Код: OPEN_STAGES включает awaiting_issue, поэтому более поздний «победитель» (например, заявка в долг, прошедшая проверку после оплаты платной) закрывает уже дошедшую до записи и оплаченную заявку. Для социальных заявок дедупликация не запускается вообще.
++- ⚠ Расхождение со схемой: Схема: остаётся та заявка, что первой дошла до записи. Код: OPEN_STAGES включает awaiting_issue, поэтому более поздний «победитель» (например, заявка в долг или социальная, прошедшая проверку после оплаты платной) закрывает уже дошедшую до записи и оплаченную заявку.
+ 
+ ## R-APP-DEDUP-02 — Закрытие дубля аннулирует его неоплаченные счета и сбрасывает записи
+ 
+diff --git a/docs/rules/billing.md b/docs/rules/billing.md
+index f8af2c4..3ca6633 100644
+--- a/docs/rules/billing.md
++++ b/docs/rules/billing.md
+@@ -268,7 +268,7 @@ link_payment публикует payment.fully_paid, только если до 
+ 
+ ## R-BILL-PROCESS-01 — Полная оплата счёта за книги открывает выдачу и закрывает дубли
+ 
+-`draft` · effect · §6 Клиент и проверка данных
++`suspect` · effect · §6 Клиент и проверка данных
+ 
+ Подписчик applications on_fully_paid для счёта books переводит заявку из awaiting_payment в awaiting_issue (actor system), формирует ссылку на запись (mark_ready_for_booking) и закрывает заявки-дубли клиента по той же сфере (dedup.close_duplicates). Переход awaiting_payment->awaiting_issue защищён guard'ом fully_paid.
+ 
+diff --git a/knowledge/model/bpm.json b/knowledge/model/bpm.json
+index a7b3be4..38a366b 100644
+--- a/knowledge/model/bpm.json
++++ b/knowledge/model/bpm.json
+@@ -471,7 +471,7 @@
+    "actor": "site_checker",
+    "dst": "awaiting_issue->books_out",
+    "lines": [
+-    69
++    71
+    ],
+    "src": "services/applications/consumers.py::on_books_issued",
+    "type": "transitions_to"
+@@ -480,7 +480,7 @@
+    "actor": "system",
+    "dst": "awaiting_invoice->on_review",
+    "lines": [
+-    63
++    65
+    ],
+    "src": "services/applications/consumers.py::on_client_updated",
+    "type": "transitions_to"
+@@ -489,7 +489,7 @@
+    "actor": "system",
+    "dst": "awaiting_payment->on_review",
+    "lines": [
+-    63
++    65
+    ],
+    "src": "services/applications/consumers.py::on_client_updated",
+    "type": "transitions_to"
+@@ -527,7 +527,7 @@
+    "actor": "system",
+    "dst": "archived->closed_duplicate",
+    "lines": [
+-    40
++    36
+    ],
+    "src": "services/applications/dedup.py::close_duplicates",
+    "type": "transitions_to"
+@@ -536,7 +536,7 @@
+    "actor": "system",
+    "dst": "awaiting_invoice->closed_duplicate",
+    "lines": [
+-    40
++    36
+    ],
+    "src": "services/applications/dedup.py::close_duplicates",
+    "type": "transitions_to"
+@@ -545,7 +545,7 @@
+    "actor": "system",
+    "dst": "awaiting_issue->closed_duplicate",
+    "lines": [
+-    40
++    36
+    ],
+    "src": "services/applications/dedup.py::close_duplicates",
+    "type": "transitions_to"
+@@ -554,7 +554,7 @@
+    "actor": "system",
+    "dst": "awaiting_payment->closed_duplicate",
+    "lines": [
+-    40
++    36
+    ],
+    "src": "services/applications/dedup.py::close_duplicates",
+    "type": "transitions_to"
+@@ -563,7 +563,7 @@
+    "actor": "system",
+    "dst": "draft->closed_duplicate",
+    "lines": [
+-    40
++    36
+    ],
+    "src": "services/applications/dedup.py::close_duplicates",
+    "type": "transitions_to"
+@@ -572,7 +572,7 @@
+    "actor": "system",
+    "dst": "needs_rework->closed_duplicate",
+    "lines": [
+-    40
++    36
+    ],
+    "src": "services/applications/dedup.py::close_duplicates",
+    "type": "transitions_to"
+@@ -581,7 +581,7 @@
+    "actor": "system",
+    "dst": "on_review->closed_duplicate",
+    "lines": [
+-    40
++    36
+    ],
+    "src": "services/applications/dedup.py::close_duplicates",
+    "type": "transitions_to"
+@@ -745,7 +745,7 @@
+    ],
+    "dst": "applications.applications",
+    "lines": [
+-    69
++    71
+    ],
+    "src": "services/applications/consumers.py::on_books_issued",
+    "type": "writes",
+@@ -757,7 +757,7 @@
+    ],
+    "dst": "applications.applications",
+    "lines": [
+-    63
++    65
+    ],
+    "src": "services/applications/consumers.py::on_client_updated",
+    "type": "writes",
+@@ -805,7 +805,7 @@
+    ],
+    "dst": "applications.applications",
+    "lines": [
+-    40
++    36
+    ],
+    "src": "services/applications/dedup.py::close_duplicates",
+    "type": "writes",
+diff --git a/knowledge/model/code.json b/knowledge/model/code.json
+index f46dac8..4e9576b 100644
+--- a/knowledge/model/code.json
++++ b/knowledge/model/code.json
+@@ -230,7 +230,7 @@
+   {
+    "dst": "services/applications/service.py::load",
+    "lines": [
+-    68
++    70
+    ],
+    "src": "services/applications/consumers.py::on_books_issued",
+    "type": "calls"
+@@ -278,7 +278,7 @@
+   {
+    "dst": "services/applications/service.py::archive",
+    "lines": [
+-    78
++    80
+    ],
+    "src": "services/applications/consumers.py::on_payment_refunded",
+    "type": "calls"
+@@ -286,7 +286,7 @@
+   {
+    "dst": "services/applications/service.py::load",
+    "lines": [
+-    76
++    78
+    ],
+    "src": "services/applications/consumers.py::on_payment_refunded",
+    "type": "calls"
+@@ -294,7 +294,7 @@
+   {
+    "dst": "services/applications/dedup.py::close_duplicates",
+    "lines": [
+-    47
++    49
+    ],
+    "src": "services/applications/consumers.py::on_review_passed",
+    "type": "calls"
+@@ -302,19 +302,11 @@
+   {
+    "dst": "services/applications/service.py::load",
+    "lines": [
+-    46
++    48
+    ],
+    "src": "services/applications/consumers.py::on_review_passed",
+    "type": "calls"
+   },
+-  {
+-   "dst": "services/applications/dedup.py::_same_track",
+-   "lines": [
+-    38
+-   ],
+-   "src": "services/applications/dedup.py::close_duplicates",
+-   "type": "calls"
+-  },
+   {
+    "dst": "services/billing/public.py::open_fines_count",
+    "lines": [
+@@ -6918,11 +6910,6 @@
+    "src": "services/applications/consumers.py::on_review_passed",
+    "type": "part_of"
+   },
+-  {
+-   "dst": "service:applications",
+-   "src": "services/applications/dedup.py::_same_track",
+-   "type": "part_of"
+-  },
+   {
+    "dst": "service:applications",
+    "src": "services/applications/dedup.py::close_duplicates",
+@@ -7660,9 +7647,9 @@
+   {
+    "dst": "applications.applications",
+    "lines": [
+-    54,
+-    55,
+-    56
++    56,
++    57,
++    58
+    ],
+    "src": "services/applications/consumers.py::on_client_updated",
+    "type": "reads"
+@@ -7670,11 +7657,11 @@
+   {
+    "dst": "applications.applications",
+    "lines": [
++    26,
++    27,
+     28,
+     29,
+-    30,
+-    31,
+-    32
++    30
+    ],
+    "src": "services/applications/dedup.py::close_duplicates",
+    "type": "reads"
+@@ -10292,7 +10279,7 @@
+   {
+    "dst": "services/applications/dedup.py::OPEN_STAGES",
+    "lines": [
+-    32
++    30
+    ],
+    "src": "services/applications/dedup.py::close_duplicates",
+    "type": "reads_config"
+@@ -11554,6 +11541,26 @@
+    "src": "services/applications/service.py::approve",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_dedup.py::test_debt_review_closes_social_and_social_review_closes_debt",
++   "src": "services/applications/service.py::approve",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_dedup.py::test_full_payment_closes_social_of_same_sphere",
++   "src": "services/applications/service.py::approve",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_dedup.py::test_social_review_closes_paid_of_same_sphere",
++   "src": "services/applications/service.py::approve",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_dedup.py::test_social_review_keeps_other_sphere_and_other_client",
++   "src": "services/applications/service.py::approve",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_kinds.py::test_debt_application_skips_invoice",
+    "src": "services/applications/service.py::approve",
+@@ -11684,6 +11691,26 @@
+    "src": "services/applications/service.py::assign_reviewer",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_dedup.py::test_debt_review_closes_social_and_social_review_closes_debt",
++   "src": "services/applications/service.py::assign_reviewer",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_dedup.py::test_full_payment_closes_social_of_same_sphere",
++   "src": "services/applications/service.py::assign_reviewer",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_dedup.py::test_social_review_closes_paid_of_same_sphere",
++   "src": "services/applications/service.py::assign_reviewer",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_dedup.py::test_social_review_keeps_other_sphere_and_other_client",
++   "src": "services/applications/service.py::assign_reviewer",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_kinds.py::test_debt_application_skips_invoice",
+    "src": "services/applications/service.py::assign_reviewer",
+@@ -11849,6 +11876,26 @@
+    "src": "services/applications/service.py::create_application",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_dedup.py::test_debt_review_closes_social_and_social_review_closes_debt",
++   "src": "services/applications/service.py::create_application",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_dedup.py::test_full_payment_closes_social_of_same_sphere",
++   "src": "services/applications/service.py::create_application",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_dedup.py::test_social_review_closes_paid_of_same_sphere",
++   "src": "services/applications/service.py::create_application",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_dedup.py::test_social_review_keeps_other_sphere_and_other_client",
++   "src": "services/applications/service.py::create_application",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_kinds.py::test_debt_application_skips_invoice",
+    "src": "services/applications/service.py::create_application",
+@@ -11994,6 +12041,26 @@
+    "src": "services/applications/service.py::load",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_dedup.py::test_debt_review_closes_social_and_social_review_closes_debt",
++   "src": "services/applications/service.py::load",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_dedup.py::test_full_payment_closes_social_of_same_sphere",
++   "src": "services/applications/service.py::load",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_dedup.py::test_social_review_closes_paid_of_same_sphere",
++   "src": "services/applications/service.py::load",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_dedup.py::test_social_review_keeps_other_sphere_and_other_client",
++   "src": "services/applications/service.py::load",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_kinds.py::test_debt_application_skips_invoice",
+    "src": "services/applications/service.py::load",
+@@ -12059,6 +12126,26 @@
+    "src": "services/applications/service.py::submit_for_review",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_dedup.py::test_debt_review_closes_social_and_social_review_closes_debt",
++   "src": "services/applications/service.py::submit_for_review",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_dedup.py::test_full_payment_closes_social_of_same_sphere",
++   "src": "services/applications/service.py::submit_for_review",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_dedup.py::test_social_review_closes_paid_of_same_sphere",
++   "src": "services/applications/service.py::submit_for_review",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_dedup.py::test_social_review_keeps_other_sphere_and_other_client",
++   "src": "services/applications/service.py::submit_for_review",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_kinds.py::test_debt_application_skips_invoice",
+    "src": "services/applications/service.py::submit_for_review",
+@@ -12189,6 +12276,16 @@
+    "src": "services/billing/service.py::issue_books_invoice",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_dedup.py::test_full_payment_closes_social_of_same_sphere",
++   "src": "services/billing/service.py::issue_books_invoice",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_dedup.py::test_social_review_closes_paid_of_same_sphere",
++   "src": "services/billing/service.py::issue_books_invoice",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_kinds.py::test_no_books_invoice_for_social",
+    "src": "services/billing/service.py::issue_books_invoice",
+@@ -12244,6 +12341,11 @@
+    "src": "services/billing/service.py::issue_books_invoice",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_dedup.py::test_full_payment_closes_social_of_same_sphere",
++   "src": "services/billing/service.py::link_payment",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_notifications.py::test_booking_email_goes_to_client_and_representative",
+    "src": "services/billing/service.py::link_payment",
+@@ -12284,6 +12386,16 @@
+    "src": "services/billing/service.py::take_application",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_dedup.py::test_full_payment_closes_social_of_same_sphere",
++   "src": "services/billing/service.py::take_application",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_dedup.py::test_social_review_closes_paid_of_same_sphere",
++   "src": "services/billing/service.py::take_application",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_kinds.py::test_debt_application_skips_invoice",
+    "src": "services/billing/service.py::take_application",
+@@ -17842,8 +17954,8 @@
+    ],
+    "dst": "applications.attempts",
+    "lines": [
+-    43,
+-    44
++    39,
++    40
+    ],
+    "src": "services/applications/dedup.py::close_duplicates",
+    "type": "writes"
+@@ -22331,12 +22443,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 69,
++   "end_line": 71,
+    "hash": "8df2e69239a7",
+    "hash_own": "0da01045f856",
+    "id": "services/applications/consumers.py::on_books_issued",
+    "kind": "consumer",
+-   "line": 67,
++   "line": 69,
+    "name": "on_books_issued",
+    "path": "services/applications/consumers.py",
+    "service": "applications",
+@@ -22344,12 +22456,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 63,
++   "end_line": 65,
+    "hash": "b9e398d012dd",
+    "hash_own": "6cb54c85182e",
+    "id": "services/applications/consumers.py::on_client_updated",
+    "kind": "consumer",
+-   "line": 51,
++   "line": 53,
+    "name": "on_client_updated",
+    "path": "services/applications/consumers.py",
+    "service": "applications",
+@@ -22358,7 +22470,7 @@
+   },
+   {
+    "end_line": 39,
+-   "hash": "ea8e31c2634d",
++   "hash": "d7ec57b7f7a7",
+    "hash_own": "d114c5c4709b",
+    "id": "services/applications/consumers.py::on_fully_paid",
+    "kind": "consumer",
+@@ -22396,12 +22508,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 78,
++   "end_line": 80,
+    "hash": "685365203414",
+    "hash_own": "e58d1067e51e",
+    "id": "services/applications/consumers.py::on_payment_refunded",
+    "kind": "consumer",
+-   "line": 73,
++   "line": 75,
+    "name": "on_payment_refunded",
+    "path": "services/applications/consumers.py",
+    "service": "applications",
+@@ -22409,12 +22521,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 47,
+-   "hash": "3695aacda943",
+-   "hash_own": "4932444042cf",
++   "end_line": 49,
++   "hash": "c83f8cd336fc",
++   "hash_own": "9be43657df01",
+    "id": "services/applications/consumers.py::on_review_passed",
+    "kind": "consumer",
+-   "line": 43,
++   "line": 45,
+    "name": "on_review_passed",
+    "path": "services/applications/consumers.py",
+    "service": "applications",
+@@ -22422,25 +22534,13 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 22,
+-   "hash": "8e83fa21ccf0",
+-   "hash_own": "98a2cc453cda",
+-   "id": "services/applications/dedup.py::_same_track",
+-   "kind": "function",
+-   "line": 21,
+-   "name": "_same_track",
+-   "path": "services/applications/dedup.py",
+-   "service": "applications",
+-   "signature": "(a, b)",
+-   "type": "symbol"
+-  },
+-  {
+-   "end_line": 51,
+-   "hash": "2a2e785b5324",
+-   "hash_own": "d4e68f242423",
++   "doc": "Закрыть другие открытые заявки клиента по сфере — любого вида (платные, в долг, социальные).",
++   "end_line": 47,
++   "hash": "b6e32e36249b",
++   "hash_own": "15053efd8738",
+    "id": "services/applications/dedup.py::close_duplicates",
+    "kind": "function",
+-   "line": 25,
++   "line": 22,
+    "name": "close_duplicates",
+    "path": "services/applications/dedup.py",
+    "service": "applications",
+@@ -33313,50 +33413,50 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 103,
++   "end_line": 108,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_bpm_layer_links_guards_and_code",
+    "kind": "test",
+-   "line": 94,
++   "line": 99,
+    "name": "test_bpm_layer_links_guards_and_code",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 80,
++   "end_line": 85,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_code_layer_finds_links_invisible_to_imports",
+    "kind": "test",
+-   "line": 59,
++   "line": 64,
+    "name": "test_code_layer_finds_links_invisible_to_imports",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(code_model)",
+    "type": "test"
+   },
+   {
+-   "end_line": 132,
++   "end_line": 137,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_entity_resolves_russian_term",
+    "kind": "test",
+-   "line": 129,
++   "line": 134,
+    "name": "test_entity_resolves_russian_term",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(g)",
+    "type": "test"
+   },
+   {
+-   "end_line": 91,
++   "end_line": 96,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_event_layer_resolves_dynamic_subscribers",
+    "kind": "test",
+-   "line": 83,
++   "line": 88,
+    "name": "test_event_layer_resolves_dynamic_subscribers",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 115,
++   "end_line": 120,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_find_entry_maps_russian_task_to_setting",
+    "kind": "test",
+-   "line": 113,
++   "line": 118,
+    "name": "test_find_entry_maps_russian_task_to_setting",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(g)",
+@@ -33373,30 +33473,30 @@
+    "type": "test"
+   },
+   {
+-   "end_line": 126,
++   "end_line": 131,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_impact_respects_budget_and_crosses_services",
+    "kind": "test",
+-   "line": 119,
++   "line": 124,
+    "name": "test_impact_respects_budget_and_crosses_services",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(g, budget)",
+    "type": "test"
+   },
+   {
+-   "end_line": 153,
++   "end_line": 158,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_mcp_log_line",
+    "kind": "test",
+-   "line": 135,
++   "line": 140,
+    "name": "test_mcp_log_line",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(monkeypatch, tmp_path, g)",
+    "type": "test"
+   },
+   {
+-   "end_line": 160,
++   "end_line": 165,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_rule_annotation_binds_to_function",
+    "kind": "test",
+-   "line": 156,
++   "line": 161,
+    "name": "test_rule_annotation_binds_to_function",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "()",
+@@ -33492,6 +33592,46 @@
+    "signature": "(client)",
+    "type": "test"
+   },
++  {
++   "end_line": 48,
++   "id": "tests/test_dedup.py::test_debt_review_closes_social_and_social_review_closes_debt",
++   "kind": "test",
++   "line": 38,
++   "name": "test_debt_review_closes_social_and_social_review_closes_debt",
++   "path": "tests/test_dedup.py",
++   "signature": "()",
++   "type": "test"
++  },
++  {
++   "end_line": 34,
++   "id": "tests/test_dedup.py::test_full_payment_closes_social_of_same_sphere",
++   "kind": "test",
++   "line": 29,
++   "name": "test_full_payment_closes_social_of_same_sphere",
++   "path": "tests/test_dedup.py",
++   "signature": "()",
++   "type": "test"
++  },
++  {
++   "end_line": 25,
++   "id": "tests/test_dedup.py::test_social_review_closes_paid_of_same_sphere",
++   "kind": "test",
++   "line": 17,
++   "name": "test_social_review_closes_paid_of_same_sphere",
++   "path": "tests/test_dedup.py",
++   "signature": "()",
++   "type": "test"
++  },
++  {
++   "end_line": 58,
++   "id": "tests/test_dedup.py::test_social_review_keeps_other_sphere_and_other_client",
++   "kind": "test",
++   "line": 52,
++   "name": "test_social_review_keeps_other_sphere_and_other_client",
++   "path": "tests/test_dedup.py",
++   "signature": "()",
++   "type": "test"
++  },
+   {
+    "end_line": 64,
+    "id": "tests/test_halls_api.py::test_booking_lifecycle_over_http",
+diff --git a/knowledge/model/events.json b/knowledge/model/events.json
+index bf77ce8..2f47fb3 100644
+--- a/knowledge/model/events.json
++++ b/knowledge/model/events.json
+@@ -165,7 +165,7 @@
+   {
+    "dst": "books.issued",
+    "lines": [
+-    67
++    69
+    ],
+    "src": "services/applications/consumers.py::on_books_issued",
+    "type": "consumes"
+@@ -173,7 +173,7 @@
+   {
+    "dst": "client.updated",
+    "lines": [
+-    51
++    53
+    ],
+    "src": "services/applications/consumers.py::on_client_updated",
+    "type": "consumes"
+@@ -205,7 +205,7 @@
+   {
+    "dst": "payment.refunded",
+    "lines": [
+-    73
++    75
+    ],
+    "src": "services/applications/consumers.py::on_payment_refunded",
+    "type": "consumes"
+@@ -213,7 +213,7 @@
+   {
+    "dst": "application.review_passed",
+    "lines": [
+-    43
++    45
+    ],
+    "src": "services/applications/consumers.py::on_review_passed",
+    "type": "consumes"
+@@ -1141,7 +1141,7 @@
+   {
+    "dst": "application.closed_duplicate",
+    "lines": [
+-    45
++    41
+    ],
+    "src": "services/applications/dedup.py::close_duplicates",
+    "type": "publishes"
+diff --git a/knowledge/rules/applications.yaml b/knowledge/rules/applications.yaml
+index bd0cc74..4ab73ba 100644
+--- a/knowledge/rules/applications.yaml
++++ b/knowledge/rules/applications.yaml
+@@ -540,7 +540,7 @@ rules:
+   implemented_by:
+   - symbol: services/applications/consumers.py::on_fully_paid
+     lines: 32-39
+-    hash: ea8e31c2634d
++    hash: d7ec57b7f7a7
+   - transition: awaiting_payment->awaiting_issue
+     hash: 6fe11e269daf
+   - guard: guard:fully_paid
+@@ -548,7 +548,8 @@ rules:
+   - tests/test_paid_flow.py::test_partial_payment_does_not_open_issue
+   - tests/test_paid_flow.py::test_paid_application_full_path
+   schema_ref: §9 Виды заявок — Платная
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-APP-PAY-04
+   title: Возврат платежа по оплаченной заявке отправляет её в архив с отметкой «возврат»
+   text: >
+@@ -970,10 +971,11 @@ rules:
+ - id: R-APP-DEDUP-01
+   title: Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
+   text: >
+-    close_duplicates вызывается при полной оплате платной заявки и при прохождении проверки заявки в долг
+-    (подписчик application.review_passed с kind=debt). Все другие заявки клиента по той же сфере на этапах
+-    OPEN_STAGES (включая awaiting_issue и archived) того же трека (не-social с не-social) переводятся
+-    в closed_duplicate; незакрытая попытка закрывается с outcome=duplicate.
++    close_duplicates вызывается, когда заявка доходит до записи: при полной оплате платной заявки и при
++    прохождении проверки заявки в долг или социальной (подписчик application.review_passed с kind=debt
++    или kind=social). Все другие заявки клиента по той же сфере на этапах OPEN_STAGES (включая awaiting_issue
++    и archived) любого вида — платные, в долг и социальные пересекаются между собой — переводятся в closed_duplicate;
++    незакрытая попытка закрывается с outcome=duplicate.
+   kind: effect
+   applies_to:
+   - table:applications.applications
+@@ -995,17 +997,14 @@ rules:
+   - R-APP-DEDUP-02
+   implemented_by:
+   - symbol: services/applications/dedup.py::close_duplicates
+-    lines: 26-50
+-    hash: 2a2e785b5324
+-  - symbol: services/applications/dedup.py::_same_track
+-    lines: 22-22
+-    hash: 8e83fa21ccf0
++    lines: 24-46
++    hash: b6e32e36249b
+   - symbol: services/applications/consumers.py::on_review_passed
+-    lines: 44-47
+-    hash: 3695aacda943
++    lines: 46-49
++    hash: c83f8cd336fc
+   - symbol: services/applications/consumers.py::on_fully_paid
+     lines: 39-39
+-    hash: ea8e31c2634d
++    hash: d7ec57b7f7a7
+   - transition: awaiting_issue->closed_duplicate
+     hash: bb5857d29271
+   enforced_by_db:
+@@ -1015,12 +1014,18 @@ rules:
+     hash: 668dded20200
+   config:
+   - services/applications/dedup.py::OPEN_STAGES
++  tested_by:
++  - tests/test_dedup.py::test_social_review_closes_paid_of_same_sphere
++  - tests/test_dedup.py::test_full_payment_closes_social_of_same_sphere
++  - tests/test_dedup.py::test_debt_review_closes_social_and_social_review_closes_debt
++  - tests/test_dedup.py::test_social_review_keeps_other_sphere_and_other_client
+   schema_ref: §6 Клиент и проверка данных
+   discrepancy: >
+     Схема: остаётся та заявка, что первой дошла до записи. Код: OPEN_STAGES включает awaiting_issue, поэтому
+-    более поздний «победитель» (например, заявка в долг, прошедшая проверку после оплаты платной) закрывает
+-    уже дошедшую до записи и оплаченную заявку. Для социальных заявок дедупликация не запускается вообще.
+-  status: draft
++    более поздний «победитель» (например, заявка в долг или социальная, прошедшая проверку после оплаты
++    платной) закрывает уже дошедшую до записи и оплаченную заявку.
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-APP-DEDUP-02
+   title: Закрытие дубля аннулирует его неоплаченные счета и сбрасывает записи
+   text: >
+diff --git a/knowledge/rules/billing.yaml b/knowledge/rules/billing.yaml
+index d872be1..84d8909 100644
+--- a/knowledge/rules/billing.yaml
++++ b/knowledge/rules/billing.yaml
+@@ -633,7 +633,7 @@ rules:
+   implemented_by:
+   - symbol: services/applications/consumers.py::on_fully_paid
+     lines: 31-39
+-    hash: ea8e31c2634d
++    hash: d7ec57b7f7a7
+   - transition: awaiting_payment->awaiting_issue
+     hash: 6fe11e269daf
+   - guard: guard:fully_paid
+@@ -641,7 +641,8 @@ rules:
+   - tests/test_paid_flow.py::test_paid_application_full_path
+   - tests/test_paid_flow.py::test_partial_payment_does_not_open_issue
+   schema_ref: §6 Клиент и проверка данных
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-BILL-PROCESS-02
+   title: 'Guard fully_paid: действующий счёт за книги оплачен полностью'
+   text: >
+diff --git a/services/applications/consumers.py b/services/applications/consumers.py
+index 7066240..3dc70c6 100644
+--- a/services/applications/consumers.py
++++ b/services/applications/consumers.py
+@@ -39,9 +39,11 @@ async def on_fully_paid(session: AsyncSession, payload: dict[str, Any]) -> None:
+     await dedup.close_duplicates(session, app)
+ 
+ 
++# @rule R-APP-DEDUP-01
++# Заявки в долг и социальные доходят до записи в момент прохождения проверки.
+ @subscribe("application.review_passed")
+ async def on_review_passed(session: AsyncSession, payload: dict[str, Any]) -> None:
+-    if payload["kind"] != "debt":
++    if payload["kind"] not in ("debt", "social"):
+         return
+     app = await service.load(session, payload["application_id"])
+     await dedup.close_duplicates(session, app)
+diff --git a/services/applications/dedup.py b/services/applications/dedup.py
+index 4e69ded..48de26a 100644
+--- a/services/applications/dedup.py
++++ b/services/applications/dedup.py
+@@ -18,11 +18,9 @@ OPEN_STAGES = (
+ )
+ 
+ 
+-def _same_track(a: Application, b: Application) -> bool:
+-    return (a.kind == "social") == (b.kind == "social")
+-
+-
++# @rule R-APP-DEDUP-01
+ async def close_duplicates(session: AsyncSession, winner: Application) -> list[int]:
++    """Закрыть другие открытые заявки клиента по сфере — любого вида (платные, в долг, социальные)."""
+     others = (
+         await session.scalars(
+             select(Application).where(
+@@ -35,8 +33,6 @@ async def close_duplicates(session: AsyncSession, winner: Application) -> list[i
+     ).all()
+     closed: list[int] = []
+     for other in others:
+-        if not _same_track(winner, other):
+-            continue
+         await bpm.transition(session, other, "closed_duplicate", actor="system")
+         attempt = other.attempts[-1]
+         if attempt.ended_at is None:
+diff --git a/tests/test_dedup.py b/tests/test_dedup.py
+new file mode 100644
+index 0000000..bcc249e
+--- /dev/null
++++ b/tests/test_dedup.py
+@@ -0,0 +1,58 @@
++from tests.factories import (
++    BOOK_L1,
++    CLIENT_B,
++    LAW,
++    REP_DEBT,
++    application,
++    invoice,
++    new_application,
++    paid_application,
++    pass_review,
++    stage,
++    submit,
++)
++
++
++# @rule R-APP-DEDUP-01
++async def test_social_review_closes_paid_of_same_sphere() -> None:
++    paid = await new_application()
++    await pass_review(paid)
++    await invoice(paid)
++    social = await new_application(social=True)
++    await pass_review(social)
++    assert await stage(social) == "awaiting_issue"
++    assert await stage(paid) == "closed_duplicate"
++    assert (await application(paid)).attempts[-1].outcome == "duplicate"
++
++
++# @rule R-APP-DEDUP-01
++async def test_full_payment_closes_social_of_same_sphere() -> None:
++    social = await new_application(social=True)
++    await submit(social)
++    paid, _ = await paid_application()
++    assert await stage(paid) == "awaiting_issue"
++    assert await stage(social) == "closed_duplicate"
++
++
++# @rule R-APP-DEDUP-01
++async def test_debt_review_closes_social_and_social_review_closes_debt() -> None:
++    social = await new_application(social=True)
++    debt = await new_application(rep=REP_DEBT)
++    await pass_review(debt)
++    assert await stage(social) == "closed_duplicate"
++
++    debt_2 = await new_application(rep=REP_DEBT, sphere=LAW, books=(BOOK_L1,))
++    social_2 = await new_application(social=True, sphere=LAW, books=(BOOK_L1,))
++    await pass_review(social_2)
++    assert await stage(debt_2) == "closed_duplicate"
++    assert await stage(debt) == "awaiting_issue"
++
++
++# @rule R-APP-DEDUP-01
++async def test_social_review_keeps_other_sphere_and_other_client() -> None:
++    other_sphere = await new_application(sphere=LAW, books=(BOOK_L1,))
++    other_client = await new_application(client=CLIENT_B)
++    social = await new_application(social=True)
++    await pass_review(social)
++    assert await stage(other_sphere) == "draft"
++    assert await stage(other_client) == "draft"

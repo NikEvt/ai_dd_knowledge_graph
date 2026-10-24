@@ -1,0 +1,79 @@
+diff --git a/docs/README.md b/docs/README.md
+index b1bc15a..e61feb8 100644
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -24,7 +24,7 @@
+ | bpm_process | 1 |
+ | bpm_transition | 27 |
+ | config | 21 |
+-| db_constraint | 50 |
++| db_constraint | 51 |
+ | effect | 3 |
+ | event | 20 |
+ | job | 2 |
+diff --git a/docs/coverage.md b/docs/coverage.md
+index 20ffe7e..5dd11ad 100644
+--- a/docs/coverage.md
++++ b/docs/coverage.md
+@@ -6,7 +6,7 @@
+ - Без реализации (implemented_by / enforced_by_db): 7
+ - Без тестов (tested_by): 82
+ - suspect: 0
+-- Ограничения БД без правил: 0
++- Ограничения БД без правил: 1
+ - Проверки в коде без правил: 0
+ 
+ ## suspect (0)
+@@ -108,9 +108,9 @@
+ - R-SCHEMA-FINE-01 О просрочке представителю сообщает оператор по почте
+ - R-SCHEMA-SPHERE-01 Название сферы уникально
+ 
+-## Ограничения БД без правил (0)
++## Ограничения БД без правил (1)
+ 
+-- нет
++- fines_amount_cap
+ 
+ ## Проверки в коде без правил (0)
+ 
+diff --git a/docs/entities/README.md b/docs/entities/README.md
+index 7985700..c5845c9 100644
+--- a/docs/entities/README.md
++++ b/docs/entities/README.md
+@@ -16,7 +16,7 @@
+ | [applications.venues](applications.venues.md) | 5 | 1 | models.py::Venue |
+ | [billing.accountant_assignments](billing.accountant_assignments.md) | 2 | 0 | models.py::AccountantAssignment |
+ | [billing.fine_rates](billing.fine_rates.md) | 4 | 2 | models.py::FineRate |
+-| [billing.fines](billing.fines.md) | 8 | 3 | models.py::Fine |
++| [billing.fines](billing.fines.md) | 8 | 4 | models.py::Fine |
+ | [billing.invoices](billing.invoices.md) | 11 | 6 | models.py::Invoice |
+ | [billing.payments](billing.payments.md) | 9 | 3 | models.py::Payment |
+ | [chat.messages](chat.messages.md) | 6 | 2 | models.py::Message |
+diff --git a/docs/entities/billing.fines.md b/docs/entities/billing.fines.md
+index 0face38..e3e8394 100644
+--- a/docs/entities/billing.fines.md
++++ b/docs/entities/billing.fines.md
+@@ -17,6 +17,7 @@
+ - billing.invoices.fine_id → сюда
+ 
+ ## Ограничения и триггеры
++- fines_amount_cap (check на billing.fines): CHECK ((amount <= (100000)::numeric)) (migrations/versions/0002_fine_amount_cap.py:16)
+ - fines_amount_check (check на billing.fines): CHECK ((amount >= (0)::numeric)) (migrations/versions/0001_initial.py:157)
+ - fines_kind_check (check на billing.fines): CHECK ((kind = ANY (ARRAY['overdue'::text, 'lost'::text, 'damaged'::text]))) (migrations/versions/0001_initial.py:156)
+ - fines_status_check (check на billing.fines): CHECK ((status = ANY (ARRAY['open'::text, 'paid'::text]))) (migrations/versions/0001_initial.py:158)
+diff --git a/docs/reconciliation.md b/docs/reconciliation.md
+index f987325..ce4b10d 100644
+--- a/docs/reconciliation.md
++++ b/docs/reconciliation.md
+@@ -41,9 +41,9 @@
+ 
+ ## Детерминированная сверка
+ 
+-### Ограничения БД без правил (скрытые правила) (0)
++### Ограничения БД без правил (скрытые правила) (1)
+ 
+-- нет
++- fines_amount_cap
+ 
+ ### ORM-модели и реальная схема БД (0)
+ 

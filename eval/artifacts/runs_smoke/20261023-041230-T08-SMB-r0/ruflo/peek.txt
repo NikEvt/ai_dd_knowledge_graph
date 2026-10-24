@@ -1,0 +1,14 @@
+
+Memory Peek
+
+cwd: ~/work/ai-dd/wt/20261023-041230-T08-SMB-r0
+root: ~/work/ai-dd/wt/20261023-041230-T08-SMB-r0/.swarm (source: default)
+
++------+------------------------------------------+--------+---------+------------+
+| Role | Path                                     | Exists |    Rows | Last Write |
++------+------------------------------------------+--------+---------+------------+
+| cli  | ~/work/ai-dd/wt/20261... | no     | unknown | N/A        |
+| mcp  | ~/work/ai-dd/wt/20261... | no     | unknown | N/A        |
++------+------------------------------------------+--------+---------+------------+
+
+Shared keys (same namespace+key in both stores): unknown

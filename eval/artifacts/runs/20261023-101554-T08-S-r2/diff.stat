@@ -1,0 +1,12 @@
+ AGENTS.md                      |  2 +-
+ docs/README.md                 |  4 ++--
+ docs/coverage.md               |  8 +++++---
+ docs/entities/chat.messages.md |  2 +-
+ docs/roles.md                  | 18 +++++++++---------
+ docs/rules/README.md           |  2 +-
+ docs/rules/chat.md             |  6 +++---
+ knowledge/model/code.json      | 33 ++++++++++++++++++++++++---------
+ knowledge/rules/chat.yaml      | 17 ++++++++++-------
+ services/chat/api.py           |  8 ++++----
+ tests/test_chat_api.py         | 18 ++++++++++++++----
+ 11 files changed, 74 insertions(+), 44 deletions(-)

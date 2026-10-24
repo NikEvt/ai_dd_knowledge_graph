@@ -1,0 +1,13 @@
+migrations/noise/lectures.sql
+services/lectures/__init__.py
+services/lectures/api.py
+services/lectures/app.py
+services/lectures/consumers.py
+services/lectures/jobs.py
+services/lectures/models.py
+services/lectures/service.py
+services/lectures/settings.py
+tests/lectures_factories.py
+tests/test_lectures_events.py
+tests/test_lectures_jobs.py
+tests/test_lectures_registrations.py

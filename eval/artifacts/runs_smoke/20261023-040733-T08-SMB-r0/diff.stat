@@ -1,0 +1,20 @@
+ .claude-flow/harness-active-policy.json |  14 ++
+ .claude-flow/policy/state.json          |  11 ++
+ .claude/.proven-config-version          |   1 +
+ .claude/helpers/.helpers-version        |   2 +-
+ .claude/helpers/helpers.manifest.json   |   6 +-
+ .claude/helpers/hook-handler.cjs        | 239 ++++++++++++++++++++++++++++++--
+ .claude/helpers/statusline.cjs          |   4 +-
+ .claude/proven-config.json              |  42 ++++++
+ AGENTS.md                               |   2 +-
+ docs/README.md                          |   4 +-
+ docs/coverage.md                        |   8 +-
+ docs/entities/chat.messages.md          |   2 +-
+ docs/roles.md                           |  18 +--
+ docs/rules/README.md                    |   2 +-
+ docs/rules/chat.md                      |   6 +-
+ knowledge/model/code.json               |  49 ++++---
+ knowledge/rules/chat.yaml               |  17 ++-
+ services/chat/api.py                    |  10 +-
+ tests/test_chat_api.py                  |  15 +-
+ 19 files changed, 382 insertions(+), 70 deletions(-)

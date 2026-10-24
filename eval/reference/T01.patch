@@ -1,0 +1,44 @@
+diff --git a/migrations/versions/0002_social_venue_change.py b/migrations/versions/0002_social_venue_change.py
+new file mode 100644
+index 0000000..d833000
+--- /dev/null
++++ b/migrations/versions/0002_social_venue_change.py
+@@ -0,0 +1,38 @@
++"""social applications may change venue until books are issued
++
++Revision ID: 0002
++Revises: 0001
++"""
++
++from alembic import op
++
++revision = "0002"
++down_revision = "0001"
++branch_labels = None
++depends_on = None
++
++
++def upgrade() -> None:
++    op.execute(
++        """
++CREATE OR REPLACE FUNCTION applications.forbid_venue_change() RETURNS trigger AS $$
++BEGIN
++    IF NEW.venue_id IS DISTINCT FROM OLD.venue_id THEN
++        IF OLD.stage IN ('books_out','closed','closed_duplicate') THEN
++            RAISE EXCEPTION 'venue change forbidden after books were issued'
++                USING ERRCODE = 'check_violation';
++        END IF;
++        IF OLD.kind = 'debt'
++           AND OLD.stage NOT IN ('draft','on_review','needs_rework','archived') THEN
++            RAISE EXCEPTION 'venue change forbidden after booking link for % application', OLD.kind
++                USING ERRCODE = 'check_violation';
++        END IF;
++    END IF;
++    RETURN NEW;
++END $$ LANGUAGE plpgsql
++"""
++    )
++
++
++def downgrade() -> None:
++    pass

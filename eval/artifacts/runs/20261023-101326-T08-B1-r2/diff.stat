@@ -1,0 +1,5 @@
+ docs/entities/chat.messages.md |  2 +-
+ docs/rules/chat.md             | 12 ++++++------
+ services/chat/api.py           |  8 ++++----
+ tests/test_chat_api.py         | 17 +++++++++++++----
+ 4 files changed, 24 insertions(+), 15 deletions(-)

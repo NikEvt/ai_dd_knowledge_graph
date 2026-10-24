@@ -1,0 +1,1895 @@
+diff --git a/migrations/noise/marketing.sql b/migrations/noise/marketing.sql
+new file mode 100644
+index 0000000..24c23ed
+--- /dev/null
++++ b/migrations/noise/marketing.sql
+@@ -0,0 +1,153 @@
++-- marketing: рассылки и кампании для читателей и партнёров
++
++CREATE SCHEMA marketing;
++
++-- Менеджеры рассылок. Строка без venue_id — менеджер всей сети.
++CREATE TABLE marketing.managers (
++    id serial PRIMARY KEY,
++    manager_id int NOT NULL,
++    venue_id int,
++    full_name text NOT NULL
++);
++
++CREATE UNIQUE INDEX managers_network_uq ON marketing.managers (manager_id) WHERE venue_id IS NULL;
++CREATE UNIQUE INDEX managers_venue_uq ON marketing.managers (manager_id, venue_id) WHERE venue_id IS NOT NULL;
++
++CREATE TABLE marketing.audiences (
++    id serial PRIMARY KEY,
++    venue_id int NOT NULL,
++    name text NOT NULL CHECK (length(trim(name)) > 0),
++    created_by int NOT NULL,
++    created_at timestamptz NOT NULL,
++    archived boolean NOT NULL DEFAULT false,
++    last_campaign_at timestamptz,
++    CONSTRAINT audiences_venue_name_uq UNIQUE (venue_id, name)
++);
++
++CREATE TABLE marketing.audience_members (
++    id serial PRIMARY KEY,
++    audience_id int NOT NULL REFERENCES marketing.audiences (id) ON DELETE CASCADE,
++    email text NOT NULL CHECK (position('@' IN email) > 1),
++    full_name text NOT NULL,
++    segment text NOT NULL CHECK (segment IN ('paid', 'debt', 'social', 'vip', 'corporate')),
++    opted_out boolean NOT NULL DEFAULT false,
++    added_at timestamptz NOT NULL
++);
++
++CREATE UNIQUE INDEX audience_members_email_uq ON marketing.audience_members (audience_id, email);
++CREATE INDEX audience_members_email_idx ON marketing.audience_members (email) WHERE NOT opted_out;
++
++-- Шаблоны писем. Строка без venue_id — шаблон сети по умолчанию.
++CREATE TABLE marketing.campaign_templates (
++    id serial PRIMARY KEY,
++    venue_id int,
++    audience_group text NOT NULL,
++    type text NOT NULL,
++    body text NOT NULL CHECK (length(body) > 0),
++    updated_at timestamptz NOT NULL,
++    CONSTRAINT campaign_templates_audience_group_check CHECK (audience_group IN ('paid', 'social', 'vip')),
++    CONSTRAINT campaign_templates_venue_group_type_uq UNIQUE (venue_id, audience_group, type)
++);
++
++CREATE UNIQUE INDEX campaign_templates_default_uq
++    ON marketing.campaign_templates (audience_group, type) WHERE venue_id IS NULL;
++
++CREATE TABLE marketing.campaigns (
++    id serial PRIMARY KEY,
++    venue_id int NOT NULL,
++    audience_id int NOT NULL REFERENCES marketing.audiences (id),
++    type text NOT NULL,
++    subject text NOT NULL,
++    status text NOT NULL
++        CHECK (status IN ('draft', 'scheduled', 'preparing', 'sending', 'sent', 'cancelled')),
++    created_by int NOT NULL,
++    created_at timestamptz NOT NULL,
++    scheduled_at timestamptz,
++    launched_at timestamptz,
++    finished_at timestamptz,
++    recipients_count int NOT NULL DEFAULT 0 CHECK (recipients_count >= 0),
++    sent_count int NOT NULL DEFAULT 0 CHECK (sent_count >= 0),
++    skipped_count int NOT NULL DEFAULT 0 CHECK (skipped_count >= 0),
++    CHECK (status <> 'scheduled' OR scheduled_at IS NOT NULL)
++);
++
++-- По одной аудитории одновременно идёт не больше одной кампании.
++CREATE UNIQUE INDEX campaigns_audience_active_uq
++    ON marketing.campaigns (audience_id) WHERE status IN ('preparing', 'sending');
++CREATE INDEX campaigns_scheduled_idx ON marketing.campaigns (scheduled_at) WHERE status = 'scheduled';
++
++CREATE TABLE marketing.sent_messages (
++    id serial PRIMARY KEY,
++    campaign_id int NOT NULL REFERENCES marketing.campaigns (id) ON DELETE CASCADE,
++    template_id int REFERENCES marketing.campaign_templates (id) ON DELETE SET NULL,
++    email text NOT NULL,
++    segment text NOT NULL,
++    body text NOT NULL,
++    status text NOT NULL CHECK (status IN ('queued', 'sent', 'skipped', 'bounced')),
++    skip_reason text,
++    is_test boolean NOT NULL DEFAULT false,
++    created_at timestamptz NOT NULL,
++    sent_at timestamptz,
++    CHECK (status NOT IN ('sent', 'bounced') OR sent_at IS NOT NULL)
++);
++
++CREATE UNIQUE INDEX sent_messages_campaign_email_uq
++    ON marketing.sent_messages (campaign_id, email) WHERE NOT is_test;
++CREATE INDEX sent_messages_bounced_idx ON marketing.sent_messages (email) WHERE status = 'bounced';
++
++-- Отписки. Строка без venue_id — отписка от всех рассылок сети.
++CREATE TABLE marketing.unsubscriptions (
++    id serial PRIMARY KEY,
++    email text NOT NULL,
++    venue_id int,
++    reason text NOT NULL CHECK (reason IN ('reader', 'bounce', 'complaint', 'operator')),
++    created_at timestamptz NOT NULL
++);
++
++CREATE UNIQUE INDEX unsubscriptions_network_uq ON marketing.unsubscriptions (email) WHERE venue_id IS NULL;
++CREATE UNIQUE INDEX unsubscriptions_venue_uq
++    ON marketing.unsubscriptions (email, venue_id) WHERE venue_id IS NOT NULL;
++
++-- Адреса хранятся в нижнем регистре без пробелов
++CREATE FUNCTION marketing.normalize_email() RETURNS trigger AS $$
++BEGIN
++    NEW.email := lower(trim(NEW.email));
++    RETURN NEW;
++END;
++$$ LANGUAGE plpgsql;
++
++CREATE TRIGGER audience_members_normalize_email
++    BEFORE INSERT OR UPDATE OF email ON marketing.audience_members
++    FOR EACH ROW EXECUTE FUNCTION marketing.normalize_email();
++
++CREATE TRIGGER unsubscriptions_normalize_email
++    BEFORE INSERT OR UPDATE OF email ON marketing.unsubscriptions
++    FOR EACH ROW EXECUTE FUNCTION marketing.normalize_email();
++
++-- Завершённая или отменённая кампания больше не меняет статус
++CREATE FUNCTION marketing.campaigns_guard_status() RETURNS trigger AS $$
++BEGIN
++    IF OLD.status IN ('sent', 'cancelled') AND NEW.status <> OLD.status THEN
++        RAISE EXCEPTION 'кампания % уже в статусе %', OLD.id, OLD.status;
++    END IF;
++    RETURN NEW;
++END;
++$$ LANGUAGE plpgsql;
++
++CREATE TRIGGER campaigns_guard_status
++    BEFORE UPDATE OF status ON marketing.campaigns
++    FOR EACH ROW EXECUTE FUNCTION marketing.campaigns_guard_status();
++
++-- Текст отправленного письма не меняется: это то, что получил читатель
++CREATE FUNCTION marketing.sent_messages_freeze_body() RETURNS trigger AS $$
++BEGIN
++    IF OLD.sent_at IS NOT NULL AND NEW.body IS DISTINCT FROM OLD.body THEN
++        RAISE EXCEPTION 'письмо % уже отправлено, текст менять нельзя', OLD.id;
++    END IF;
++    RETURN NEW;
++END;
++$$ LANGUAGE plpgsql;
++
++CREATE TRIGGER sent_messages_freeze_body
++    BEFORE UPDATE ON marketing.sent_messages
++    FOR EACH ROW EXECUTE FUNCTION marketing.sent_messages_freeze_body();
+diff --git a/services/marketing/__init__.py b/services/marketing/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/services/marketing/api.py b/services/marketing/api.py
+new file mode 100644
+index 0000000..821eb7e
+--- /dev/null
++++ b/services/marketing/api.py
+@@ -0,0 +1,191 @@
++from datetime import datetime
++from typing import Annotated
++
++from fastapi import APIRouter, Depends
++from pydantic import BaseModel
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs.web import session
++from services.marketing import service
++from services.marketing.models import Campaign
++
++router = APIRouter(prefix="/marketing", tags=["marketing"])
++Session = Annotated[AsyncSession, Depends(session)]
++
++
++class AudienceIn(BaseModel):
++    manager_id: int
++    venue_id: int
++    name: str
++
++
++class MemberIn(BaseModel):
++    manager_id: int
++    email: str
++    full_name: str
++    segment: str
++
++
++class TemplateIn(BaseModel):
++    manager_id: int
++    venue_id: int | None = None
++    audience_group: str
++    type: str
++    body: str
++
++
++class CampaignIn(BaseModel):
++    manager_id: int
++    audience_id: int
++    type: str
++    subject: str
++    scheduled_at: datetime | None = None
++
++
++class ScheduleIn(BaseModel):
++    manager_id: int
++    scheduled_at: datetime
++
++
++class CampaignOut(BaseModel):
++    id: int
++    status: str
++    scheduled_at: datetime | None
++    recipients_count: int
++    sent_count: int
++    skipped_count: int
++    skipped_by_reason: dict[str, int] = {}
++
++    @classmethod
++    def of(cls, c: Campaign, skipped_by_reason: dict[str, int] | None = None) -> CampaignOut:
++        return cls(
++            id=c.id,
++            status=c.status,
++            scheduled_at=c.scheduled_at,
++            recipients_count=c.recipients_count,
++            sent_count=c.sent_count,
++            skipped_count=c.skipped_count,
++            skipped_by_reason=skipped_by_reason or {},
++        )
++
++
++class TestMessageIn(BaseModel):
++    manager_id: int
++    email: str
++    full_name: str = "Тестовый читатель"
++    segment: str = "paid"
++
++
++class MessageOut(BaseModel):
++    id: int
++    body: str
++    sent_at: datetime | None
++
++
++class UnsubscribeIn(BaseModel):
++    email: str
++    venue_id: int | None = None
++
++
++@router.post("/audiences", status_code=201)
++async def create_audience(body: AudienceIn, s: Session) -> dict[str, int]:
++    audience = await service.create_audience(
++        s, manager_id=body.manager_id, venue_id=body.venue_id, name=body.name
++    )
++    return {"audience_id": audience.id}
++
++
++@router.post("/audiences/{audience_id}/members", status_code=201)
++async def add_member(audience_id: int, body: MemberIn, s: Session) -> dict[str, int]:
++    member = await service.add_member(
++        s,
++        audience_id,
++        body.manager_id,
++        email=body.email,
++        full_name=body.full_name,
++        segment=body.segment,
++    )
++    return {"member_id": member.id}
++
++
++@router.post("/audiences/{audience_id}/archive", status_code=204)
++async def archive_audience(audience_id: int, manager_id: int, s: Session) -> None:
++    await service.archive_audience(s, audience_id, manager_id)
++
++
++@router.put("/templates")
++async def set_template(body: TemplateIn, s: Session) -> dict[str, int]:
++    tpl = await service.set_template(
++        s,
++        manager_id=body.manager_id,
++        venue_id=body.venue_id,
++        audience_group=body.audience_group,
++        type_=body.type,
++        body=body.body,
++    )
++    return {"template_id": tpl.id}
++
++
++@router.post("/campaigns", status_code=201)
++async def create_campaign(body: CampaignIn, s: Session) -> dict[str, int]:
++    campaign = await service.create_campaign(
++        s,
++        manager_id=body.manager_id,
++        audience_id=body.audience_id,
++        type_=body.type,
++        subject=body.subject,
++        scheduled_at=body.scheduled_at,
++    )
++    return {"campaign_id": campaign.id}
++
++
++@router.get("/campaigns/{campaign_id}")
++async def campaign(campaign_id: int, manager_id: int, s: Session) -> CampaignOut:
++    c, skipped = await service.campaign_report(s, campaign_id, manager_id)
++    return CampaignOut.of(c, skipped)
++
++
++@router.post("/campaigns/{campaign_id}/schedule")
++async def schedule(campaign_id: int, body: ScheduleIn, s: Session) -> CampaignOut:
++    return CampaignOut.of(await service.schedule_campaign(s, campaign_id, body.manager_id, body.scheduled_at))
++
++
++@router.post("/campaigns/{campaign_id}/cancel")
++async def cancel(campaign_id: int, manager_id: int, s: Session) -> CampaignOut:
++    return CampaignOut.of(await service.cancel_campaign(s, campaign_id, manager_id))
++
++
++@router.post("/campaigns/{campaign_id}/launch")
++async def launch(campaign_id: int, manager_id: int, s: Session) -> CampaignOut:
++    return CampaignOut.of(await service.launch_campaign(s, campaign_id, manager_id))
++
++
++@router.get("/campaigns/{campaign_id}/messages")
++async def messages(campaign_id: int, manager_id: int, s: Session) -> list[MessageOut]:
++    return [
++        MessageOut(id=m.id, body=m.body, sent_at=m.sent_at)
++        for m in await service.campaign_messages(s, campaign_id, manager_id)
++    ]
++
++
++@router.post("/campaigns/{campaign_id}/messages/test", status_code=201)
++async def send_test(campaign_id: int, body: TestMessageIn, s: Session) -> MessageOut:
++    m = await service.send_test_message(
++        s,
++        campaign_id,
++        body.manager_id,
++        email=body.email,
++        full_name=body.full_name,
++        segment=body.segment,
++    )
++    return MessageOut(id=m.id, body=m.body, sent_at=m.sent_at)
++
++
++@router.post("/messages/{message_id}/bounce", status_code=204)
++async def bounce(message_id: int, s: Session) -> None:
++    await service.register_bounce(s, message_id)
++
++
++@router.post("/unsubscribe", status_code=204)
++async def unsubscribe(body: UnsubscribeIn, s: Session) -> None:
++    await service.unsubscribe(s, email=body.email, venue_id=body.venue_id)
+diff --git a/services/marketing/app.py b/services/marketing/app.py
+new file mode 100644
+index 0000000..5a43cfd
+--- /dev/null
++++ b/services/marketing/app.py
+@@ -0,0 +1,10 @@
++from fastapi import FastAPI
++
++from libs.web import install_error_handlers
++from services import wiring
++from services.marketing.api import router
++
++wiring.load()
++app = FastAPI(title="marketing")
++app.include_router(router)
++install_error_handlers(app)
+diff --git a/services/marketing/consumers.py b/services/marketing/consumers.py
+new file mode 100644
+index 0000000..9411956
+--- /dev/null
++++ b/services/marketing/consumers.py
+@@ -0,0 +1,31 @@
++from typing import Any
++
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs.events import subscribe
++from services.marketing import service
++
++
++@subscribe("marketing.campaign_launched")
++async def on_campaign_launched(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.prepare_messages(session, payload["campaign_id"])
++
++
++@subscribe("marketing.campaign_prepared")
++async def on_campaign_prepared(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.deliver_messages(session, payload["campaign_id"])
++
++
++@subscribe("marketing.campaign_finished")
++async def on_campaign_finished(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.summarize_campaign(session, payload["campaign_id"])
++
++
++@subscribe("marketing.unsubscribed")
++async def on_unsubscribed(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.exclude_address(session, payload["email"], payload["venue_id"])
++
++
++@subscribe("marketing.message_bounced")
++async def on_message_bounced(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.handle_bounce(session, payload["email"])
+diff --git a/services/marketing/jobs.py b/services/marketing/jobs.py
+new file mode 100644
+index 0000000..e5a0195
+--- /dev/null
++++ b/services/marketing/jobs.py
+@@ -0,0 +1,39 @@
++from datetime import datetime, timedelta
++
++from sqlalchemy import select
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs.errors import DomainError
++from services.marketing import service, settings
++from services.marketing.models import Campaign
++
++
++async def launch_due(session: AsyncSession, now: datetime) -> list[int]:
++    """Запускает запланированные кампании, время которых пришло.
++
++    Кампания, которую сейчас запустить нельзя (например, аудитории недавно писали),
++    остаётся запланированной и попадёт в следующий прогон.
++    """
++    due = (
++        await session.scalars(
++            select(Campaign)
++            .where(Campaign.status == "scheduled", Campaign.scheduled_at <= now)
++            .order_by(Campaign.scheduled_at, Campaign.id)
++            .with_for_update(skip_locked=True)
++        )
++    ).all()
++    launched = []
++    for campaign in due:
++        try:
++            async with session.begin_nested():
++                await service.start(session, campaign, now)
++        except DomainError:
++            continue
++        launched.append(campaign.id)
++    return launched
++
++
++async def purge_test_messages(session: AsyncSession, now: datetime) -> int:
++    return await service.purge_test_messages(
++        session, now - timedelta(days=settings.TEST_MESSAGE_TTL_DAYS)
++    )
+diff --git a/services/marketing/models.py b/services/marketing/models.py
+new file mode 100644
+index 0000000..ba6725e
+--- /dev/null
++++ b/services/marketing/models.py
+@@ -0,0 +1,108 @@
++from datetime import datetime
++
++from sqlalchemy import ForeignKey
++from sqlalchemy.orm import Mapped, mapped_column
++
++from libs.db import Base
++
++SCHEMA = {"schema": "marketing"}
++
++
++class Manager(Base):
++    """Менеджер рассылок площадки; без venue_id — менеджер всей сети."""
++
++    __tablename__ = "managers"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    manager_id: Mapped[int]
++    venue_id: Mapped[int | None]
++    full_name: Mapped[str]
++
++
++class Audience(Base):
++    __tablename__ = "audiences"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    venue_id: Mapped[int]
++    name: Mapped[str]
++    created_by: Mapped[int]
++    created_at: Mapped[datetime]
++    archived: Mapped[bool] = mapped_column(default=False)
++    last_campaign_at: Mapped[datetime | None]
++
++
++class AudienceMember(Base):
++    __tablename__ = "audience_members"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    audience_id: Mapped[int] = mapped_column(ForeignKey("marketing.audiences.id"))
++    email: Mapped[str]
++    full_name: Mapped[str]
++    segment: Mapped[str]
++    opted_out: Mapped[bool] = mapped_column(default=False)
++    added_at: Mapped[datetime]
++
++
++class CampaignTemplate(Base):
++    __tablename__ = "campaign_templates"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    venue_id: Mapped[int | None]
++    audience_group: Mapped[str]
++    type: Mapped[str]
++    body: Mapped[str]
++    updated_at: Mapped[datetime]
++
++
++class Campaign(Base):
++    __tablename__ = "campaigns"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    venue_id: Mapped[int]
++    audience_id: Mapped[int] = mapped_column(ForeignKey("marketing.audiences.id"))
++    type: Mapped[str]
++    subject: Mapped[str]
++    status: Mapped[str]
++    created_by: Mapped[int]
++    created_at: Mapped[datetime]
++    scheduled_at: Mapped[datetime | None]
++    launched_at: Mapped[datetime | None]
++    finished_at: Mapped[datetime | None]
++    recipients_count: Mapped[int] = mapped_column(default=0)
++    sent_count: Mapped[int] = mapped_column(default=0)
++    skipped_count: Mapped[int] = mapped_column(default=0)
++
++
++class SentMessage(Base):
++    __tablename__ = "sent_messages"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    campaign_id: Mapped[int] = mapped_column(ForeignKey("marketing.campaigns.id"))
++    template_id: Mapped[int | None] = mapped_column(ForeignKey("marketing.campaign_templates.id"))
++    email: Mapped[str]
++    segment: Mapped[str]
++    body: Mapped[str]
++    status: Mapped[str]
++    skip_reason: Mapped[str | None]
++    is_test: Mapped[bool] = mapped_column(default=False)
++    created_at: Mapped[datetime]
++    sent_at: Mapped[datetime | None]
++
++
++class Unsubscription(Base):
++    """Отписка адреса от рассылок площадки; без venue_id — от всех рассылок сети."""
++
++    __tablename__ = "unsubscriptions"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    email: Mapped[str]
++    venue_id: Mapped[int | None]
++    reason: Mapped[str]
++    created_at: Mapped[datetime]
+diff --git a/services/marketing/service.py b/services/marketing/service.py
+new file mode 100644
+index 0000000..b147dc6
+--- /dev/null
++++ b/services/marketing/service.py
+@@ -0,0 +1,572 @@
++"""Аудитории, шаблоны писем, кампании рассылок и отписки."""
++
++from datetime import datetime, timedelta
++from string import Template as Text
++
++from sqlalchemy import delete, func, or_, select, update
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs import clock, events
++from libs.errors import AccessDenied, DomainError, NotFound
++from services.marketing import settings
++from services.marketing.models import (
++    Audience,
++    AudienceMember,
++    Campaign,
++    CampaignTemplate,
++    Manager,
++    SentMessage,
++    Unsubscription,
++)
++
++NOT_STARTED = ("draft", "scheduled")
++RUNNING = ("preparing", "sending")
++UNSUBSCRIBE_REASONS = ("reader", "bounce", "complaint", "operator")
++
++
++def normalize_email(email: str) -> str:
++    email = email.strip().lower()
++    if "@" not in email[1:]:
++        raise DomainError(f"некорректный адрес: {email!r}")
++    return email
++
++
++def render(body: str, context: dict[str, str]) -> str:
++    return Text(body).safe_substitute(context)
++
++
++# Менеджеры ------------------------------------------------------------------
++
++
++async def add_manager(
++    session: AsyncSession, *, manager_id: int, venue_id: int | None, full_name: str
++) -> Manager:
++    manager = Manager(manager_id=manager_id, venue_id=venue_id, full_name=full_name)
++    session.add(manager)
++    await session.flush()
++    return manager
++
++
++async def _require_manager(session: AsyncSession, manager_id: int, venue_id: int | None) -> None:
++    scope = Manager.venue_id.is_(None)
++    if venue_id is not None:
++        scope = or_(scope, Manager.venue_id == venue_id)
++    found = await session.scalar(select(Manager.id).where(Manager.manager_id == manager_id, scope).limit(1))
++    if found is None:
++        if venue_id is None:
++            raise AccessDenied("шаблоны сети задаёт только менеджер сети")
++        raise AccessDenied("менеджер не ведёт рассылки этой площадки")
++
++
++# Аудитории ------------------------------------------------------------------
++
++
++async def create_audience(session: AsyncSession, *, manager_id: int, venue_id: int, name: str) -> Audience:
++    await _require_manager(session, manager_id, venue_id)
++    name = name.strip()
++    if not name:
++        raise DomainError("у аудитории должно быть название")
++    taken = await session.scalar(
++        select(Audience.id).where(Audience.venue_id == venue_id, Audience.name == name)
++    )
++    if taken is not None:
++        raise DomainError(f"на площадке уже есть аудитория «{name}»")
++    audience = Audience(venue_id=venue_id, name=name, created_by=manager_id, created_at=clock.now())
++    session.add(audience)
++    await session.flush()
++    return audience
++
++
++async def _audience(session: AsyncSession, audience_id: int) -> Audience:
++    audience = await session.get(Audience, audience_id)
++    if audience is None:
++        raise NotFound(f"аудитория {audience_id}")
++    return audience
++
++
++async def archive_audience(session: AsyncSession, audience_id: int, manager_id: int) -> Audience:
++    audience = await _audience(session, audience_id)
++    await _require_manager(session, manager_id, audience.venue_id)
++    pending = await session.scalar(
++        select(func.count()).where(
++            Campaign.audience_id == audience_id, Campaign.status.in_(("scheduled", *RUNNING))
++        )
++    )
++    if pending:
++        raise DomainError("по аудитории есть незавершённые кампании")
++    audience.archived = True
++    return audience
++
++
++async def is_unsubscribed(session: AsyncSession, email: str, venue_id: int) -> bool:
++    found = await session.scalar(
++        select(Unsubscription.id)
++        .where(
++            Unsubscription.email == email,
++            or_(Unsubscription.venue_id.is_(None), Unsubscription.venue_id == venue_id),
++        )
++        .limit(1)
++    )
++    return found is not None
++
++
++async def add_member(
++    session: AsyncSession,
++    audience_id: int,
++    manager_id: int,
++    *,
++    email: str,
++    full_name: str,
++    segment: str,
++) -> AudienceMember:
++    audience = await _audience(session, audience_id)
++    await _require_manager(session, manager_id, audience.venue_id)
++    if audience.archived:
++        raise DomainError("аудитория в архиве")
++    if segment not in settings.AUDIENCE_GROUP:
++        raise DomainError(f"неизвестный сегмент читателя: {segment}")
++    email = normalize_email(email)
++    size = await session.scalar(select(func.count()).where(AudienceMember.audience_id == audience_id))
++    if size >= settings.MAX_AUDIENCE_SIZE:
++        raise DomainError(f"в аудитории не может быть больше {settings.MAX_AUDIENCE_SIZE} адресов")
++    duplicate = await session.scalar(
++        select(AudienceMember.id).where(
++            AudienceMember.audience_id == audience_id, AudienceMember.email == email
++        )
++    )
++    if duplicate is not None:
++        raise DomainError("адрес уже есть в аудитории")
++    if await is_unsubscribed(session, email, audience.venue_id):
++        raise DomainError("адрес отписан от рассылок площадки")
++    member = AudienceMember(
++        audience_id=audience_id,
++        email=email,
++        full_name=full_name.strip(),
++        segment=segment,
++        added_at=clock.now(),
++    )
++    session.add(member)
++    await session.flush()
++    return member
++
++
++# Шаблоны --------------------------------------------------------------------
++
++
++async def set_template(
++    session: AsyncSession,
++    *,
++    manager_id: int,
++    venue_id: int | None,
++    audience_group: str,
++    type_: str,
++    body: str,
++) -> CampaignTemplate:
++    await _require_manager(session, manager_id, venue_id)
++    if audience_group not in set(settings.AUDIENCE_GROUP.values()):
++        raise DomainError(f"неизвестная группа аудитории: {audience_group}")
++    if type_ not in settings.CAMPAIGN_TYPES:
++        raise DomainError(f"неизвестный тип кампании: {type_}")
++    if not body.strip():
++        raise DomainError("текст шаблона пуст")
++    if len(body) > settings.MAX_TEMPLATE_LENGTH:
++        raise DomainError(f"текст шаблона длиннее {settings.MAX_TEMPLATE_LENGTH} символов")
++
++    venue = CampaignTemplate.venue_id.is_(None) if venue_id is None else CampaignTemplate.venue_id == venue_id
++    tpl = await session.scalar(
++        select(CampaignTemplate).where(
++            venue, CampaignTemplate.audience_group == audience_group, CampaignTemplate.type == type_
++        )
++    )
++    if tpl is None:
++        tpl = CampaignTemplate(venue_id=venue_id, audience_group=audience_group, type=type_, body=body)
++        session.add(tpl)
++    tpl.body = body
++    tpl.updated_at = clock.now()
++    await session.flush()
++    return tpl
++
++
++async def find_template(
++    session: AsyncSession, venue_id: int, segment: str, type_: str
++) -> CampaignTemplate | None:
++    """Шаблон площадки для группы читателя, иначе шаблон сети; затем то же для запасной группы."""
++    group = settings.AUDIENCE_GROUP.get(segment, settings.FALLBACK_GROUP)
++    groups = [group] if group == settings.FALLBACK_GROUP else [group, settings.FALLBACK_GROUP]
++    candidates = (
++        await session.scalars(
++            select(CampaignTemplate).where(
++                CampaignTemplate.type == type_,
++                CampaignTemplate.audience_group.in_(groups),
++                or_(CampaignTemplate.venue_id == venue_id, CampaignTemplate.venue_id.is_(None)),
++            )
++        )
++    ).all()
++    by_key = {(t.audience_group, t.venue_id): t for t in candidates}
++    for g in groups:
++        for v in (venue_id, None):
++            if (g, v) in by_key:
++                return by_key[g, v]
++    return None
++
++
++# Кампании -------------------------------------------------------------------
++
++
++def _check_schedule(scheduled_at: datetime) -> None:
++    now = clock.now()
++    if scheduled_at <= now:
++        raise DomainError("нельзя запланировать кампанию на прошедшее время")
++    if scheduled_at - now > timedelta(days=settings.MAX_SCHEDULE_AHEAD_DAYS):
++        raise DomainError(
++            f"кампанию можно запланировать не дальше чем на {settings.MAX_SCHEDULE_AHEAD_DAYS} дней"
++        )
++
++
++async def create_campaign(
++    session: AsyncSession,
++    *,
++    manager_id: int,
++    audience_id: int,
++    type_: str,
++    subject: str,
++    scheduled_at: datetime | None = None,
++) -> Campaign:
++    audience = await _audience(session, audience_id)
++    await _require_manager(session, manager_id, audience.venue_id)
++    if audience.archived:
++        raise DomainError("аудитория в архиве")
++    if type_ not in settings.CAMPAIGN_TYPES:
++        raise DomainError(f"неизвестный тип кампании: {type_}")
++    subject = subject.strip()
++    if not subject:
++        raise DomainError("у кампании должна быть тема письма")
++    if scheduled_at is not None:
++        _check_schedule(scheduled_at)
++    campaign = Campaign(
++        venue_id=audience.venue_id,
++        audience_id=audience_id,
++        type=type_,
++        subject=subject,
++        status="scheduled" if scheduled_at else "draft",
++        created_by=manager_id,
++        created_at=clock.now(),
++        scheduled_at=scheduled_at,
++    )
++    session.add(campaign)
++    await session.flush()
++    return campaign
++
++
++async def _campaign_for(session: AsyncSession, campaign_id: int, manager_id: int) -> Campaign:
++    campaign = await session.get(Campaign, campaign_id)
++    if campaign is None:
++        raise NotFound(f"кампания {campaign_id}")
++    await _require_manager(session, manager_id, campaign.venue_id)
++    return campaign
++
++
++async def schedule_campaign(
++    session: AsyncSession, campaign_id: int, manager_id: int, scheduled_at: datetime
++) -> Campaign:
++    campaign = await _campaign_for(session, campaign_id, manager_id)
++    if campaign.status not in NOT_STARTED:
++        raise DomainError("перенести можно только кампанию, которая ещё не запущена")
++    _check_schedule(scheduled_at)
++    campaign.status = "scheduled"
++    campaign.scheduled_at = scheduled_at
++    return campaign
++
++
++async def cancel_campaign(session: AsyncSession, campaign_id: int, manager_id: int) -> Campaign:
++    campaign = await _campaign_for(session, campaign_id, manager_id)
++    if campaign.status not in NOT_STARTED:
++        raise DomainError("отменить можно только кампанию, которая ещё не запущена")
++    campaign.status = "cancelled"
++    return campaign
++
++
++async def launch_campaign(session: AsyncSession, campaign_id: int, manager_id: int) -> Campaign:
++    campaign = await _campaign_for(session, campaign_id, manager_id)
++    await start(session, campaign, clock.now())
++    return campaign
++
++
++async def start(session: AsyncSession, campaign: Campaign, now: datetime) -> None:
++    if campaign.status not in NOT_STARTED:
++        raise DomainError("кампания уже запущена или закрыта")
++    audience = await _audience(session, campaign.audience_id)
++    if audience.archived:
++        raise DomainError("аудитория в архиве")
++    running = await session.scalar(
++        select(Campaign.id).where(
++            Campaign.audience_id == audience.id, Campaign.status.in_(RUNNING), Campaign.id != campaign.id
++        )
++    )
++    if running is not None:
++        raise DomainError("по аудитории уже идёт другая кампания")
++    pause = timedelta(days=settings.MIN_DAYS_BETWEEN_CAMPAIGNS)
++    if audience.last_campaign_at is not None and now - audience.last_campaign_at < pause:
++        raise DomainError(
++            f"аудитории уже писали меньше {settings.MIN_DAYS_BETWEEN_CAMPAIGNS} дней назад"
++        )
++    reachable = await session.scalar(
++        select(func.count()).where(
++            AudienceMember.audience_id == audience.id, AudienceMember.opted_out.is_(False)
++        )
++    )
++    if not reachable:
++        raise DomainError("в аудитории нет адресов для рассылки")
++
++    campaign.status = "preparing"
++    campaign.launched_at = now
++    events.publish(
++        session,
++        "marketing.campaign_launched",
++        {"campaign_id": campaign.id, "venue_id": campaign.venue_id, "audience_id": audience.id},
++    )
++
++
++async def prepare_messages(session: AsyncSession, campaign_id: int) -> None:
++    """Раскладывает кампанию на письма адресатам: текст по шаблону или пропуск с причиной."""
++    campaign = await session.get(Campaign, campaign_id, with_for_update=True)
++    if campaign is None or campaign.status != "preparing":
++        return
++    members = (
++        await session.scalars(
++            select(AudienceMember)
++            .where(AudienceMember.audience_id == campaign.audience_id, AudienceMember.opted_out.is_(False))
++            .order_by(AudienceMember.id)
++        )
++    ).all()
++    unsubscribed = set(
++        (
++            await session.scalars(
++                select(Unsubscription.email).where(
++                    Unsubscription.email.in_([m.email for m in members]),
++                    or_(Unsubscription.venue_id.is_(None), Unsubscription.venue_id == campaign.venue_id),
++                )
++            )
++        ).all()
++    )
++
++    now = clock.now()
++    templates: dict[str, CampaignTemplate | None] = {}
++    queued = 0
++    for m in members:
++        msg = SentMessage(campaign_id=campaign.id, email=m.email, segment=m.segment, body="", created_at=now)
++        if m.email in unsubscribed:
++            msg.status, msg.skip_reason = "skipped", "unsubscribed"
++        else:
++            if m.segment not in templates:
++                templates[m.segment] = await find_template(
++                    session, campaign.venue_id, m.segment, campaign.type
++                )
++            tpl = templates[m.segment]
++            if tpl is None:
++                msg.status, msg.skip_reason = "skipped", "no_template"
++            else:
++                msg.status, msg.template_id = "queued", tpl.id
++                msg.body = render(
++                    tpl.body, {"full_name": m.full_name, "email": m.email, "subject": campaign.subject}
++                )
++                queued += 1
++        session.add(msg)
++
++    campaign.status = "sending"
++    campaign.recipients_count = len(members)
++    await session.flush()
++    events.publish(session, "marketing.campaign_prepared", {"campaign_id": campaign.id, "queued": queued})
++
++
++async def deliver_messages(session: AsyncSession, campaign_id: int) -> None:
++    campaign = await session.get(Campaign, campaign_id, with_for_update=True)
++    if campaign is None or campaign.status != "sending":
++        return
++    now = clock.now()
++    await session.execute(
++        update(SentMessage)
++        .where(SentMessage.campaign_id == campaign_id, SentMessage.status == "queued")
++        .values(status="sent", sent_at=now)
++    )
++    campaign.status = "sent"
++    campaign.finished_at = now
++    events.publish(
++        session,
++        "marketing.campaign_finished",
++        {"campaign_id": campaign.id, "audience_id": campaign.audience_id, "finished_at": now.isoformat()},
++    )
++
++
++async def summarize_campaign(session: AsyncSession, campaign_id: int) -> Campaign:
++    campaign = await session.get(Campaign, campaign_id)
++    if campaign is None:
++        raise NotFound(f"кампания {campaign_id}")
++    counts = dict(
++        (
++            await session.execute(
++                select(SentMessage.status, func.count())
++                .where(SentMessage.campaign_id == campaign_id, SentMessage.is_test.is_(False))
++                .group_by(SentMessage.status)
++            )
++        ).all()
++    )
++    campaign.sent_count = counts.get("sent", 0) + counts.get("bounced", 0)
++    campaign.skipped_count = counts.get("skipped", 0)
++    audience = await _audience(session, campaign.audience_id)
++    if audience.last_campaign_at is None or audience.last_campaign_at < campaign.finished_at:
++        audience.last_campaign_at = campaign.finished_at
++    return campaign
++
++
++async def campaign_report(
++    session: AsyncSession, campaign_id: int, manager_id: int
++) -> tuple[Campaign, dict[str, int]]:
++    """Кампания и число пропущенных писем по причинам."""
++    campaign = await _campaign_for(session, campaign_id, manager_id)
++    reasons = (
++        await session.execute(
++            select(SentMessage.skip_reason, func.count())
++            .where(
++                SentMessage.campaign_id == campaign_id,
++                SentMessage.status == "skipped",
++                SentMessage.is_test.is_(False),
++            )
++            .group_by(SentMessage.skip_reason)
++        )
++    ).all()
++    return campaign, dict(reasons)
++
++
++# Письма ---------------------------------------------------------------------
++
++
++async def campaign_messages(session: AsyncSession, campaign_id: int, manager_id: int) -> list[SentMessage]:
++    await _campaign_for(session, campaign_id, manager_id)
++    rows = await session.scalars(
++        select(SentMessage).where(SentMessage.campaign_id == campaign_id).order_by(SentMessage.id)
++    )
++    return list(rows.all())
++
++
++async def send_test_message(
++    session: AsyncSession,
++    campaign_id: int,
++    manager_id: int,
++    *,
++    email: str,
++    full_name: str = "Тестовый читатель",
++    segment: str = "paid",
++) -> SentMessage:
++    campaign = await _campaign_for(session, campaign_id, manager_id)
++    if campaign.status not in NOT_STARTED:
++        raise DomainError("тестовое письмо отправляют только до запуска кампании")
++    if segment not in settings.AUDIENCE_GROUP:
++        raise DomainError(f"неизвестный сегмент читателя: {segment}")
++    email = normalize_email(email)
++    sent = await session.scalar(
++        select(func.count()).where(SentMessage.campaign_id == campaign_id, SentMessage.is_test.is_(True))
++    )
++    if sent >= settings.MAX_TEST_MESSAGES:
++        raise DomainError(f"по кампании уже отправлено {settings.MAX_TEST_MESSAGES} тестовых писем")
++    tpl = await find_template(session, campaign.venue_id, segment, campaign.type)
++    if tpl is None:
++        raise DomainError("для этого сегмента нет шаблона письма")
++    now = clock.now()
++    msg = SentMessage(
++        campaign_id=campaign_id,
++        template_id=tpl.id,
++        email=email,
++        segment=segment,
++        body=render(tpl.body, {"full_name": full_name, "email": email, "subject": campaign.subject}),
++        status="sent",
++        is_test=True,
++        created_at=now,
++        sent_at=now,
++    )
++    session.add(msg)
++    await session.flush()
++    return msg
++
++
++async def register_bounce(session: AsyncSession, message_id: int) -> SentMessage:
++    msg = await session.get(SentMessage, message_id)
++    if msg is None:
++        raise NotFound(f"письмо {message_id}")
++    if msg.is_test or msg.status != "sent":
++        raise DomainError("возврат возможен только по отправленному письму кампании")
++    msg.status = "bounced"
++    events.publish(
++        session,
++        "marketing.message_bounced",
++        {"message_id": msg.id, "campaign_id": msg.campaign_id, "email": msg.email},
++    )
++    return msg
++
++
++async def handle_bounce(session: AsyncSession, email: str) -> None:
++    bounced = await session.scalar(
++        select(func.count()).where(
++            SentMessage.email == email, SentMessage.status == "bounced", SentMessage.is_test.is_(False)
++        )
++    )
++    if bounced >= settings.BOUNCE_LIMIT:
++        await unsubscribe(session, email=email, reason="bounce")
++
++
++async def purge_test_messages(session: AsyncSession, before: datetime) -> int:
++    result = await session.execute(
++        delete(SentMessage).where(SentMessage.is_test.is_(True), SentMessage.sent_at < before)
++    )
++    return result.rowcount
++
++
++# Отписки --------------------------------------------------------------------
++
++
++async def unsubscribe(
++    session: AsyncSession, *, email: str, venue_id: int | None = None, reason: str = "reader"
++) -> Unsubscription:
++    if reason not in UNSUBSCRIBE_REASONS:
++        raise DomainError(f"неизвестная причина отписки: {reason}")
++    email = normalize_email(email)
++    # Уже отписан от всей сети или от этой площадки — повторно ничего не делаем
++    scope = Unsubscription.venue_id.is_(None)
++    if venue_id is not None:
++        scope = or_(scope, Unsubscription.venue_id == venue_id)
++    existing = await session.scalar(
++        select(Unsubscription).where(Unsubscription.email == email, scope).limit(1)
++    )
++    if existing is not None:
++        return existing
++
++    row = Unsubscription(email=email, venue_id=venue_id, reason=reason, created_at=clock.now())
++    session.add(row)
++    await session.flush()
++    events.publish(
++        session, "marketing.unsubscribed", {"email": email, "venue_id": venue_id, "reason": reason}
++    )
++    return row
++
++
++async def exclude_address(session: AsyncSession, email: str, venue_id: int | None) -> None:
++    """Исключает адрес из аудиторий и из писем, которые ещё не ушли."""
++    audiences = select(Audience.id)
++    campaigns = select(Campaign.id).where(Campaign.status.in_(RUNNING))
++    if venue_id is not None:
++        audiences = audiences.where(Audience.venue_id == venue_id)
++        campaigns = campaigns.where(Campaign.venue_id == venue_id)
++    await session.execute(
++        update(AudienceMember)
++        .where(AudienceMember.email == email, AudienceMember.audience_id.in_(audiences))
++        .values(opted_out=True)
++    )
++    await session.execute(
++        update(SentMessage)
++        .where(
++            SentMessage.email == email,
++            SentMessage.status == "queued",
++            SentMessage.campaign_id.in_(campaigns),
++        )
++        .values(status="skipped", skip_reason="unsubscribed")
++    )
+diff --git a/services/marketing/settings.py b/services/marketing/settings.py
+new file mode 100644
+index 0000000..95dbe79
+--- /dev/null
++++ b/services/marketing/settings.py
+@@ -0,0 +1,27 @@
++# Сегмент читателя -> группа шаблонов писем.
++AUDIENCE_GROUP = {
++    "paid": "paid",
++    "debt": "paid",
++    "social": "social",
++    "vip": "vip",
++    "corporate": "paid",
++}
++# Группа, шаблон которой берётся, если для группы читателя на площадке шаблона нет.
++FALLBACK_GROUP = "paid"
++
++CAMPAIGN_TYPES = ("newsletter", "event", "promo")
++
++# Сколько адресов может быть в одной аудитории.
++MAX_AUDIENCE_SIZE = 5_000
++# Длина текста шаблона.
++MAX_TEMPLATE_LENGTH = 10_000
++# Тестовых писем на одну кампанию.
++MAX_TEST_MESSAGES = 5
++# Тестовые письма удаляются через столько дней после отправки.
++TEST_MESSAGE_TTL_DAYS = 14
++# Не чаще одной кампании в столько дней на аудиторию.
++MIN_DAYS_BETWEEN_CAMPAIGNS = 3
++# Насколько вперёд можно запланировать кампанию.
++MAX_SCHEDULE_AHEAD_DAYS = 90
++# После стольких возвратов адрес отписывается от всех рассылок.
++BOUNCE_LIMIT = 3
+diff --git a/tests/marketing_factories.py b/tests/marketing_factories.py
+new file mode 100644
+index 0000000..3bd6bb0
+--- /dev/null
++++ b/tests/marketing_factories.py
+@@ -0,0 +1,141 @@
++"""Данные сервиса рассылок для тестов."""
++
++from datetime import datetime
++
++from sqlalchemy import select
++
++from libs import db
++from services.marketing import service
++from services.marketing.models import Audience, AudienceMember, Campaign, SentMessage, Unsubscription
++from tests.factories import act, read
++
++VENUE, VENUE_2 = 1, 2
++MANAGER, MANAGER_2, NETWORK_MANAGER, STRANGER = 701, 702, 703, 799
++
++READERS = (
++    ("anna@example.org", "Анна Петрова", "paid"),
++    ("boris@example.org", "Борис Сидоров", "social"),
++    ("vika@example.org", "Виктория Ли", "vip"),
++)
++
++
++async def run(fn, *args, **kwargs):
++    """Шаг в отдельной транзакции без доставки событий."""
++    async with db.sessionmaker().begin() as s:
++        return await fn(s, *args, **kwargs)
++
++
++async def staff() -> None:
++    await act(service.add_manager, manager_id=MANAGER, venue_id=VENUE, full_name="Ольга Лаптева")
++    await act(service.add_manager, manager_id=MANAGER_2, venue_id=VENUE_2, full_name="Игорь Зуев")
++    await act(service.add_manager, manager_id=NETWORK_MANAGER, venue_id=None, full_name="Марина Блохина")
++
++
++def manager_of(venue: int | None) -> int:
++    return {VENUE: MANAGER, VENUE_2: MANAGER_2}.get(venue, NETWORK_MANAGER)
++
++
++async def template(
++    group: str, *, venue: int | None = VENUE, type_: str = "newsletter", body: str | None = None
++) -> int:
++    tpl = await act(
++        service.set_template,
++        manager_id=manager_of(venue),
++        venue_id=venue,
++        audience_group=group,
++        type_=type_,
++        body=body or f"[{venue or 'сеть'}/{group}] $subject. Здравствуйте, $full_name!",
++    )
++    return tpl.id
++
++
++async def templates(venue: int | None = VENUE, type_: str = "newsletter") -> None:
++    for group in ("paid", "social", "vip"):
++        await template(group, venue=venue, type_=type_)
++
++
++async def audience(
++    name: str = "Читатели", *, venue: int = VENUE, readers: tuple[tuple[str, str, str], ...] = READERS
++) -> int:
++    created = await act(service.create_audience, manager_id=manager_of(venue), venue_id=venue, name=name)
++    for email, full_name, segment in readers:
++        await member(created.id, email, full_name, segment, venue=venue)
++    return created.id
++
++
++async def member(
++    audience_id: int, email: str, full_name: str = "Читатель", segment: str = "paid", *, venue: int = VENUE
++) -> int:
++    m = await act(
++        service.add_member,
++        audience_id,
++        manager_of(venue),
++        email=email,
++        full_name=full_name,
++        segment=segment,
++    )
++    return m.id
++
++
++async def campaign(
++    audience_id: int,
++    *,
++    venue: int = VENUE,
++    type_: str = "newsletter",
++    subject: str = "Новинки марта",
++    scheduled_at: datetime | None = None,
++) -> int:
++    c = await act(
++        service.create_campaign,
++        manager_id=manager_of(venue),
++        audience_id=audience_id,
++        type_=type_,
++        subject=subject,
++        scheduled_at=scheduled_at,
++    )
++    return c.id
++
++
++async def launched(audience_id: int, *, venue: int = VENUE, **kwargs) -> int:
++    campaign_id = await campaign(audience_id, venue=venue, **kwargs)
++    await act(service.launch_campaign, campaign_id, manager_of(venue))
++    return campaign_id
++
++
++async def _get(s, model, id_):
++    return await s.get(model, id_)
++
++
++async def campaign_row(campaign_id: int) -> Campaign:
++    return await read(_get, Campaign, campaign_id)
++
++
++async def audience_row(audience_id: int) -> Audience:
++    return await read(_get, Audience, audience_id)
++
++
++async def _messages(s, campaign_id: int) -> list[SentMessage]:
++    rows = await s.scalars(
++        select(SentMessage).where(SentMessage.campaign_id == campaign_id).order_by(SentMessage.id)
++    )
++    return list(rows.all())
++
++
++async def messages(campaign_id: int) -> dict[str, SentMessage]:
++    return {m.email: m for m in await read(_messages, campaign_id) if not m.is_test}
++
++
++async def _members(s, email: str) -> list[AudienceMember]:
++    return list((await s.scalars(select(AudienceMember).where(AudienceMember.email == email))).all())
++
++
++async def members(email: str) -> list[AudienceMember]:
++    return await read(_members, email)
++
++
++async def _unsubscriptions(s, email: str) -> list[Unsubscription]:
++    return list((await s.scalars(select(Unsubscription).where(Unsubscription.email == email))).all())
++
++
++async def unsubscriptions(email: str) -> list[Unsubscription]:
++    return await read(_unsubscriptions, email)
+diff --git a/tests/test_marketing_api.py b/tests/test_marketing_api.py
+new file mode 100644
+index 0000000..51d41bd
+--- /dev/null
++++ b/tests/test_marketing_api.py
+@@ -0,0 +1,151 @@
++from datetime import timedelta
++
++import httpx
++import pytest
++
++from libs import events
++from services.marketing import jobs
++from services.marketing.app import app
++from services.marketing.settings import MAX_TEST_MESSAGES
++from tests import marketing_factories as mf
++from tests.factories import T0, act, travel
++
++
++@pytest.fixture
++async def client():
++    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://marketing") as c:
++        yield c
++
++
++@pytest.fixture(autouse=True)
++async def staff() -> None:
++    await mf.staff()
++
++
++async def _campaign(client: httpx.AsyncClient) -> int:
++    await mf.templates()
++    r = await client.post(
++        "/marketing/audiences", json={"manager_id": mf.MANAGER, "venue_id": mf.VENUE, "name": "Читатели"}
++    )
++    assert r.status_code == 201
++    audience_id = r.json()["audience_id"]
++    for email, full_name, segment in mf.READERS:
++        r = await client.post(
++            f"/marketing/audiences/{audience_id}/members",
++            json={"manager_id": mf.MANAGER, "email": email, "full_name": full_name, "segment": segment},
++        )
++        assert r.status_code == 201
++    r = await client.post(
++        "/marketing/campaigns",
++        json={"manager_id": mf.MANAGER, "audience_id": audience_id, "type": "newsletter", "subject": "Акция"},
++    )
++    assert r.status_code == 201
++    return r.json()["campaign_id"]
++
++
++async def test_test_message_then_campaign_messages(client: httpx.AsyncClient) -> None:
++    campaign_id = await _campaign(client)
++    r = await client.post(
++        f"/marketing/campaigns/{campaign_id}/messages/test",
++        json={"manager_id": mf.MANAGER, "email": "qa@example.org", "full_name": "Тестер", "segment": "vip"},
++    )
++    assert r.status_code == 201
++    assert r.json()["body"] == "[1/vip] Акция. Здравствуйте, Тестер!"
++    assert set(r.json()) == {"id", "body", "sent_at"}
++
++    r = await client.post(f"/marketing/campaigns/{campaign_id}/launch", params={"manager_id": mf.MANAGER})
++    assert r.status_code == 200
++    assert r.json()["status"] == "preparing"
++    await events.dispatch_pending()
++
++    r = await client.get(f"/marketing/campaigns/{campaign_id}/messages", params={"manager_id": mf.MANAGER})
++    assert r.status_code == 200
++    bodies = [m["body"] for m in r.json()]
++    assert bodies[0] == "[1/vip] Акция. Здравствуйте, Тестер!"
++    assert "[1/paid] Акция. Здравствуйте, Анна Петрова!" in bodies
++    assert len(bodies) == 4
++    assert all(m["sent_at"] == T0.isoformat().replace("+00:00", "Z") for m in r.json())
++
++    r = await client.post(
++        f"/marketing/campaigns/{campaign_id}/messages/test",
++        json={"manager_id": mf.MANAGER, "email": "qa@example.org"},
++    )
++    assert r.status_code == 409
++    assert "до запуска кампании" in r.json()["detail"]
++
++
++async def test_test_messages_are_limited_and_purged(client: httpx.AsyncClient) -> None:
++    campaign_id = await _campaign(client)
++    url = f"/marketing/campaigns/{campaign_id}/messages/test"
++    for n in range(MAX_TEST_MESSAGES):
++        r = await client.post(url, json={"manager_id": mf.MANAGER, "email": f"qa{n}@example.org"})
++        assert r.status_code == 201
++    r = await client.post(url, json={"manager_id": mf.MANAGER, "email": "qa@example.org"})
++    assert r.status_code == 409
++    assert "тестовых писем" in r.json()["detail"]
++
++    assert await act(jobs.purge_test_messages, T0 + timedelta(days=13)) == 0
++    travel(T0 + timedelta(days=15))
++    assert await act(jobs.purge_test_messages, T0 + timedelta(days=15)) == MAX_TEST_MESSAGES
++    r = await client.get(f"/marketing/campaigns/{campaign_id}/messages", params={"manager_id": mf.MANAGER})
++    assert r.json() == []
++
++
++async def test_access_and_missing_campaign(client: httpx.AsyncClient) -> None:
++    campaign_id = await _campaign(client)
++    r = await client.get(f"/marketing/campaigns/{campaign_id}/messages", params={"manager_id": mf.MANAGER_2})
++    assert r.status_code == 403
++    r = await client.get("/marketing/campaigns/999/messages", params={"manager_id": mf.MANAGER})
++    assert r.status_code == 404
++    assert r.json()["detail"] == "кампания 999"
++    template = {"manager_id": mf.MANAGER, "venue_id": mf.VENUE, "type": "promo", "body": "x"}
++    r = await client.put("/marketing/templates", json={**template, "audience_group": "debt"})
++    assert r.status_code == 409
++
++
++async def test_schedule_cancel_and_report(client: httpx.AsyncClient) -> None:
++    campaign_id = await _campaign(client)
++    url = f"/marketing/campaigns/{campaign_id}"
++    params = {"manager_id": mf.MANAGER}
++
++    for at, status in ((T0 - timedelta(hours=1), 409), (T0 + timedelta(days=1), 200)):
++        r = await client.post(
++            f"{url}/schedule", json={"manager_id": mf.MANAGER, "scheduled_at": at.isoformat()}
++        )
++        assert r.status_code == status
++    assert r.json()["status"] == "scheduled"
++    assert r.json()["scheduled_at"].startswith("2026-03-03T09:00")
++
++    r = await client.post("/marketing/audiences/1/archive", params=params)
++    assert r.status_code == 409
++    r = await client.post(f"{url}/cancel", params=params)
++    assert r.json()["status"] == "cancelled"
++    r = await client.post("/marketing/audiences/1/archive", params=params)
++    assert r.status_code == 204
++
++    # отчёт по запущенной кампании разбивает пропуски по причинам
++    await mf.template("vip", type_="event")
++    launched = await mf.launched(await mf.audience("Гости вечера"), type_="event")
++    r = await client.get(f"/marketing/campaigns/{launched}", params=params)
++    assert r.status_code == 200
++    report = r.json()
++    assert (report["status"], report["recipients_count"], report["sent_count"]) == ("sent", 3, 1)
++    assert report["skipped_by_reason"] == {"no_template": 2}
++
++
++async def test_unsubscribe_and_bounce_endpoints(client: httpx.AsyncClient) -> None:
++    campaign_id = await _campaign(client)
++    r = await client.post("/marketing/unsubscribe", json={"email": "Boris@Example.org"})
++    assert r.status_code == 204
++    await events.dispatch_pending()
++    assert [m.opted_out for m in await mf.members("boris@example.org")] == [True]
++
++    await client.post(f"/marketing/campaigns/{campaign_id}/launch", params={"manager_id": mf.MANAGER})
++    await events.dispatch_pending()
++    sent = await mf.messages(campaign_id)
++    assert set(sent) == {"anna@example.org", "vika@example.org"}
++
++    r = await client.post(f"/marketing/messages/{sent['anna@example.org'].id}/bounce")
++    assert r.status_code == 204
++    r = await client.post("/marketing/messages/999/bounce")
++    assert r.status_code == 404
+diff --git a/tests/test_marketing_audiences.py b/tests/test_marketing_audiences.py
+new file mode 100644
+index 0000000..e3453e3
+--- /dev/null
++++ b/tests/test_marketing_audiences.py
+@@ -0,0 +1,104 @@
++import pytest
++from sqlalchemy.exc import IntegrityError
++
++from libs import db
++from libs.errors import AccessDenied, DomainError
++from services.marketing import service
++from tests import marketing_factories as mf
++from tests.factories import T0, act
++
++
++@pytest.fixture(autouse=True)
++async def staff() -> None:
++    await mf.staff()
++
++
++async def test_audience_is_created_by_venue_manager() -> None:
++    audience_id = await mf.audience("Постоянные читатели")
++    audience = await mf.audience_row(audience_id)
++    assert audience.venue_id == mf.VENUE
++    assert audience.created_by == mf.MANAGER
++    assert audience.created_at == T0
++    assert [m.audience_id for m in await mf.members("anna@example.org")] == [audience_id]
++
++
++async def test_manager_of_other_venue_is_denied() -> None:
++    with pytest.raises(AccessDenied, match="не ведёт рассылки этой площадки"):
++        await act(service.create_audience, manager_id=mf.MANAGER_2, venue_id=mf.VENUE, name="Чужая")
++    audience_id = await mf.audience(readers=())
++    with pytest.raises(AccessDenied):
++        await act(
++            service.add_member,
++            audience_id,
++            mf.STRANGER,
++            email="x@example.org",
++            full_name="Икс",
++            segment="paid",
++        )
++    # менеджер сети работает с любой площадкой
++    created = await act(
++        service.create_audience, manager_id=mf.NETWORK_MANAGER, venue_id=mf.VENUE_2, name="Партнёры"
++    )
++    assert created.venue_id == mf.VENUE_2
++
++
++async def test_audience_name_is_unique_within_venue() -> None:
++    await mf.audience("Партнёры", readers=())
++    with pytest.raises(DomainError, match="уже есть аудитория «Партнёры»"):
++        await mf.audience("  Партнёры ", readers=())
++    # на другой площадке то же название допустимо
++    await mf.audience("Партнёры", venue=mf.VENUE_2, readers=())
++
++
++async def test_member_email_is_normalized_and_unique() -> None:
++    audience_id = await mf.audience(readers=())
++    await mf.member(audience_id, "  Anna@Example.ORG ")
++    assert [m.email for m in await mf.members("anna@example.org")] == ["anna@example.org"]
++    with pytest.raises(DomainError, match="уже есть в аудитории"):
++        await mf.member(audience_id, "ANNA@example.org")
++
++
++async def test_member_email_normalized_by_database_too() -> None:
++    audience_id = await mf.audience(readers=())
++    async with db.engine().begin() as conn:
++        await conn.exec_driver_sql(
++            "INSERT INTO marketing.audience_members (audience_id, email, full_name, segment, added_at) "
++            f"VALUES ({audience_id}, ' Gleb@Example.org', 'Глеб', 'paid', now())"
++        )
++    assert len(await mf.members("gleb@example.org")) == 1
++    with pytest.raises(IntegrityError):
++        async with db.engine().begin() as conn:
++            await conn.exec_driver_sql(
++                "INSERT INTO marketing.audience_members (audience_id, email, full_name, segment, added_at) "
++                f"VALUES ({audience_id}, 'GLEB@example.org', 'Глеб', 'paid', now())"
++            )
++
++
++async def test_unknown_segment_and_bad_email_rejected() -> None:
++    audience_id = await mf.audience(readers=())
++    with pytest.raises(DomainError, match="неизвестный сегмент читателя: student"):
++        await mf.member(audience_id, "s@example.org", segment="student")
++    with pytest.raises(DomainError, match="некорректный адрес"):
++        await mf.member(audience_id, "@example.org")
++
++
++async def test_unsubscribed_address_cannot_be_added() -> None:
++    await act(service.unsubscribe, email="anna@example.org", venue_id=mf.VENUE)
++    audience_id = await mf.audience(readers=())
++    with pytest.raises(DomainError, match="отписан"):
++        await mf.member(audience_id, "anna@example.org")
++    # отписка от одной площадки не мешает другой
++    other = await mf.audience(venue=mf.VENUE_2, readers=())
++    await mf.member(other, "anna@example.org", venue=mf.VENUE_2)
++
++
++async def test_archived_audience_cannot_have_pending_campaigns() -> None:
++    audience_id = await mf.audience()
++    await mf.campaign(audience_id, scheduled_at=T0.replace(hour=18))
++    with pytest.raises(DomainError, match="незавершённые кампании"):
++        await act(service.archive_audience, audience_id, mf.MANAGER)
++
++    empty = await mf.audience("Пустая", readers=())
++    await act(service.archive_audience, empty, mf.MANAGER)
++    with pytest.raises(DomainError, match="аудитория в архиве"):
++        await mf.campaign(empty)
+diff --git a/tests/test_marketing_campaigns.py b/tests/test_marketing_campaigns.py
+new file mode 100644
+index 0000000..8e257dc
+--- /dev/null
++++ b/tests/test_marketing_campaigns.py
+@@ -0,0 +1,197 @@
++from datetime import timedelta
++
++import pytest
++from sqlalchemy import select
++from sqlalchemy.exc import DBAPIError, IntegrityError
++
++from libs import db
++from libs.errors import DomainError
++from libs.events import OutboxEvent
++from services.marketing import consumers, jobs, service
++from tests import marketing_factories as mf
++from tests.factories import T0, act, read, travel
++
++
++@pytest.fixture(autouse=True)
++async def staff() -> None:
++    await mf.staff()
++
++
++async def _topics(s) -> list[str]:
++    return list((await s.scalars(select(OutboxEvent.topic).order_by(OutboxEvent.id))).all())
++
++
++async def test_launch_prepares_sends_and_summarizes() -> None:
++    await mf.templates()
++    audience_id = await mf.audience()
++    campaign_id = await mf.launched(audience_id, subject="Новинки марта")
++
++    campaign = await mf.campaign_row(campaign_id)
++    assert campaign.status == "sent"
++    assert (campaign.launched_at, campaign.finished_at) == (T0, T0)
++    assert (campaign.recipients_count, campaign.sent_count, campaign.skipped_count) == (3, 3, 0)
++
++    sent = await mf.messages(campaign_id)
++    assert sent["anna@example.org"].body == "[1/paid] Новинки марта. Здравствуйте, Анна Петрова!"
++    assert sent["boris@example.org"].body.startswith("[1/social]")
++    assert sent["vika@example.org"].body.startswith("[1/vip]")
++    assert {m.status for m in sent.values()} == {"sent"}
++    assert all(m.sent_at == T0 for m in sent.values())
++
++    assert (await mf.audience_row(audience_id)).last_campaign_at == T0
++    assert await read(_topics) == [
++        "marketing.campaign_launched",
++        "marketing.campaign_prepared",
++        "marketing.campaign_finished",
++    ]
++
++
++async def test_reader_without_template_is_skipped() -> None:
++    await mf.template("social")
++    await mf.template("vip", venue=None)
++    audience_id = await mf.audience()
++    campaign_id = await mf.launched(audience_id)
++
++    sent = await mf.messages(campaign_id)
++    assert sent["boris@example.org"].body.startswith("[1/social]")
++    assert sent["vika@example.org"].body.startswith("[сеть/vip]")
++    # для платной группы нет шаблона ни у площадки, ни у сети
++    assert sent["anna@example.org"].status == "skipped"
++    assert sent["anna@example.org"].skip_reason == "no_template"
++    assert sent["anna@example.org"].sent_at is None
++    campaign = await mf.campaign_row(campaign_id)
++    assert (campaign.sent_count, campaign.skipped_count) == (2, 1)
++
++
++async def test_unsubscribed_reader_excluded_from_future_campaigns() -> None:
++    await mf.templates()
++    audience_id = await mf.audience()
++    await mf.launched(audience_id)
++
++    first = await act(service.unsubscribe, email="Anna@example.org")
++    again = await act(service.unsubscribe, email="anna@example.org", venue_id=mf.VENUE)
++    assert again.id == first.id
++    assert [m.opted_out for m in await mf.members("anna@example.org")] == [True]
++
++    travel(T0 + timedelta(days=3))
++    campaign_id = await mf.launched(audience_id)
++    assert set(await mf.messages(campaign_id)) == {"boris@example.org", "vika@example.org"}
++    assert (await mf.campaign_row(campaign_id)).recipients_count == 2
++
++
++async def test_unsubscribe_skips_messages_not_yet_sent() -> None:
++    await mf.templates()
++    audience_id = await mf.audience()
++    campaign_id = await mf.campaign(audience_id)
++    await mf.run(service.launch_campaign, campaign_id, mf.MANAGER)
++    await mf.run(service.prepare_messages, campaign_id)
++    assert {m.status for m in (await mf.messages(campaign_id)).values()} == {"queued"}
++
++    await act(consumers.on_unsubscribed, {"email": "boris@example.org", "venue_id": None})
++
++    sent = await mf.messages(campaign_id)
++    assert (sent["boris@example.org"].status, sent["boris@example.org"].skip_reason) == (
++        "skipped",
++        "unsubscribed",
++    )
++    assert sent["anna@example.org"].status == "sent"
++    assert (await mf.campaign_row(campaign_id)).skipped_count == 1
++
++
++async def test_venue_unsubscribe_keeps_other_venues() -> None:
++    await mf.templates()
++    await mf.templates(venue=mf.VENUE_2)
++    here = await mf.audience()
++    there = await mf.audience(venue=mf.VENUE_2)
++
++    await act(service.unsubscribe, email="anna@example.org", venue_id=mf.VENUE)
++
++    assert "anna@example.org" not in await mf.messages(await mf.launched(here))
++    assert "anna@example.org" in await mf.messages(await mf.launched(there, venue=mf.VENUE_2))
++
++
++async def test_audience_rests_between_campaigns() -> None:
++    await mf.templates()
++    audience_id = await mf.audience()
++    await mf.launched(audience_id)
++
++    travel(T0 + timedelta(days=1))
++    second = await mf.campaign(audience_id)
++    with pytest.raises(DomainError, match="меньше 3 дней назад"):
++        await act(service.launch_campaign, second, mf.MANAGER)
++
++    travel(T0 + timedelta(days=3))
++    await act(service.launch_campaign, second, mf.MANAGER)
++    assert (await mf.campaign_row(second)).status == "sent"
++    with pytest.raises(DomainError, match="уже запущена или закрыта"):
++        await act(service.launch_campaign, second, mf.MANAGER)
++
++
++async def test_one_running_campaign_per_audience() -> None:
++    audience_id = await mf.audience()
++    first, second = await mf.campaign(audience_id), await mf.campaign(audience_id)
++    await mf.run(service.launch_campaign, first, mf.MANAGER)
++    with pytest.raises(DomainError, match="уже идёт другая кампания"):
++        await mf.run(service.launch_campaign, second, mf.MANAGER)
++    sql = f"UPDATE marketing.campaigns SET status = 'sending' WHERE id = {second}"
++    with pytest.raises(IntegrityError, match="campaigns_audience_active_uq"):
++        async with db.engine().begin() as conn:
++            await conn.exec_driver_sql(sql)
++
++
++async def test_finished_campaign_and_sent_letters_are_frozen() -> None:
++    await mf.templates()
++    campaign_id = await mf.launched(await mf.audience())
++    with pytest.raises(DomainError, match="ещё не запущена"):
++        await act(service.cancel_campaign, campaign_id, mf.MANAGER)
++
++    async with db.engine().connect() as conn:
++        with pytest.raises(DBAPIError, match=f"кампания {campaign_id} уже в статусе sent"):
++            await conn.exec_driver_sql(
++                f"UPDATE marketing.campaigns SET status = 'draft' WHERE id = {campaign_id}"
++            )
++        await conn.rollback()
++        with pytest.raises(DBAPIError, match="текст менять нельзя"):
++            await conn.exec_driver_sql(
++                f"UPDATE marketing.sent_messages SET body = 'другое' WHERE campaign_id = {campaign_id}"
++            )
++
++
++async def test_repeated_bounces_unsubscribe_address() -> None:
++    await mf.templates()
++    reader = (("anna@example.org", "Анна Петрова", "paid"),)
++    campaign_ids = [await mf.launched(await mf.audience(f"Аудитория {n}", readers=reader)) for n in range(3)]
++    message_ids = [(await mf.messages(c))["anna@example.org"].id for c in campaign_ids]
++
++    for message_id in message_ids[:2]:
++        await act(service.register_bounce, message_id)
++    assert await mf.unsubscriptions("anna@example.org") == []
++    with pytest.raises(DomainError, match="только по отправленному письму"):
++        await act(service.register_bounce, message_ids[0])
++
++    await act(service.register_bounce, message_ids[2])
++    [unsub] = await mf.unsubscriptions("anna@example.org")
++    assert (unsub.reason, unsub.venue_id) == ("bounce", None)
++    assert all(m.opted_out for m in await mf.members("anna@example.org"))
++    assert (await mf.campaign_row(campaign_ids[0])).sent_count == 1
++
++
++async def test_job_launches_due_campaigns() -> None:
++    await mf.templates()
++    fresh = await mf.audience("Новые читатели")
++    tired = await mf.audience("Все читатели")
++    await mf.launched(tired)
++    due = await mf.campaign(fresh, scheduled_at=T0 + timedelta(hours=2))
++    blocked = await mf.campaign(tired, scheduled_at=T0 + timedelta(hours=1))
++    later = await mf.campaign(fresh, scheduled_at=T0 + timedelta(days=5))
++
++    assert await act(jobs.launch_due, T0 + timedelta(hours=1)) == []
++
++    travel(T0 + timedelta(hours=2))
++    assert await act(jobs.launch_due, T0 + timedelta(hours=2)) == [due]
++    assert (await mf.campaign_row(due)).status == "sent"
++    assert (await mf.campaign_row(blocked)).status == "scheduled"
++    assert (await mf.campaign_row(later)).status == "scheduled"
++
++    travel(T0 + timedelta(days=3))
++    assert await act(jobs.launch_due, T0 + timedelta(days=3)) == [blocked]
+diff --git a/tests/test_marketing_templates.py b/tests/test_marketing_templates.py
+new file mode 100644
+index 0000000..54f9f1a
+--- /dev/null
++++ b/tests/test_marketing_templates.py
+@@ -0,0 +1,90 @@
++import pytest
++from sqlalchemy.exc import IntegrityError
++
++from libs import db
++from libs.errors import AccessDenied, DomainError
++from services.marketing import service
++from services.marketing.settings import AUDIENCE_GROUP
++from tests import marketing_factories as mf
++from tests.factories import act, read
++
++
++@pytest.fixture(autouse=True)
++async def staff() -> None:
++    await mf.staff()
++
++
++async def _insert_template(venue: str, group: str, type_: str = "newsletter") -> None:
++    async with db.engine().begin() as conn:
++        await conn.exec_driver_sql(
++            "INSERT INTO marketing.campaign_templates (venue_id, audience_group, type, body, updated_at) "
++            f"VALUES ({venue}, '{group}', '{type_}', 'текст', now())"
++        )
++
++
++async def test_audience_group_is_checked_by_database() -> None:
++    with pytest.raises(IntegrityError, match="campaign_templates_audience_group_check"):
++        await _insert_template("1", "corporate")
++
++
++async def test_one_template_per_venue_group_and_type() -> None:
++    await _insert_template("1", "vip")
++    with pytest.raises(IntegrityError, match="campaign_templates_venue_group_type_uq"):
++        await _insert_template("1", "vip")
++    await _insert_template("NULL", "vip")
++    with pytest.raises(IntegrityError, match="campaign_templates_default_uq"):
++        await _insert_template("NULL", "vip")
++
++
++async def test_set_template_updates_existing() -> None:
++    first = await mf.template("paid", body="Старый текст")
++    second = await mf.template("paid", body="Новый текст для $full_name")
++    assert first == second
++    tpl = await read(service.find_template, mf.VENUE, "paid", "newsletter")
++    assert tpl.body == "Новый текст для $full_name"
++
++
++async def test_template_validation() -> None:
++    with pytest.raises(DomainError, match="неизвестная группа аудитории: debt"):
++        await mf.template("debt")
++    with pytest.raises(DomainError, match="неизвестный тип кампании"):
++        await mf.template("paid", type_="sms")
++    with pytest.raises(DomainError, match="текст шаблона пуст"):
++        await mf.template("paid", body="   ")
++
++
++async def test_network_templates_only_by_network_manager() -> None:
++    with pytest.raises(AccessDenied, match="менеджер сети"):
++        await act(
++            service.set_template,
++            manager_id=mf.MANAGER,
++            venue_id=None,
++            audience_group="paid",
++            type_="newsletter",
++            body="текст",
++        )
++    await mf.template("paid", venue=None)
++
++
++async def test_paying_segments_share_template() -> None:
++    await mf.templates()
++    for segment in ("paid", "debt", "corporate"):
++        tpl = await read(service.find_template, mf.VENUE, segment, "newsletter")
++        assert AUDIENCE_GROUP[segment] == "paid"
++        assert (tpl.audience_group, tpl.venue_id) == ("paid", mf.VENUE)
++    vip = await read(service.find_template, mf.VENUE, "vip", "newsletter")
++    assert vip.audience_group == "vip"
++
++
++async def test_find_template_falls_back_to_network_then_paid_group() -> None:
++    venue_paid = await mf.template("paid")
++    network_social = await mf.template("social", venue=None)
++
++    social = await read(service.find_template, mf.VENUE, "social", "newsletter")
++    assert social.id == network_social
++    # для VIP нет ни шаблона площадки, ни шаблона сети — берётся платная группа
++    vip = await read(service.find_template, mf.VENUE, "vip", "newsletter")
++    assert vip.id == venue_paid
++    # на другой площадке своего шаблона нет совсем
++    assert await read(service.find_template, mf.VENUE_2, "vip", "newsletter") is None
++    assert await read(service.find_template, mf.VENUE, "paid", "event") is None

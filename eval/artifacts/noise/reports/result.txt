@@ -1,0 +1,6 @@
+success err=false cost=2.2890184999999996 Сервис `services/reports/` готов, все три проверки проходят:
+- тесты сервиса: 29 passed;
+- полный прогон: 65 passed (36 прежних + 29 новых);
+- `ruff check services/reports tests` чистый.
+
+Изменения то

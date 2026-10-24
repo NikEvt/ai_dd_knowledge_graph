@@ -1,0 +1,30 @@
+{
+  "task": "T08",
+  "recall": 1.0,
+  "hidden_recall": null,
+  "hit": [
+    "services/chat/api.py::MessageIn",
+    "services/chat/api.py::MessageOut",
+    "services/chat/api.py::_out",
+    "tests/test_chat_api.py"
+  ],
+  "missed": [],
+  "extra": [
+    "application.stage_changed",
+    "chat.messages",
+    "services/chat/api.py::list_",
+    "services/chat/api.py::post",
+    "services/chat/consumers.py::EVENT_TEXT",
+    "services/chat/models.py::Message",
+    "services/chat/service.py::log_event",
+    "services/chat/service.py::post_message",
+    "services/notifications/models.py::Email",
+    "services/notifications/models.py::Template",
+    "tests/test_chat_api.py::test_operator_posts_and_reads",
+    "tests/test_chat_api.py::test_outsider_cannot_post",
+    "tests/test_chat_api.py::test_stage_changes_appear_in_chat",
+    "trg_chat_messages_immutable"
+  ],
+  "cost_usd": 0.3136357,
+  "input_tokens": 117465
+}

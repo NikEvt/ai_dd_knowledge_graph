@@ -1,0 +1,69 @@
+id: T04
+prompt_file: T04.prompt.md
+summary: дубли между социальной и платной заявками
+expected_nodes:
+- ref: GT-DUP-04
+  kind: rule
+  role: change
+- ref: services/applications/dedup.py::_same_track
+  kind: code
+  role: change
+- ref: GT-DUP-03
+  kind: rule
+  role: change
+  hidden: H2
+- ref: application.review_passed
+  kind: event
+  role: affected
+  hidden: H2
+- ref: services/applications/consumers.py::on_review_passed
+  kind: code
+  role: change
+  hidden: H2
+- ref: services/applications/service.py::approve
+  kind: code
+  role: affected
+- ref: GT-DUP-01
+  kind: rule
+  role: affected
+  hidden: H7
+- ref: GT-DUP-02
+  kind: rule
+  role: affected
+  hidden: H2
+- ref: GT-DUP-05
+  kind: rule
+  role: affected
+  hidden: H2
+- ref: services/billing/consumers.py::on_closed_duplicate
+  kind: code
+  role: affected
+  hidden: H2
+- ref: services/scheduling/consumers.py::on_closed_duplicate
+  kind: code
+  role: affected
+  hidden: H2
+- ref: services/applications/consumers.py::on_fully_paid
+  kind: code
+  role: affected
+  source: blind_audit
+  hidden: H2
+- ref: application.closed_duplicate
+  kind: event
+  role: affected
+  source: blind_audit
+  hidden: H2
+- ref: services/scheduling/service.py::reset_bookings
+  kind: code
+  role: affected
+  source: blind_audit
+  hidden: H2
+- ref: services/billing/service.py::cancel_invoice
+  kind: code
+  role: affected
+  source: blind_audit
+hidden_tests:
+- hidden_tests/tasks/test_t04.py
+supersedes:
+- test_gt_applications.py::test_gt_dedup_social_paid_independent
+reference: reference/T04.patch

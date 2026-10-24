@@ -1,0 +1,27 @@
+diff --git a/docs/README.md b/docs/README.md
+index b1bc15a..479a5e6 100644
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -23,7 +23,7 @@
+ | bpm_guard | 3 |
+ | bpm_process | 1 |
+ | bpm_transition | 27 |
+-| config | 21 |
++| config | 22 |
+ | db_constraint | 50 |
+ | effect | 3 |
+ | event | 20 |
+diff --git a/docs/config.md b/docs/config.md
+index 500660c..367b27e 100644
+--- a/docs/config.md
++++ b/docs/config.md
+@@ -17,7 +17,8 @@
+ | [`settings.py::REVIEW_ARCHIVE_DAYS`](../libs/settings.py#L10) | `30` | Заявка уходит в архив, если с начала проверки прошло столько дней, а данные не получены. | [`jobs.py::archive_stale`](../services/applications/jobs.py#L14) |
+ | [`dedup.py::OPEN_STAGES`](../services/applications/dedup.py#L10) | `['draft', 'on_review', 'needs_rework', 'awaiting_invoice', 'awaiting_payment', …` |  | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+ | [`listeners.py::TRACKED_FIELDS`](../services/applications/listeners.py#L9) | `['full_name', 'passport', 'birth_date']` |  | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) |
+-| [`review.py::REQUIRED_CLIENT_FIELDS`](../services/applications/review.py#L3) | `['full_name', 'passport', 'birth_date']` |  | [`review.py::missing_client_fields`](../services/applications/review.py#L6) |
++| [`review.py::OPTIONAL_FIELDS`](../services/applications/review.py#L4) | `['birth_date']` |  | [`review.py::missing_client_fields`](../services/applications/review.py#L7) |
++| [`review.py::REQUIRED_CLIENT_FIELDS`](../services/applications/review.py#L3) | `['full_name', 'passport', 'birth_date']` |  | [`review.py::missing_client_fields`](../services/applications/review.py#L7) |
+ | [`service.py::CLIENT_EDITABLE_FIELDS`](../services/applications/service.py#L28) | `['full_name', 'passport', 'birth_date', 'email']` |  | [`service.py::update_client`](../services/applications/service.py#L131) |
+ | [`service.py::PAID_VENUE_LOCKED_STAGES`](../services/applications/service.py#L26) | `['awaiting_issue', 'books_out']` |  | [`service.py::change_venue`](../services/applications/service.py#L199) |
+ | [`service.py::TERMINAL_STAGES`](../services/applications/service.py#L27) | `['closed', 'closed_duplicate']` |  | [`service.py::change_venue`](../services/applications/service.py#L199) |

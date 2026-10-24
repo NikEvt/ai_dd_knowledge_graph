@@ -1,0 +1,13 @@
+WARNING: drift: код правила изменился, текст правила не обновлён -> suspect: R-APP-REVIEW-03 (services/applications/service.py::approve)
+WARNING: drift: код правила изменился, текст правила не обновлён -> suspect: R-APP-REVIEW-04 (services/applications/service.py::approve)
+WARNING: drift: код правила изменился, текст правила не обновлён -> suspect: R-APP-REVIEW-04 (services/applications/review.py::missing_client_fields)
+WARNING: drift: код правила изменился, текст правила не обновлён -> suspect: R-APP-REVIEW-05 (services/applications/service.py::approve)
+## Модель знаний: drift и покрытие
+
+- правил: 162 (draft: 140, verified: 22)
+- drift (-> suspect): 4
+- без implemented_by/enforced_by_db: 7
+- без tested_by: 82
+- ограничения БД без правил: 0 из 48
+- suspect старше 14 дней: 0
+

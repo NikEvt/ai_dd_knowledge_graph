@@ -1,0 +1,14 @@
+{
+  "id": "session-1792740709369",
+  "startedAt": "2026-10-23T07:31:49.369Z",
+  "cwd": "~/work/ai-dd/wt/series-smb1",
+  "context": {},
+  "metrics": {
+    "edits": 21,
+    "commands": 0,
+    "tasks": 0,
+    "errors": 0
+  },
+  "endedAt": "2026-10-23T07:34:36.242Z",
+  "duration": 166874
+}

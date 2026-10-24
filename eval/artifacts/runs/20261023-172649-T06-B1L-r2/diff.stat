@@ -1,0 +1,11 @@
+ docs/config.md                                     |  3 +-
+ docs/coverage.md                                   |  6 +--
+ docs/entities/notifications.templates.md           |  4 +-
+ docs/reconciliation.md                             |  2 +-
+ docs/roles.md                                      |  4 +-
+ docs/rules/notifications.md                        | 50 ++++++++---------
+ .../versions/0002_notification_debt_templates.py   | 29 ++++++++++
+ services/notifications/config.py                   |  7 ++-
+ services/notifications/service.py                  | 19 ++++---
+ tests/test_notifications.py                        | 62 +++++++++++++++++++++-
+ 10 files changed, 142 insertions(+), 44 deletions(-)

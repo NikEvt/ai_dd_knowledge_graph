@@ -1,0 +1,20 @@
+ AGENTS.md                                |   2 +-
+ docs/README.md                           |   6 +-
+ docs/config.md                           |   6 +-
+ docs/coverage.md                         |  12 +-
+ docs/entities/applications.venues.md     |   2 +-
+ docs/entities/scheduling.slots.md        |   2 +
+ docs/entities/scheduling.venue_limits.md |   5 +-
+ docs/events.md                           |  18 +-
+ docs/roles.md                            |  26 +-
+ docs/rules/README.md                     |   4 +-
+ docs/rules/applications.md               |  14 +-
+ docs/rules/scheduling.md                 |  63 +++--
+ knowledge/model/code.json                | 467 ++++++++++++++++++-------------
+ knowledge/model/events.json              |  18 +-
+ knowledge/rules/applications.yaml        |  17 +-
+ knowledge/rules/scheduling.yaml          | 100 ++++---
+ services/scheduling/consumers.py         |   8 +-
+ services/scheduling/service.py           |  28 ++
+ tests/test_scheduling.py                 |  32 +++
+ 19 files changed, 487 insertions(+), 343 deletions(-)

@@ -1,0 +1,34 @@
+diff --git a/services/scheduling/consumers.py b/services/scheduling/consumers.py
+index 5341474..eb12e92 100644
+--- a/services/scheduling/consumers.py
++++ b/services/scheduling/consumers.py
+@@ -1,11 +1,13 @@
+ from typing import Any
+ 
++from sqlalchemy import update
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
++from libs import clock
+ from libs.events import subscribe
+ from services.applications import public as applications
+ from services.scheduling import service
+-from services.scheduling.models import VenueLimit
++from services.scheduling.models import Slot, VenueLimit
+ 
+ 
+ @subscribe("application.ready_for_booking")
+@@ -38,3 +40,14 @@ async def on_venue_settings_changed(session: AsyncSession, payload: dict[str, An
+         session.add(VenueLimit(venue_id=payload["venue_id"], max_capacity=payload["max_capacity"]))
+     else:
+         limit.max_capacity = payload["max_capacity"]
++    await session.flush()
++    await session.execute(
++        update(Slot)
++        .where(
++            Slot.venue_id == payload["venue_id"],
++            Slot.capacity == payload["old_max_capacity"],
++            Slot.starts_at > clock.now(),
++            Slot.removed.is_(False),
++        )
++        .values(capacity=payload["max_capacity"])
++    )

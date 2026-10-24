@@ -1,0 +1,43 @@
+{
+  "task": "T05",
+  "recall": 1.0,
+  "hidden_recall": 1.0,
+  "hit": [
+    "applications.clients",
+    "client.updated",
+    "services/applications/consumers.py::on_client_updated",
+    "services/applications/listeners.py::TRACKED_FIELDS",
+    "services/applications/listeners.py::_domain_events",
+    "services/applications/models.py::Client",
+    "services/applications/review.py::REQUIRED_CLIENT_FIELDS",
+    "services/applications/review.py::missing_client_fields",
+    "services/applications/service.py::CLIENT_EDITABLE_FIELDS",
+    "services/applications/service.py::approve",
+    "services/applications/service.py::update_client",
+    "tests/factories.py::seed"
+  ],
+  "missed": [],
+  "extra": [
+    "application.review_passed",
+    "application.stage_changed",
+    "awaiting_invoice->on_review",
+    "awaiting_payment->on_review",
+    "libs/settings.py::REVIEW_ARCHIVE_DAYS",
+    "migrations/versions/0002_client_snils.py::upgrade",
+    "on_review->archived",
+    "on_review->awaiting_invoice",
+    "on_review->awaiting_issue",
+    "on_review->awaiting_payment",
+    "on_review->needs_rework",
+    "services/applications/jobs.py::archive_stale",
+    "services/applications/service.py::create_client",
+    "services/billing/guards.py::has_active_invoice",
+    "services/chat/consumers.py::EVENT_TEXT",
+    "tests/test_archive.py::test_stuck_review_goes_to_archive_after_month",
+    "tests/test_paid_flow.py::test_paid_application_full_path",
+    "tests/test_review.py",
+    "tests/test_review.py::test_incomplete_client_goes_to_rework"
+  ],
+  "cost_usd": 0.9369732,
+  "input_tokens": 600427
+}

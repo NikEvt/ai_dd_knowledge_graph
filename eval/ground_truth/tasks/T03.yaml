@@ -1,0 +1,84 @@
+id: T03
+prompt_file: T03.prompt.md
+summary: выдача после оплаты 50%
+expected_nodes:
+- ref: GT-BPM-02
+  kind: rule
+  role: change
+  hidden: H3
+- ref: awaiting_payment->awaiting_issue
+  kind: bpm
+  role: affected
+  hidden: H3
+- ref: services/billing/guards.py::fully_paid
+  kind: code
+  role: change
+  hidden: H3
+- ref: services/billing/service.py::link_payment
+  kind: code
+  role: change
+- ref: payment.fully_paid
+  kind: event
+  role: affected
+  hidden: H2
+- ref: services/applications/consumers.py::on_fully_paid
+  kind: code
+  role: affected
+  hidden: H2
+- ref: GT-DUP-02
+  kind: rule
+  role: affected
+  hidden: H2
+- ref: services/applications/dedup.py::close_duplicates
+  kind: code
+  role: affected
+- ref: GT-FIN-02
+  kind: rule
+  role: keep
+- ref: GT-ARC-02
+  kind: rule
+  role: risk
+  note: автоархив по неоплате проверяет полную оплату
+- ref: services/applications/jobs.py::archive_stale
+  kind: code
+  role: risk
+  hidden: H5
+- ref: services/applications/service.py::mark_ready_for_booking
+  kind: code
+  role: affected
+  source: blind_audit
+- ref: application.ready_for_booking
+  kind: event
+  role: affected
+  source: blind_audit
+  hidden: H2
+- ref: services/scheduling/consumers.py::on_ready_for_booking
+  kind: code
+  role: affected
+  source: blind_audit
+  hidden: H2
+- ref: application.closed_duplicate
+  kind: event
+  role: affected
+  source: blind_audit
+  hidden: H2
+- ref: services/billing/consumers.py::on_closed_duplicate
+  kind: code
+  role: affected
+  source: blind_audit
+  hidden: H2
+- ref: services/applications/guards.py::settled
+  kind: code
+  role: risk
+  source: blind_audit
+  hidden: H3
+- ref: services/applications/consumers.py::on_payment_refunded
+  kind: code
+  role: risk
+  source: blind_audit
+  hidden: H2
+hidden_tests:
+- hidden_tests/tasks/test_t03.py
+supersedes:
+- test_gt_billing.py::test_gt_partial_payment_keeps_waiting
+reference: reference/T03.patch

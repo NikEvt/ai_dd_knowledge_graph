@@ -1,0 +1,26 @@
+ AGENTS.md                                       |   2 +-
+ docs/README.md                                  |   6 +-
+ docs/config.md                                  |   7 +-
+ docs/coverage.md                                |  14 +-
+ docs/entities/applications.application_books.md |   2 +-
+ docs/entities/applications.applications.md      |   9 +-
+ docs/entities/applications.attempts.md          |   2 +-
+ docs/events.md                                  |  10 +-
+ docs/process.md                                 |  28 +-
+ docs/reconciliation.md                          |   5 +-
+ docs/roles.md                                   |  32 +-
+ docs/rules/README.md                            |   2 +-
+ docs/rules/applications.md                      |  61 ++-
+ docs/rules/scheduling.md                        |   3 +-
+ docs/rules/schema.md                            |   4 +-
+ knowledge/model/bpm.json                        |  46 +--
+ knowledge/model/code.json                       | 488 +++++++++++++++++-------
+ knowledge/model/db.json                         |   4 +-
+ knowledge/model/events.json                     |  10 +-
+ knowledge/rules/applications.yaml               | 102 ++---
+ knowledge/rules/scheduling.yaml                 |   9 +-
+ knowledge/sources/erp-library.md                |   9 +-
+ migrations/versions/0002_social_venue_change.py |  56 +++
+ services/applications/service.py                |   7 +
+ tests/test_venue_change.py                      |  61 +++
+ 25 files changed, 669 insertions(+), 310 deletions(-)

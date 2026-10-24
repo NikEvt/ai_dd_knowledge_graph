@@ -1,0 +1,260 @@
+diff --git a/docs/entities/scheduling.slots.md b/docs/entities/scheduling.slots.md
+index 28e50b2..c533d76 100644
+--- a/docs/entities/scheduling.slots.md
++++ b/docs/entities/scheduling.slots.md
+@@ -10,6 +10,7 @@
+ - starts_at: timestamp with time zone NOT NULL
+ - capacity: integer NOT NULL
+ - removed: boolean NOT NULL
++- capacity_reduced: boolean NOT NULL DEFAULT false — число мест уменьшил проверяющий оператор ([`migrations/versions/0002_slot_capacity_reduced.py:16`](../../migrations/versions/0002_slot_capacity_reduced.py#L16))
+ 
+ ## Связи (FK)
+ - scheduling.bookings.slot_id → сюда
+@@ -24,7 +25,8 @@
+ 
+ ## Пишут (код)
+ - services/scheduling/service.py::create_slot
+-- services/scheduling/service.py::reduce_capacity [capacity]
++- services/scheduling/service.py::reduce_capacity [capacity, capacity_reduced]
++- services/scheduling/service.py::apply_venue_max_capacity [capacity]
+ - services/scheduling/service.py::remove_slot [removed]
+ 
+ ## Правила
+@@ -34,3 +36,4 @@
+ - R-SCHED-SLOT-03 [draft] Число мест в окне не больше максимума площадки (контроль в БД)
+ - R-SCHED-SLOT-04 [draft] Проверяющий оператор может только уменьшить число мест в окне
+ - R-SCHED-SLOT-05 [draft] Удаление окна отменяет записи на него
++- R-SCHED-VENUE-LIMIT-01 [draft] Максимум мест площадки реплицируется из админки событием
+diff --git a/docs/entities/scheduling.venue_limits.md b/docs/entities/scheduling.venue_limits.md
+index 9dc5ed2..80e78ce 100644
+--- a/docs/entities/scheduling.venue_limits.md
++++ b/docs/entities/scheduling.venue_limits.md
+@@ -14,7 +14,7 @@
+ - services/scheduling/models.py::VenueLimit:11 (orm_model)
+ 
+ ## Пишут (код)
+-- services/scheduling/consumers.py::on_venue_settings_changed [max_capacity]
++- services/scheduling/service.py::apply_venue_max_capacity [max_capacity] (из consumers.py::on_venue_settings_changed)
+ 
+ ## Правила
+ - R-APP-ADMIN-03 [draft] Максимум мест в окне площадки положителен и передаётся в scheduling событием
+diff --git a/docs/events.md b/docs/events.md
+index c9993e8..3cfde51 100644
+--- a/docs/events.md
++++ b/docs/events.md
+@@ -263,4 +263,4 @@ flowchart LR
+ | `subscriptions.payment_completed` | [`service.py::record_payment`](../services/subscriptions/service.py#L272) | [`consumers.py::on_payment_completed`](../services/subscriptions/consumers.py#L40) | invoice_id, subscription_id | — |
+ | `subscriptions.refund_required` | [`service.py::apply_payment`](../services/subscriptions/service.py#L358)<br>[`service.py::void_open_invoices`](../services/subscriptions/service.py#L303) | [`consumers.py::on_refund_required`](../services/subscriptions/consumers.py#L86) | amount, invoice_id, subscription_id | — |
+ | `subscriptions.renewed` | [`service.py::apply_payment`](../services/subscriptions/service.py#L358) | [`consumers.py::on_renewed`](../services/subscriptions/consumers.py#L52) | paid_until, subscription_id | — |
+-| `venue.settings_changed` | [`admin.py::set_venue_max_capacity`](../services/applications/admin.py#L32) | [`consumers.py::on_venue_settings_changed`](../services/scheduling/consumers.py#L35) | max_capacity, old_max_capacity, venue_id | — |
++| `venue.settings_changed` | [`admin.py::set_venue_max_capacity`](../services/applications/admin.py#L32) | [`consumers.py::on_venue_settings_changed`](../services/scheduling/consumers.py#L34) | max_capacity, old_max_capacity, venue_id | — |
+diff --git a/docs/rules/applications.md b/docs/rules/applications.md
+index 50fc264..2e96142 100644
+--- a/docs/rules/applications.md
++++ b/docs/rules/applications.md
+@@ -443,9 +443,9 @@ set_venue_requisites записывает реквизиты организац
+ 
+ `draft` · config · §2 Администратор
+ 
+-set_venue_max_capacity отклоняет значение меньше 1 (DomainError, плюс CHECK в БД), сохраняет max_slot_capacity и публикует venue.settings_changed; scheduling обновляет VenueLimit площадки, которым ограничивается число мест в окнах.
++set_venue_max_capacity отклоняет значение меньше 1 (DomainError, плюс CHECK в БД), сохраняет max_slot_capacity и публикует venue.settings_changed; scheduling обновляет VenueLimit площадки, которым ограничивается число мест в окнах, и переводит на новый максимум будущие окна со старым максимумом, кроме уменьшенных проверяющим оператором (R-SCHED-VENUE-LIMIT-01).
+ 
+-- Реализация: [`services/applications/admin.py::set_venue_max_capacity:36-44`](../../services/applications/admin.py#L36), [`services/scheduling/consumers.py::on_venue_settings_changed:36-40`](../../services/scheduling/consumers.py#L36)
++- Реализация: [`services/applications/admin.py::set_venue_max_capacity:36-44`](../../services/applications/admin.py#L36), [`services/scheduling/consumers.py::on_venue_settings_changed:34-35`](../../services/scheduling/consumers.py#L34), [`services/scheduling/service.py::apply_venue_max_capacity:67-87`](../../services/scheduling/service.py#L67)
+ - БД: [`venues_max_slot_capacity_check`](../../migrations/versions/0001_initial.py#L33)
+ - Роли: Администратор
+ 
+diff --git a/docs/rules/scheduling.md b/docs/rules/scheduling.md
+index 5697d25..6c88836 100644
+--- a/docs/rules/scheduling.md
++++ b/docs/rules/scheduling.md
+@@ -53,13 +53,13 @@
+ 
+ `draft` · guard · §12 Расписание площадок
+ 
+-reduce_capacity принимает только значение строго меньше текущего capacity окна («проверяющий оператор может только уменьшить число мест») и не меньше числа действующих записей в окне («в окне уже записано больше клиентов»). Действующие записи — bookings со статусом active.
++reduce_capacity принимает только значение строго меньше текущего capacity окна («проверяющий оператор может только уменьшить число мест») и не меньше числа действующих записей в окне («в окне уже записано больше клиентов»). Действующие записи — bookings со статусом active. Уменьшенное окно помечается slots.capacity_reduced = true: смена максимума площадки его больше не пересчитывает (R-SCHED-VENUE-LIMIT-01).
+ 
+-- Реализация: [`services/scheduling/service.py::reduce_capacity:57-61`](../../services/scheduling/service.py#L57), [`services/scheduling/service.py::_active_bookings:46-49`](../../services/scheduling/service.py#L46)
++- Реализация: [`services/scheduling/service.py::reduce_capacity:57-62`](../../services/scheduling/service.py#L57), [`services/scheduling/service.py::_active_bookings:46-49`](../../services/scheduling/service.py#L46)
+ - БД: [`trg_slot_capacity_limit`](../../migrations/versions/0001_initial.py#L259), [`slots_capacity_check`](../../migrations/versions/0001_initial.py#L240)
+ - Тесты: `tests/test_scheduling.py::test_checker_can_only_reduce_capacity`
+ - Роли: Проверяющий оператор
+-- Связанные: R-SCHED-SITE-CHECKER-01, R-SCHED-SLOT-03
++- Связанные: R-SCHED-SITE-CHECKER-01, R-SCHED-SLOT-03, R-SCHED-VENUE-LIMIT-01
+ 
+ ## R-SCHED-SLOT-05 — Удаление окна отменяет записи на него
+ 
+@@ -75,12 +75,13 @@ reduce_capacity принимает только значение строго м
+ 
+ `draft` · effect · §2 Администратор; §12 Расписание площадок
+ 
+-Подписчик venue.settings_changed (публикует admin.set_venue_max_capacity) создаёт или обновляет строку scheduling.venue_limits с новым max_capacity. Уже созданные окна не пересчитываются: триггер срабатывает только на INSERT или изменение capacity, поэтому после снижения максимума окна со старым, большим числом мест остаются. CHECK требует max_capacity > 0.
++Подписчик venue.settings_changed (публикует admin.set_venue_max_capacity) вызывает apply_venue_max_capacity: создаёт или обновляет строку scheduling.venue_limits с новым max_capacity. Если строка уже была, будущие окна площадки (starts_at > clock.now(), не удалённые), у которых capacity равно прежнему max_capacity из venue_limits и capacity_reduced = false, получают новый максимум — и при увеличении, и при уменьшении. Не меняются: прошедшие окна, окна, где проверяющий оператор уменьшил число мест (capacity_reduced, R-SCHED-SLOT-04), даже если их capacity совпадает со старым максимумом, и окна с другим числом мест. Лимит записывается раньше окон, чтобы trg_slot_capacity_limit сверял capacity с новым максимумом. Число действующих записей при пересчёте не проверяется: при снижении максимума capacity может стать меньше числа записей. CHECK требует max_capacity > 0.
+ 
+-- Реализация: [`services/scheduling/consumers.py::on_venue_settings_changed:35-40`](../../services/scheduling/consumers.py#L35)
+-- БД: [`venue_limits_max_capacity_check`](../../migrations/versions/0001_initial.py#L232)
++- Реализация: [`services/scheduling/consumers.py::on_venue_settings_changed:34-35`](../../services/scheduling/consumers.py#L34), [`services/scheduling/service.py::apply_venue_max_capacity:67-87`](../../services/scheduling/service.py#L67)
++- БД: [`venue_limits_max_capacity_check`](../../migrations/versions/0001_initial.py#L232), [`trg_slot_capacity_limit`](../../migrations/versions/0001_initial.py#L259), [`slots.capacity_reduced`](../../migrations/versions/0002_slot_capacity_reduced.py#L16)
++- Тесты: `tests/test_scheduling.py::test_venue_maximum_change_updates_future_default_slots`
+ - Роли: Администратор
+-- Связанные: R-SCHED-SLOT-02, R-SCHED-SLOT-03
++- Связанные: R-SCHED-SLOT-02, R-SCHED-SLOT-03, R-SCHED-SLOT-04
+ 
+ ## R-SCHED-LINK-01 — Ссылка на запись за книгами выдаётся при готовности к записи
+ 
+diff --git a/migrations/versions/0002_slot_capacity_reduced.py b/migrations/versions/0002_slot_capacity_reduced.py
+new file mode 100644
+index 0000000..c89c53f
+--- /dev/null
++++ b/migrations/versions/0002_slot_capacity_reduced.py
+@@ -0,0 +1,20 @@
++"""scheduling.slots.capacity_reduced: число мест в окне уменьшил проверяющий оператор
++
++Revision ID: 0002
++Revises: 0001
++"""
++
++from alembic import op
++
++revision = "0002"
++down_revision = "0001"
++branch_labels = None
++depends_on = None
++
++
++def upgrade() -> None:
++    op.execute("ALTER TABLE scheduling.slots ADD COLUMN capacity_reduced boolean NOT NULL DEFAULT false")
++
++
++def downgrade() -> None:
++    op.execute("ALTER TABLE scheduling.slots DROP COLUMN capacity_reduced")
+diff --git a/services/scheduling/consumers.py b/services/scheduling/consumers.py
+index 5341474..38ca665 100644
+--- a/services/scheduling/consumers.py
++++ b/services/scheduling/consumers.py
+@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
+ from libs.events import subscribe
+ from services.applications import public as applications
+ from services.scheduling import service
+-from services.scheduling.models import VenueLimit
+ 
+ 
+ @subscribe("application.ready_for_booking")
+@@ -33,8 +32,4 @@ async def on_closed_duplicate(session: AsyncSession, payload: dict[str, Any]) ->
+ 
+ @subscribe("venue.settings_changed")
+ async def on_venue_settings_changed(session: AsyncSession, payload: dict[str, Any]) -> None:
+-    limit = await session.get(VenueLimit, payload["venue_id"])
+-    if limit is None:
+-        session.add(VenueLimit(venue_id=payload["venue_id"], max_capacity=payload["max_capacity"]))
+-    else:
+-        limit.max_capacity = payload["max_capacity"]
++    await service.apply_venue_max_capacity(session, payload["venue_id"], payload["max_capacity"])
+diff --git a/services/scheduling/models.py b/services/scheduling/models.py
+index b03e634..a981385 100644
+--- a/services/scheduling/models.py
++++ b/services/scheduling/models.py
+@@ -28,6 +28,8 @@ class Slot(Base):
+     starts_at: Mapped[datetime]
+     capacity: Mapped[int]
+     removed: Mapped[bool] = mapped_column(default=False)
++    # Число мест уменьшил проверяющий оператор: смена максимума площадки такое окно не меняет.
++    capacity_reduced: Mapped[bool] = mapped_column(default=False)
+ 
+ 
+ class BookingLink(Base):
+diff --git a/services/scheduling/service.py b/services/scheduling/service.py
+index 7cb7b5e..a60d317 100644
+--- a/services/scheduling/service.py
++++ b/services/scheduling/service.py
+@@ -59,10 +59,34 @@ async def reduce_capacity(session: AsyncSession, slot_id: int, site_checker_id:
+     if capacity < await _active_bookings(session, slot_id):
+         raise DomainError("в окне уже записано больше клиентов")
+     slot.capacity = capacity
++    slot.capacity_reduced = True
+     await session.flush()
+     return slot
+ 
+ 
++async def apply_venue_max_capacity(session: AsyncSession, venue_id: int, max_capacity: int) -> None:
++    """Новый максимум мест площадки: будущие окна со старым максимумом получают новый."""
++    limit = await session.get(VenueLimit, venue_id)
++    if limit is None:
++        session.add(VenueLimit(venue_id=venue_id, max_capacity=max_capacity))
++        return
++    old = limit.max_capacity
++    limit.max_capacity = max_capacity
++    # Лимит пишем раньше окон: trg_slot_capacity_limit сверяет capacity с уже новым максимумом.
++    await session.flush()
++    await session.execute(
++        update(Slot)
++        .where(
++            Slot.venue_id == venue_id,
++            Slot.capacity == old,
++            Slot.starts_at > clock.now(),
++            Slot.removed.is_(False),
++            Slot.capacity_reduced.is_(False),
++        )
++        .values(capacity=max_capacity)
++    )
++
++
+ async def remove_slot(session: AsyncSession, slot_id: int, site_checker_id: int) -> None:
+     slot = await session.get(Slot, slot_id)
+     if slot is None:
+diff --git a/tests/test_scheduling.py b/tests/test_scheduling.py
+index b43958e..6faa744 100644
+--- a/tests/test_scheduling.py
++++ b/tests/test_scheduling.py
+@@ -3,7 +3,9 @@ from datetime import timedelta
+ import pytest
+ 
+ from libs.errors import DomainError
++from services.applications import admin
+ from services.scheduling import service as scheduling
++from services.scheduling.models import Slot
+ from tests.factories import (
+     CHECKER,
+     HISTORY,
+@@ -39,6 +41,40 @@ async def test_slot_capacity_cannot_exceed_venue_maximum() -> None:
+         await slot(MSK, HISTORY, T0 + timedelta(days=5), capacity=10)
+ 
+ 
++async def _capacity(slot_id: int) -> int:
++    async def get(s):
++        return (await s.get(Slot, slot_id)).capacity
++
++    return await read(get)
++
++
++async def test_venue_maximum_change_updates_future_default_slots() -> None:
++    past = await slot(MSK, HISTORY, T0 + timedelta(days=1))
++    default = await slot(MSK, HISTORY, T0 + timedelta(days=5))
++    explicit = await slot(MSK, HISTORY, T0 + timedelta(days=5), capacity=2)
++    reduced = await slot(MSK, HISTORY, T0 + timedelta(days=6))
++    await act(scheduling.reduce_capacity, reduced, CHECKER[MSK], 2)
++    other_venue = await slot(KZN, HISTORY, T0 + timedelta(days=5))
++    travel(T0 + timedelta(days=2))
++
++    await act(admin.set_venue_max_capacity, MSK, 5)
++    assert await _capacity(default) == 5
++    assert await _capacity(past) == 3
++    assert await _capacity(explicit) == 2
++    assert await _capacity(reduced) == 2
++    assert await _capacity(other_venue) == 3
++
++    await act(admin.set_venue_max_capacity, MSK, 2)
++    assert await _capacity(default) == 2
++    assert await _capacity(past) == 3
++
++    # Уменьшенное проверяющим окно не трогается, даже если его число мест совпало со старым максимумом.
++    await act(admin.set_venue_max_capacity, MSK, 4)
++    assert await _capacity(default) == 4
++    assert await _capacity(explicit) == 4
++    assert await _capacity(reduced) == 2
++
++
+ async def test_booking_only_on_own_venue_and_sphere() -> None:
+     app_id = await new_application(rep=2)
+     await pass_review(app_id)

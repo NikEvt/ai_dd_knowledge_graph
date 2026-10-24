@@ -1,0 +1,14 @@
+migrations/noise/subscriptions.sql
+services/subscriptions/__init__.py
+services/subscriptions/api.py
+services/subscriptions/app.py
+services/subscriptions/consumers.py
+services/subscriptions/jobs.py
+services/subscriptions/models.py
+services/subscriptions/service.py
+services/subscriptions/settings.py
+tests/subscriptions_factories.py
+tests/test_subscriptions_activation.py
+tests/test_subscriptions_api.py
+tests/test_subscriptions_holder.py
+tests/test_subscriptions_lifecycle.py

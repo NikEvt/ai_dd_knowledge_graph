@@ -1,0 +1,82 @@
+diff --git a/migrations/versions/0002_debt_templates.py b/migrations/versions/0002_debt_templates.py
+new file mode 100644
+index 0000000..6d5a49d
+--- /dev/null
++++ b/migrations/versions/0002_debt_templates.py
+@@ -0,0 +1,24 @@
++"""debt template group
++
++Revision ID: 0002
++Revises: 0001
++"""
++
++from alembic import op
++
++revision = "0002"
++down_revision = "0001"
++branch_labels = None
++depends_on = None
++
++
++def upgrade() -> None:
++    op.execute("ALTER TABLE notifications.templates DROP CONSTRAINT templates_kind_group_check")
++    op.execute(
++        "ALTER TABLE notifications.templates ADD CONSTRAINT templates_kind_group_check "
++        "CHECK (kind_group IN ('paid','social','debt'))"
++    )
++
++
++def downgrade() -> None:
++    pass
+diff --git a/services/notifications/config.py b/services/notifications/config.py
+index 6fa2e38..abfc689 100644
+--- a/services/notifications/config.py
++++ b/services/notifications/config.py
+@@ -1,6 +1,9 @@
+ # Группа шаблонов писем по виду заявки.
+ TEMPLATE_GROUP = {
+     "paid": "paid",
+-    "debt": "paid",
++    "debt": "debt",
+     "social": "social",
+ }
++
++# Если на площадке нет шаблона группы, берётся шаблон запасной группы.
++FALLBACK_GROUP = {"debt": "paid"}
+diff --git a/services/notifications/service.py b/services/notifications/service.py
+index 2160076..4423100 100644
+--- a/services/notifications/service.py
++++ b/services/notifications/service.py
+@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+ from libs import clock
+ from services.applications import public as applications
+-from services.notifications.config import TEMPLATE_GROUP
++from services.notifications.config import FALLBACK_GROUP, TEMPLATE_GROUP
+ from services.notifications.models import Email, Template
+ 
+ 
+@@ -30,13 +30,17 @@ async def set_template(
+ 
+ 
+ async def find_template(session: AsyncSession, venue_id: int, kind: str, type_: str) -> Template | None:
+-    return await session.scalar(
+-        select(Template).where(
+-            Template.venue_id == venue_id,
+-            Template.kind_group == TEMPLATE_GROUP[kind],
+-            Template.type == type_,
++    group = TEMPLATE_GROUP[kind]
++    while group:
++        tpl = await session.scalar(
++            select(Template).where(
++                Template.venue_id == venue_id, Template.kind_group == group, Template.type == type_
++            )
+         )
+-    )
++        if tpl is not None:
++            return tpl
++        group = FALLBACK_GROUP.get(group)
++    return None
+ 
+ 
+ async def send(

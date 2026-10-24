@@ -1,0 +1,424 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 10751d8..e55ec2a 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -101,5 +101,5 @@ args = ["run", "--quiet", "python", "mcp/knowledge_server.py"]
+ 
+ События: `application.archived`, `application.closed_duplicate`, `application.ready_for_booking`, `application.review_passed`, `application.stage_changed`, `application.unarchived`, `application.venue_changed`, `booking.cancelled`, `booking.created`, `books.issued`, `client.updated`, `invoice.cancelled`, `invoice.issued`, `loan.damaged`, `loan.lost`, `loan.overdue`, `payment.fully_paid`, `payment.linked`, `payment.refunded`, `venue.settings_changed`.
+ 
+-Правил в модели: 162 (draft: 140, verified: 22).
++Правил в модели: 162 (draft: 137, suspect: 3, verified: 22).
+ <!-- END L0 -->
+diff --git a/docs/README.md b/docs/README.md
+index b1bc15a..bc57cc8 100644
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -36,4 +36,4 @@
+ | table | 25 |
+ | test | 46 |
+ 
+-Правила по статусу: draft — 140, verified — 22
++Правила по статусу: draft — 137, suspect — 3, verified — 22
+diff --git a/docs/coverage.md b/docs/coverage.md
+index 20ffe7e..4780e47 100644
+--- a/docs/coverage.md
++++ b/docs/coverage.md
+@@ -5,13 +5,15 @@
+ - Правил: 162; verified: 22
+ - Без реализации (implemented_by / enforced_by_db): 7
+ - Без тестов (tested_by): 82
+-- suspect: 0
++- suspect: 3
+ - Ограничения БД без правил: 0
+ - Проверки в коде без правил: 0
+ 
+-## suspect (0)
++## suspect (3)
+ 
+-- нет
++- R-CHAT-POST-02 (с 2026-10-23) Писать в чат могут только закреплённые за заявкой сотрудники
++- R-CHAT-READ-02 (с 2026-10-23) Чат видят участники заявки и администратор
++- R-CHAT-AUTH-01 (с 2026-10-23) Личность и роль в API чата берутся из параметров запроса без проверки
+ 
+ ## Правила без реализации (7)
+ 
+diff --git a/docs/entities/chat.messages.md b/docs/entities/chat.messages.md
+index 504f5e3..cb975b5 100644
+--- a/docs/entities/chat.messages.md
++++ b/docs/entities/chat.messages.md
+@@ -29,6 +29,6 @@
+ - R-CHAT-EVENTS-01 [verified] 11 топиков из EVENT_TEXT автоматически пишутся в чат системными сообщениями
+ - R-CHAT-EVENTS-05 [draft] События пишутся в чат и после закрытия заявки
+ - R-CHAT-POST-01 [verified] После закрытия заявки писать в чат нельзя
+-- R-CHAT-POST-02 [draft] Писать в чат могут только закреплённые за заявкой сотрудники
++- R-CHAT-POST-02 [suspect] Писать в чат могут только закреплённые за заявкой сотрудники
+ - R-CHAT-POST-03 [draft] Сообщение сотрудника записывается как обычное, с автором и временем
+ - R-CHAT-READ-04 [draft] Администратор чат только читает
+diff --git a/docs/reconciliation.md b/docs/reconciliation.md
+index f987325..c7b8c37 100644
+--- a/docs/reconciliation.md
++++ b/docs/reconciliation.md
+@@ -109,7 +109,7 @@
+ - R-CHAT-AUTH-01: Схема: доступ к чату определяется ролью сотрудника и закреплением за заявкой. Код: роль приходит от клиента API — если передать role=admin, проверка участника для чтения отключается.
+ - R-CHAT-EVENTS-06: Схема называет перенос и неявку отдельными событиями чата. Код: перенос не отличить от отмены с новой записью, неявка показывается кодом причины «no_show» внутри текста об отмене.
+ - R-CHAT-EVENTS-07: Схема: в чат автоматически попадают все события заявки, включая назначения и платежи. Код: назначения, возврат и отвязка платежа, порча и утеря книг в чате не фиксируются.
+-- R-CHAT-POST-03: Схема: к сообщениям можно прикреплять файлы. Код: у сообщения есть только текст (body), поддержки вложений нет ни в модели, ни в API.
++- R-CHAT-POST-03: Схема: к сообщениям можно прикреплять файлы. Код: у сообщения есть только текст (колонка body, в API — text), поддержки вложений нет ни в модели, ни в API.
+ - R-NOTIF-RENDER-02: Схема (§7): при смене площадки клиент и представитель получают письмо об отмене и новую ссылку. Код: в письме об отмене нет ссылки, а отдельного письма со ссылкой модуль не отправляет.
+ - R-NOTIF-RESET-01: Схема (§5): пока заявка в архиве, письма не отправляются. Код: в момент архивирования письмо об отмене всё-таки уходит. В send нет проверки этапа и архивного статуса, поэтому любое событие booking.* по заявке в архиве тоже приведёт к письму.
+ - R-NOTIF-TEMPLATE-07: Схема (§2, §17): шаблоны писем настраивает только администратор в админке. Код: в set_template нет проверки роли и нет точки входа для администратора.
+diff --git a/docs/roles.md b/docs/roles.md
+index 966da33..e2b8128 100644
+--- a/docs/roles.md
++++ b/docs/roles.md
+@@ -25,9 +25,9 @@
+ - R-BILL-FINE-OUTSIDE-01 [verified] Штраф по заявке в долг гасит закреплённый оператор вне системы
+ - R-CHAT-PARTICIPANTS-01 [draft] Участники чата — оператор, проверяющий оператор, проверяющий и бухгалтер заявки
+ - R-CHAT-POST-01 [verified] После закрытия заявки писать в чат нельзя
+-- R-CHAT-POST-02 [draft] Писать в чат могут только закреплённые за заявкой сотрудники
++- R-CHAT-POST-02 [suspect] Писать в чат могут только закреплённые за заявкой сотрудники
+ - R-CHAT-POST-03 [draft] Сообщение сотрудника записывается как обычное, с автором и временем
+-- R-CHAT-READ-02 [draft] Чат видят участники заявки и администратор
++- R-CHAT-READ-02 [suspect] Чат видят участники заявки и администратор
+ - R-NOTIF-BOOKING-01 [draft] При записи на визит отправляется письмо о записи
+ - R-NOTIF-CANCEL-01 [draft] Любая отмена записи даёт письмо об отмене
+ - R-NOTIF-RESCHEDULE-01 [draft] Перенос даёт письмо об отмене и письмо о новой записи
+@@ -64,9 +64,9 @@
+ - R-CHAT-PARTICIPANTS-01 [draft] Участники чата — оператор, проверяющий оператор, проверяющий и бухгалтер заявки
+ - R-CHAT-PARTICIPANTS-02 [draft] Доступ к чату следует за текущим закреплением сотрудника
+ - R-CHAT-POST-01 [verified] После закрытия заявки писать в чат нельзя
+-- R-CHAT-POST-02 [draft] Писать в чат могут только закреплённые за заявкой сотрудники
++- R-CHAT-POST-02 [suspect] Писать в чат могут только закреплённые за заявкой сотрудники
+ - R-CHAT-POST-03 [draft] Сообщение сотрудника записывается как обычное, с автором и временем
+-- R-CHAT-READ-02 [draft] Чат видят участники заявки и администратор
++- R-CHAT-READ-02 [suspect] Чат видят участники заявки и администратор
+ 
+ ### Бухгалтер (`accountant`)
+ 
+@@ -88,9 +88,9 @@
+ - R-CHAT-PARTICIPANTS-01 [draft] Участники чата — оператор, проверяющий оператор, проверяющий и бухгалтер заявки
+ - R-CHAT-PARTICIPANTS-02 [draft] Доступ к чату следует за текущим закреплением сотрудника
+ - R-CHAT-POST-01 [verified] После закрытия заявки писать в чат нельзя
+-- R-CHAT-POST-02 [draft] Писать в чат могут только закреплённые за заявкой сотрудники
++- R-CHAT-POST-02 [suspect] Писать в чат могут только закреплённые за заявкой сотрудники
+ - R-CHAT-POST-03 [draft] Сообщение сотрудника записывается как обычное, с автором и временем
+-- R-CHAT-READ-02 [draft] Чат видят участники заявки и администратор
++- R-CHAT-READ-02 [suspect] Чат видят участники заявки и администратор
+ 
+ ### Главный бухгалтер (`chief_accountant`)
+ 
+@@ -114,9 +114,9 @@
+ - R-BILL-FINE-SETTLED-01 [draft] Заявку нельзя закрыть, пока есть открытые штрафы
+ - R-CHAT-PARTICIPANTS-01 [draft] Участники чата — оператор, проверяющий оператор, проверяющий и бухгалтер заявки
+ - R-CHAT-POST-01 [verified] После закрытия заявки писать в чат нельзя
+-- R-CHAT-POST-02 [draft] Писать в чат могут только закреплённые за заявкой сотрудники
++- R-CHAT-POST-02 [suspect] Писать в чат могут только закреплённые за заявкой сотрудники
+ - R-CHAT-POST-03 [draft] Сообщение сотрудника записывается как обычное, с автором и временем
+-- R-CHAT-READ-02 [draft] Чат видят участники заявки и администратор
++- R-CHAT-READ-02 [suspect] Чат видят участники заявки и администратор
+ - R-NOTIF-CANCEL-01 [draft] Любая отмена записи даёт письмо об отмене
+ - R-NOTIF-NOSHOW-01 [verified] Неявка отправляет письмо об отмене
+ - R-NOTIF-SLOT-01 [verified] Удаление окна с записями рассылает письма об отмене
+@@ -144,7 +144,7 @@
+ - R-APP-ADMIN-03 [draft] Максимум мест в окне площадки положителен и передаётся в scheduling событием
+ - R-APP-ADMIN-04 [draft] Отключение сферы на площадке запрещает новые заявки, действующие доводятся до конца
+ - R-BILL-FINE-02 [draft] Размер штрафа берётся из ставки по представителю, площадке и виду
+-- R-CHAT-READ-02 [draft] Чат видят участники заявки и администратор
++- R-CHAT-READ-02 [suspect] Чат видят участники заявки и администратор
+ - R-CHAT-READ-04 [draft] Администратор чат только читает
+ - R-NOTIF-TEMPLATE-04 [draft] Один шаблон на площадку, группу и тип письма
+ - R-NOTIF-TEMPLATE-05 [draft] Допустимые группы шаблонов — paid и social, типы — booking и cancel
+diff --git a/docs/rules/README.md b/docs/rules/README.md
+index ea21dc4..f74a44c 100644
+--- a/docs/rules/README.md
++++ b/docs/rules/README.md
+@@ -6,7 +6,7 @@
+ |---|---|---|---|---|
+ | [applications](applications.md) | 40 | 5 | 35 | 0 |
+ | [billing](billing.md) | 36 | 6 | 30 | 0 |
+-| [chat](chat.md) | 22 | 5 | 17 | 0 |
++| [chat](chat.md) | 22 | 5 | 14 | 3 |
+ | [notifications](notifications.md) | 21 | 4 | 17 | 0 |
+ | [scheduling](scheduling.md) | 31 | 2 | 29 | 0 |
+ | [schema](schema.md) | 12 | 0 | 12 | 0 |
+diff --git a/docs/rules/chat.md b/docs/rules/chat.md
+index 87b77ab..641173a 100644
+--- a/docs/rules/chat.md
++++ b/docs/rules/chat.md
+@@ -37,7 +37,7 @@
+ 
+ ## R-CHAT-POST-02 — Писать в чат могут только закреплённые за заявкой сотрудники
+ 
+-`draft` · permission · §17 Сводная таблица: кто что может
++`suspect` · permission · §17 Сводная таблица: кто что может
+ 
+ post_message пропускает сообщение, только если author_id входит в участники заявки. В остальных случаях — AccessDenied «писать в чат могут только закреплённые за заявкой сотрудники» (HTTP 403). Поэтому администратор, главный бухгалтер, руководитель проверяющих, а также клиент и представитель писать в чат не могут.
+ 
+@@ -57,7 +57,7 @@ post_message пропускает сообщение, только если auth
+ - Тесты: `tests/test_chat_api.py::test_operator_posts_and_reads`
+ - Роли: Оператор, Проверяющий оператор, Проверяющий, Бухгалтер
+ - Связанные: R-CHAT-DB-01
+-- ⚠ Расхождение со схемой: Схема: к сообщениям можно прикреплять файлы. Код: у сообщения есть только текст (body), поддержки вложений нет ни в модели, ни в API.
++- ⚠ Расхождение со схемой: Схема: к сообщениям можно прикреплять файлы. Код: у сообщения есть только текст (колонка body, в API — text), поддержки вложений нет ни в модели, ни в API.
+ 
+ ## R-CHAT-READ-01 — Главный бухгалтер и руководитель проверяющих не видят чат
+ 
+@@ -73,7 +73,7 @@ list_messages сразу отклоняет роли из NO_CHAT_ROLES (chief_a
+ 
+ ## R-CHAT-READ-02 — Чат видят участники заявки и администратор
+ 
+-`draft` · permission · §15 Чат заявки
++`suspect` · permission · §15 Чат заявки
+ 
+ Читать чат может роль admin (по любой заявке, проверки участника нет) или сотрудник, чей viewer_id входит в участники заявки. Остальным — AccessDenied «чат видят только закреплённые сотрудники и администратор». Клиент и представитель в чат не попадают, потому что их нет среди участников.
+ 
+@@ -105,7 +105,7 @@ list_messages сразу отклоняет роли из NO_CHAT_ROLES (chief_a
+ 
+ ## R-CHAT-AUTH-01 — Личность и роль в API чата берутся из параметров запроса без проверки
+ 
+-`draft` · permission
++`suspect` · permission
+ 
+ GET принимает viewer_id и role как query-параметры, POST принимает author_id в теле. Сервис чата не сверяет их с аутентифицированным пользователем и с реальной ролью сотрудника: проверки прав в list_messages и post_message доверяют переданным значениям.
+ 
+diff --git a/knowledge/model/code.json b/knowledge/model/code.json
+index 6cfd29f..945d616 100644
+--- a/knowledge/model/code.json
++++ b/knowledge/model/code.json
+@@ -7080,8 +7080,8 @@
+   },
+   {
+    "end_line": 17,
+-   "hash": "0675899ed381",
+-   "hash_own": "0675899ed381",
++   "hash": "ffa0fce214aa",
++   "hash_own": "ffa0fce214aa",
+    "id": "services/chat/api.py::MessageIn",
+    "kind": "class",
+    "line": 15,
+@@ -7092,8 +7092,8 @@
+   },
+   {
+    "end_line": 25,
+-   "hash": "14802783d883",
+-   "hash_own": "14802783d883",
++   "hash": "910c2b28ce4f",
++   "hash_own": "910c2b28ce4f",
+    "id": "services/chat/api.py::MessageOut",
+    "kind": "class",
+    "line": 20,
+@@ -7104,8 +7104,8 @@
+   },
+   {
+    "end_line": 31,
+-   "hash": "cfa89d14fb5f",
+-   "hash_own": "44891c27521e",
++   "hash": "250965a1526e",
++   "hash_own": "4adb5dd1dba1",
+    "id": "services/chat/api.py::_out",
+    "kind": "function",
+    "line": 28,
+@@ -7117,7 +7117,7 @@
+   },
+   {
+    "end_line": 36,
+-   "hash": "2389c489fff6",
++   "hash": "65ce98e93dbf",
+    "hash_own": "2175aadaa99d",
+    "id": "services/chat/api.py::list_",
+    "kind": "route",
+@@ -7131,8 +7131,8 @@
+   },
+   {
+    "end_line": 41,
+-   "hash": "ecd0dec2ae00",
+-   "hash_own": "c169cff3a6a9",
++   "hash": "01c46a3a0188",
++   "hash_own": "a4a39304151e",
+    "id": "services/chat/api.py::post",
+    "kind": "route",
+    "line": 40,
+@@ -8192,17 +8192,17 @@
+    "type": "test"
+   },
+   {
+-   "end_line": 44,
++   "end_line": 45,
+    "id": "tests/test_chat_api.py::test_admin_reads_chief_accountant_does_not",
+    "kind": "test",
+-   "line": 37,
++   "line": 38,
+    "name": "test_admin_reads_chief_accountant_does_not",
+    "path": "tests/test_chat_api.py",
+    "signature": "(client)",
+    "type": "test"
+   },
+   {
+-   "end_line": 23,
++   "end_line": 24,
+    "id": "tests/test_chat_api.py::test_operator_posts_and_reads",
+    "kind": "test",
+    "line": 14,
+@@ -8212,20 +8212,20 @@
+    "type": "test"
+   },
+   {
+-   "end_line": 50,
++   "end_line": 51,
+    "id": "tests/test_chat_api.py::test_outsider_cannot_post",
+    "kind": "test",
+-   "line": 47,
++   "line": 48,
+    "name": "test_outsider_cannot_post",
+    "path": "tests/test_chat_api.py",
+    "signature": "(client)",
+    "type": "test"
+   },
+   {
+-   "end_line": 34,
++   "end_line": 35,
+    "id": "tests/test_chat_api.py::test_stage_changes_appear_in_chat",
+    "kind": "test",
+-   "line": 26,
++   "line": 27,
+    "name": "test_stage_changes_appear_in_chat",
+    "path": "tests/test_chat_api.py",
+    "signature": "(client)",
+diff --git a/knowledge/rules/chat.yaml b/knowledge/rules/chat.yaml
+index 43bef1f..e8e5c66 100644
+--- a/knowledge/rules/chat.yaml
++++ b/knowledge/rules/chat.yaml
+@@ -103,12 +103,13 @@ rules:
+     hash: 201ddba10869
+   - symbol: services/chat/api.py::post
+     lines: 39-41
+-    hash: ecd0dec2ae00
++    hash: 01c46a3a0188
+   tested_by:
+   - tests/test_chat_api.py::test_outsider_cannot_post
+   - tests/test_chat_api.py::test_operator_posts_and_reads
+   schema_ref: '§17 Сводная таблица: кто что может'
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-CHAT-POST-03
+   title: Сообщение сотрудника записывается как обычное, с автором и временем
+   text: >
+@@ -138,8 +139,8 @@ rules:
+   - tests/test_chat_api.py::test_operator_posts_and_reads
+   schema_ref: §15 Чат заявки
+   discrepancy: >
+-    Схема: к сообщениям можно прикреплять файлы. Код: у сообщения есть только текст (body), поддержки
+-    вложений нет ни в модели, ни в API.
++    Схема: к сообщениям можно прикреплять файлы. Код: у сообщения есть только текст (колонка body, в API
++    — text), поддержки вложений нет ни в модели, ни в API.
+   status: draft
+ - id: R-CHAT-READ-01
+   title: Главный бухгалтер и руководитель проверяющих не видят чат
+@@ -195,13 +196,14 @@ rules:
+     hash: cdd465085f6e
+   - symbol: services/chat/api.py::list_
+     lines: 34-36
+-    hash: 2389c489fff6
++    hash: 65ce98e93dbf
+   tested_by:
+   - tests/test_chat_api.py::test_admin_reads_chief_accountant_does_not
+   - tests/test_chat_api.py::test_operator_posts_and_reads
+   - tests/test_chat_api.py::test_stage_changes_appear_in_chat
+   schema_ref: §15 Чат заявки
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-CHAT-READ-03
+   title: Один чат на заявку, общий для всех попыток, в порядке создания
+   text: >
+@@ -266,14 +268,15 @@ rules:
+   implemented_by:
+   - symbol: services/chat/api.py::list_
+     lines: 35-36
+-    hash: 2389c489fff6
++    hash: 65ce98e93dbf
+   - symbol: services/chat/api.py::post
+     lines: 40-41
+-    hash: ecd0dec2ae00
++    hash: 01c46a3a0188
+   discrepancy: >
+     Схема: доступ к чату определяется ролью сотрудника и закреплением за заявкой. Код: роль приходит от
+     клиента API — если передать role=admin, проверка участника для чтения отключается.
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-CHAT-CONFIG-01
+   title: Список ролей без доступа к чату задан константой NO_CHAT_ROLES
+   text: >
+diff --git a/services/chat/api.py b/services/chat/api.py
+index bba0f26..2f68088 100644
+--- a/services/chat/api.py
++++ b/services/chat/api.py
+@@ -14,20 +14,20 @@ Session = Annotated[AsyncSession, Depends(session)]
+ 
+ class MessageIn(BaseModel):
+     author_id: int
+-    body: str
++    text: str
+ 
+ 
+ class MessageOut(BaseModel):
+     id: int
+     author_id: int | None
+-    body: str
++    text: str
+     is_event: bool
+     created_at: datetime
+ 
+ 
+ def _out(m) -> MessageOut:
+     return MessageOut(
+-        id=m.id, author_id=m.author_id, body=m.body, is_event=m.is_event, created_at=m.created_at
++        id=m.id, author_id=m.author_id, text=m.body, is_event=m.is_event, created_at=m.created_at
+     )
+ 
+ 
+@@ -38,4 +38,4 @@ async def list_(application_id: int, viewer_id: int, role: str, s: Session) -> l
+ 
+ @router.post("", status_code=201)
+ async def post(application_id: int, body: MessageIn, s: Session) -> MessageOut:
+-    return _out(await service.post_message(s, application_id, body.author_id, body.body))
++    return _out(await service.post_message(s, application_id, body.author_id, body.text))
+diff --git a/tests/test_chat_api.py b/tests/test_chat_api.py
+index a74b55e..ff99f34 100644
+--- a/tests/test_chat_api.py
++++ b/tests/test_chat_api.py
+@@ -13,13 +13,14 @@ async def client():
+ 
+ async def test_operator_posts_and_reads(client: httpx.AsyncClient) -> None:
+     app_id = await new_application()
+-    r = await client.post(f"/applications/{app_id}/messages", json={"author_id": OPERATOR, "body": "Привет"})
++    r = await client.post(f"/applications/{app_id}/messages", json={"author_id": OPERATOR, "text": "Привет"})
+     assert r.status_code == 201
+     r = await client.get(
+         f"/applications/{app_id}/messages", params={"viewer_id": OPERATOR, "role": "operator"}
+     )
+     assert r.status_code == 200
+-    assert r.json()[-1]["body"] == "Привет"
++    assert r.json()[-1]["text"] == "Привет"
++    assert "body" not in r.json()[-1]
+     assert r.json()[-1]["is_event"] is False
+ 
+ 
+@@ -29,7 +30,7 @@ async def test_stage_changes_appear_in_chat(client: httpx.AsyncClient) -> None:
+     r = await client.get(
+         f"/applications/{app_id}/messages", params={"viewer_id": REVIEWER, "role": "reviewer"}
+     )
+-    events = [m["body"] for m in r.json() if m["is_event"]]
++    events = [m["text"] for m in r.json() if m["is_event"]]
+     assert "Этап: draft → on_review" in events
+     assert "Этап: on_review → awaiting_invoice" in events
+ 
+@@ -46,5 +47,5 @@ async def test_admin_reads_chief_accountant_does_not(client: httpx.AsyncClient)
+ 
+ async def test_outsider_cannot_post(client: httpx.AsyncClient) -> None:
+     app_id = await new_application()
+-    r = await client.post(f"/applications/{app_id}/messages", json={"author_id": 999, "body": "x"})
++    r = await client.post(f"/applications/{app_id}/messages", json={"author_id": 999, "text": "x"})
+     assert r.status_code == 403

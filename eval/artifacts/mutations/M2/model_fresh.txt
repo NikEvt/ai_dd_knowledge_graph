@@ -1,0 +1,79 @@
+diff --git a/knowledge/model/code.json b/knowledge/model/code.json
+index 6cfd29f..634e706 100644
+--- a/knowledge/model/code.json
++++ b/knowledge/model/code.json
+@@ -3042,10 +3042,18 @@
+    "src": "services/applications/listeners.py::_domain_events",
+    "type": "reads_config"
+   },
++  {
++   "dst": "services/applications/review.py::OPTIONAL_FIELDS",
++   "lines": [
++    8
++   ],
++   "src": "services/applications/review.py::missing_client_fields",
++   "type": "reads_config"
++  },
+   {
+    "dst": "services/applications/review.py::REQUIRED_CLIENT_FIELDS",
+    "lines": [
+-    7
++    8
+    ],
+    "src": "services/applications/review.py::missing_client_fields",
+    "type": "reads_config"
+@@ -4900,6 +4908,19 @@
+     "birth_date"
+    ]
+   },
++  {
++   "end_line": 4,
++   "hash": "75510ad34fa0",
++   "id": "services/applications/review.py::OPTIONAL_FIELDS",
++   "line": 4,
++   "name": "OPTIONAL_FIELDS",
++   "path": "services/applications/review.py",
++   "service": "applications",
++   "type": "config",
++   "value": [
++    "birth_date"
++   ]
++  },
+   {
+    "end_line": 3,
+    "hash": "48cb9edbcf9e",
+@@ -5577,7 +5598,7 @@
+   },
+   {
+    "end_line": 66,
+-   "hash": "b505010c8e88",
++   "hash": "587149ac7176",
+    "hash_own": "227c4dcbecaa",
+    "id": "services/applications/api.py::approve",
+    "kind": "route",
+@@ -6076,12 +6097,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 7,
+-   "hash": "0eebe786926a",
+-   "hash_own": "37dcecc66bd0",
++   "end_line": 8,
++   "hash": "7cfc08d5235c",
++   "hash_own": "cb39efe7f698",
+    "id": "services/applications/review.py::missing_client_fields",
+    "kind": "function",
+-   "line": 6,
++   "line": 7,
+    "name": "missing_client_fields",
+    "path": "services/applications/review.py",
+    "service": "applications",
+@@ -6179,7 +6200,7 @@
+     }
+    ],
+    "end_line": 186,
+-   "hash": "263c830daa5d",
++   "hash": "64823f48e328",
+    "hash_own": "a93fd5f64c68",
+    "id": "services/applications/service.py::approve",
+    "kind": "function",

@@ -1,0 +1,16 @@
+ AGENTS.md                                       |   2 +-
+ docs/README.md                                  |   4 +-
+ docs/coverage.md                                |  11 +-
+ docs/entities/applications.applications.md      |   2 +-
+ docs/reconciliation.md                          |   4 +-
+ docs/roles.md                                   |   2 +-
+ docs/rules/README.md                            |   2 +-
+ docs/rules/applications.md                      |   8 +-
+ docs/rules/scheduling.md                        |   3 +-
+ knowledge/model/code.json                       | 203 +++++++++++++++++++++---
+ knowledge/model/db.json                         |   4 +-
+ knowledge/rules/applications.yaml               |  21 ++-
+ knowledge/rules/scheduling.yaml                 |  10 +-
+ migrations/versions/0002_social_venue_change.py |  40 +++++
+ tests/test_venue_change.py                      |  47 ++++++
+ 15 files changed, 307 insertions(+), 56 deletions(-)

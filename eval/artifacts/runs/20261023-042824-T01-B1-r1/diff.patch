@@ -1,0 +1,657 @@
+diff --git a/docs/config.md b/docs/config.md
+index 500660c..6e6fa5c 100644
+--- a/docs/config.md
++++ b/docs/config.md
+@@ -18,9 +18,10 @@
+ | [`dedup.py::OPEN_STAGES`](../services/applications/dedup.py#L10) | `['draft', 'on_review', 'needs_rework', 'awaiting_invoice', 'awaiting_payment', …` |  | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+ | [`listeners.py::TRACKED_FIELDS`](../services/applications/listeners.py#L9) | `['full_name', 'passport', 'birth_date']` |  | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) |
+ | [`review.py::REQUIRED_CLIENT_FIELDS`](../services/applications/review.py#L3) | `['full_name', 'passport', 'birth_date']` |  | [`review.py::missing_client_fields`](../services/applications/review.py#L6) |
+-| [`service.py::CLIENT_EDITABLE_FIELDS`](../services/applications/service.py#L28) | `['full_name', 'passport', 'birth_date', 'email']` |  | [`service.py::update_client`](../services/applications/service.py#L131) |
+-| [`service.py::PAID_VENUE_LOCKED_STAGES`](../services/applications/service.py#L26) | `['awaiting_issue', 'books_out']` |  | [`service.py::change_venue`](../services/applications/service.py#L199) |
+-| [`service.py::TERMINAL_STAGES`](../services/applications/service.py#L27) | `['closed', 'closed_duplicate']` |  | [`service.py::change_venue`](../services/applications/service.py#L199) |
++| [`service.py::CLIENT_EDITABLE_FIELDS`](../services/applications/service.py#L30) | `['full_name', 'passport', 'birth_date', 'email']` |  | [`service.py::update_client`](../services/applications/service.py#L133) |
++| [`service.py::PAID_VENUE_LOCKED_STAGES`](../services/applications/service.py#L26) | `['awaiting_issue', 'books_out']` |  | [`service.py::change_venue`](../services/applications/service.py#L201) |
++| [`service.py::DEBT_VENUE_EDITABLE_STAGES`](../services/applications/service.py#L28) | `['draft', 'on_review', 'needs_rework', 'archived']` |  | [`service.py::change_venue`](../services/applications/service.py#L201) |
++| [`service.py::TERMINAL_STAGES`](../services/applications/service.py#L29) | `['closed', 'closed_duplicate']` |  | [`service.py::change_venue`](../services/applications/service.py#L201) |
+ | [`service.py::CENT`](../services/billing/service.py#L14) | `Decimal('0.01')` |  | [`service.py::issue_books_invoice`](../services/billing/service.py#L35) |
+ | [`consumers.py::EVENT_TEXT`](../services/chat/consumers.py#L8) | `{'application.archived': 'Заявка ушла в архив ({outcome})', 'application.closed…` |  | [`consumers.py::<module>`](../services/chat/consumers.py#L1) |
+ | [`service.py::NO_CHAT_ROLES`](../services/chat/service.py#L12) | `['chief_accountant', 'reviewer_lead']` |  | [`service.py::list_messages`](../services/chat/service.py#L48) |
+diff --git a/docs/entities/applications.applications.md b/docs/entities/applications.applications.md
+index 3b37905..3f9fcff 100644
+--- a/docs/entities/applications.applications.md
++++ b/docs/entities/applications.applications.md
+@@ -33,7 +33,7 @@
+ - trg_applications_core_immutable: BEFORE UPDATE OF sphere_id, representative_id ON applications.applications FOR EACH ROW EXECUTE FUNCTION applications.f… (migrations/versions/0001_initial.py:121)
+   - forbid_core_change(): 'sphere and representative of an application cannot be changed'
+ - trg_applications_venue_lock: BEFORE UPDATE OF venue_id ON applications.applications FOR EACH ROW EXECUTE FUNCTION applications.forbid_venue_change() (migrations/versions/0001_initial.py:141)
+-  - forbid_venue_change(): 'venue change forbidden after books were issued'; 'venue change forbidden after booking link for % application'
++  - forbid_venue_change(): 'venue change forbidden after books were issued'; 'venue change forbidden after booking link for % application' (с миграции 0002 — только для debt; migrations/versions/0002_social_venue_change.py:15)
+ 
+ ## ORM
+ - services/applications/models.py::Application:82 (orm_model)
+@@ -89,7 +89,7 @@
+ - R-APP-UNARCHIVE-03 [draft] После возврата из архива счёт аннулируется при изменении суммы, иначе срок оплаты отсчитывается заново
+ 
+ - R-APP-VENUE-CHANGE-01 [draft] Смену площадки выполняет оператор заявки; закрытую заявку не меняют
+-- R-APP-VENUE-CHANGE-02 [draft] Платной заявке после оплаты площадку не меняют; после выдачи книг — никому
++- R-APP-VENUE-CHANGE-02 [draft] Платной заявке после оплаты и заявке в долг после ссылки на запись площадку не меняют; после выдачи книг — никому
+ - R-APP-VENUE-CHANGE-03 [draft] Смена площадки переназначает проверяющего оператора и запускает реакции billing, scheduling и chat
+ - R-BILL-CANCEL-03 [draft] Аннулирование счёта за книги возвращает заявку в «Ожидает счёта»
+ - R-BILL-INVOICE-08 [verified] Выставление счёта за книги переводит заявку в «Ожидает оплаты»
+diff --git a/docs/events.md b/docs/events.md
+index 9622316..e921633 100644
+--- a/docs/events.md
++++ b/docs/events.md
+@@ -86,13 +86,13 @@ flowchart LR
+ 
+ | Событие | Публикует | Обрабатывает | Данные | Эффекты |
+ |---|---|---|---|---|
+-| `application.archived` | [`service.py::archive`](../services/applications/service.py#L246) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_archived`](../services/scheduling/consumers.py#L25) | application_id, outcome | effect:chat.event_log |
++| `application.archived` | [`service.py::archive`](../services/applications/service.py#L252) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_archived`](../services/scheduling/consumers.py#L25) | application_id, outcome | effect:chat.event_log |
+ | `application.closed_duplicate` | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) | [`consumers.py::on_closed_duplicate`](../services/billing/consumers.py#L20)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_closed_duplicate`](../services/scheduling/consumers.py#L30) | application_id, winner_id | effect:chat.event_log |
+-| `application.ready_for_booking` | [`service.py::mark_ready_for_booking`](../services/applications/service.py#L157) | [`consumers.py::on_ready_for_booking`](../services/scheduling/consumers.py#L12) | application_id, sphere_id, venue_id | — |
+-| `application.review_passed` | [`service.py::approve`](../services/applications/service.py#L167) | [`consumers.py::on_review_passed`](../services/applications/consumers.py#L43) | application_id, kind | — |
++| `application.ready_for_booking` | [`service.py::mark_ready_for_booking`](../services/applications/service.py#L159) | [`consumers.py::on_ready_for_booking`](../services/scheduling/consumers.py#L12) | application_id, sphere_id, venue_id | — |
++| `application.review_passed` | [`service.py::approve`](../services/applications/service.py#L169) | [`consumers.py::on_review_passed`](../services/applications/consumers.py#L43) | application_id, kind | — |
+ | `application.stage_changed` | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) | [`consumers.py::_handler`](../services/chat/consumers.py#L23) | application_id, from, to | effect:chat.event_log |
+-| `application.unarchived` | [`service.py::unarchive`](../services/applications/service.py#L265) | [`consumers.py::on_unarchived`](../services/billing/consumers.py#L27)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23) | amount_changed, application_id | effect:chat.event_log |
+-| `application.venue_changed` | [`service.py::change_venue`](../services/applications/service.py#L199) | [`consumers.py::on_venue_changed`](../services/billing/consumers.py#L13)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_venue_changed`](../services/scheduling/consumers.py#L17) | application_id, kind, new_venue_id, old_venue_id, stage | effect:chat.event_log |
++| `application.unarchived` | [`service.py::unarchive`](../services/applications/service.py#L271) | [`consumers.py::on_unarchived`](../services/billing/consumers.py#L27)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23) | amount_changed, application_id | effect:chat.event_log |
++| `application.venue_changed` | [`service.py::change_venue`](../services/applications/service.py#L201) | [`consumers.py::on_venue_changed`](../services/billing/consumers.py#L13)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_venue_changed`](../services/scheduling/consumers.py#L17) | application_id, kind, new_venue_id, old_venue_id, stage | effect:chat.event_log |
+ | `booking.cancelled` | [`service.py::_cancel`](../services/scheduling/service.py#L178) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_booking_cancelled`](../services/notifications/consumers.py#L21) | application_id, booking_id, reason, starts_at, venue_id | effect:chat.event_log, effect:email.cancel |
+ | `booking.created` | [`service.py::book`](../services/scheduling/service.py#L126) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_booking_created`](../services/notifications/consumers.py#L10) | application_id, booking_id, purpose, starts_at, venue_id | effect:chat.event_log, effect:email.booking |
+ | `books.issued` | [`service.py::issue_books`](../services/scheduling/service.py#L223) | [`consumers.py::on_books_issued`](../services/applications/consumers.py#L67) | application_id | — |
+diff --git a/docs/process.md b/docs/process.md
+index 78ab9c1..3cdb2fc 100644
+--- a/docs/process.md
++++ b/docs/process.md
+@@ -63,32 +63,32 @@ stateDiagram-v2
+ | Переход | Исполнитель (виды, условие) | Код |
+ |---|---|---|
+ | [`archived->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+-| [`archived->on_review`](../bpm/application_process.yaml#L41) | operator | [`service.py::submit_for_review`](../services/applications/service.py#L113), [`service.py::unarchive`](../services/applications/service.py#L265) |
+-| [`awaiting_invoice->archived`](../bpm/application_process.yaml#L39) | operator | [`service.py::archive`](../services/applications/service.py#L246) |
++| [`archived->on_review`](../bpm/application_process.yaml#L41) | operator | [`service.py::submit_for_review`](../services/applications/service.py#L115), [`service.py::unarchive`](../services/applications/service.py#L271) |
++| [`awaiting_invoice->archived`](../bpm/application_process.yaml#L39) | operator | [`service.py::archive`](../services/applications/service.py#L252) |
+ | [`awaiting_invoice->awaiting_payment`](../bpm/application_process.yaml#L27) | accountant [paid] | [`consumers.py::on_invoice_issued`](../services/applications/consumers.py#L13) |
+ | [`awaiting_invoice->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+ | [`awaiting_invoice->on_review`](../bpm/application_process.yaml#L32) | system | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L51) |
+-| [`awaiting_issue->archived`](../bpm/application_process.yaml#L40) | chief_accountant [paid] | [`service.py::archive`](../services/applications/service.py#L246) |
++| [`awaiting_issue->archived`](../bpm/application_process.yaml#L40) | chief_accountant [paid] | [`service.py::archive`](../services/applications/service.py#L252) |
+ | [`awaiting_issue->books_out`](../bpm/application_process.yaml#L34) | site_checker | [`consumers.py::on_books_issued`](../services/applications/consumers.py#L67) |
+ | [`awaiting_issue->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+-| [`awaiting_payment->archived`](../bpm/application_process.yaml#L38) | system [paid]; operator | [`service.py::archive`](../services/applications/service.py#L246) |
++| [`awaiting_payment->archived`](../bpm/application_process.yaml#L38) | system [paid]; operator | [`service.py::archive`](../services/applications/service.py#L252) |
+ | [`awaiting_payment->awaiting_invoice`](../bpm/application_process.yaml#L28) | system [paid] | [`consumers.py::on_invoice_cancelled`](../services/applications/consumers.py#L22) |
+ | [`awaiting_payment->awaiting_issue`](../bpm/application_process.yaml#L29) | system [paid] guard fully_paid | [`consumers.py::on_fully_paid`](../services/applications/consumers.py#L31) |
+ | [`awaiting_payment->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+ | [`awaiting_payment->on_review`](../bpm/application_process.yaml#L32) | system | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L51) |
+-| [`books_out->closed`](../bpm/application_process.yaml#L35) | site_checker guard settled | [`service.py::close`](../services/applications/service.py#L307) |
+-| [`draft->archived`](../bpm/application_process.yaml#L39) | operator | [`service.py::archive`](../services/applications/service.py#L246) |
++| [`books_out->closed`](../bpm/application_process.yaml#L35) | site_checker guard settled | [`service.py::close`](../services/applications/service.py#L313) |
++| [`draft->archived`](../bpm/application_process.yaml#L39) | operator | [`service.py::archive`](../services/applications/service.py#L252) |
+ | [`draft->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+-| [`draft->on_review`](../bpm/application_process.yaml#L20) | operator | [`service.py::submit_for_review`](../services/applications/service.py#L113), [`service.py::unarchive`](../services/applications/service.py#L265) |
+-| [`needs_rework->archived`](../bpm/application_process.yaml#L37) | system; operator | [`service.py::archive`](../services/applications/service.py#L246) |
++| [`draft->on_review`](../bpm/application_process.yaml#L20) | operator | [`service.py::submit_for_review`](../services/applications/service.py#L115), [`service.py::unarchive`](../services/applications/service.py#L271) |
++| [`needs_rework->archived`](../bpm/application_process.yaml#L37) | system; operator | [`service.py::archive`](../services/applications/service.py#L252) |
+ | [`needs_rework->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+-| [`needs_rework->on_review`](../bpm/application_process.yaml#L20) | operator | [`service.py::submit_for_review`](../services/applications/service.py#L113), [`service.py::unarchive`](../services/applications/service.py#L265) |
+-| [`on_review->archived`](../bpm/application_process.yaml#L37) | system; operator | [`service.py::archive`](../services/applications/service.py#L246) |
+-| [`on_review->awaiting_invoice`](../bpm/application_process.yaml#L23) | reviewer [paid] | [`service.py::approve`](../services/applications/service.py#L167) |
+-| [`on_review->awaiting_issue`](../bpm/application_process.yaml#L25) | reviewer [debt,social] | [`service.py::approve`](../services/applications/service.py#L167) |
+-| [`on_review->awaiting_payment`](../bpm/application_process.yaml#L24) | reviewer [paid] guard has_active_invoice | [`service.py::approve`](../services/applications/service.py#L167) |
++| [`needs_rework->on_review`](../bpm/application_process.yaml#L20) | operator | [`service.py::submit_for_review`](../services/applications/service.py#L115), [`service.py::unarchive`](../services/applications/service.py#L271) |
++| [`on_review->archived`](../bpm/application_process.yaml#L37) | system; operator | [`service.py::archive`](../services/applications/service.py#L252) |
++| [`on_review->awaiting_invoice`](../bpm/application_process.yaml#L23) | reviewer [paid] | [`service.py::approve`](../services/applications/service.py#L169) |
++| [`on_review->awaiting_issue`](../bpm/application_process.yaml#L25) | reviewer [debt,social] | [`service.py::approve`](../services/applications/service.py#L169) |
++| [`on_review->awaiting_payment`](../bpm/application_process.yaml#L24) | reviewer [paid] guard has_active_invoice | [`service.py::approve`](../services/applications/service.py#L169) |
+ | [`on_review->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+-| [`on_review->needs_rework`](../bpm/application_process.yaml#L21) | reviewer | [`service.py::return_for_rework`](../services/applications/service.py#L189) |
++| [`on_review->needs_rework`](../bpm/application_process.yaml#L21) | reviewer | [`service.py::return_for_rework`](../services/applications/service.py#L191) |
+ 
+ ## Условия переходов (guard)
+ 
+diff --git a/docs/reconciliation.md b/docs/reconciliation.md
+index f987325..98e3d3a 100644
+--- a/docs/reconciliation.md
++++ b/docs/reconciliation.md
+@@ -13,16 +13,16 @@
+ | D-02 | high | Ссылка на запись нигде не отправляется клиенту | §13: ссылка формируется и уходит на «Ожидает выдачи» и когда книги у клиента; §1: клиент работает только по ссылке из письма | services/scheduling/consumers.py::on_ready_for_booking:12 и scheduling/service.py::issue_books:223 создают ссылку; notifications подписан только на booking.created и booking.cancelled (notifications/consumers.py:9,20)<br>БД: emails_type_check, templates_type_check — только booking и cancel | R-SCHEMA-NOTIF-01, R-SCHEMA-NOTIF-02, R-SCHED-LINK-01, R-NOTIF-TYPES-01, R-NOTIF-RENDER-02 | Как клиент получает токен ссылки — нужен ли тип письма «ссылка на запись» (за книгами и на сдачу), в том числе после смены площадки? |
+ | D-03 | high | Роли и закрепление сотрудников в большинстве действий не проверяются | §2, §3, §17: проверяющего назначает только руководитель проверяющих; привязку, отвязку и возврат платежа выполняет только главный бухгалтер; аннулирует счёт закреплённый бухгалтер; данные клиента обновляет проверяющий | applications/service.py::assign_reviewer:122 (без исполнителя); update_client:131 (без source_application_id проверки нет); billing/service.py::link_payment:98 (chief_id из тела запроса), unlink_payment:132, refund_payment:143, cancel_invoice:75 (без исполнителя); chat/api.py::list_:35 (role из query) | R-APP-REVIEW-02, R-APP-CLIENT-01, R-BILL-PAYMENT-03, R-BILL-REFUND-01, R-BILL-UNLINK-01, R-BILL-CANCEL-02, R-CHAT-AUTH-01, R-SCHEMA-ROLE-01 | Где должна проверяться роль — в сервисах (тогда нужен справочник сотрудников) или во внешнем шлюзе аутентификации, которому сервисы доверяют? |
+ | D-04 | high | Ограничение «за два дня» и признак оператора обходятся параметром запроса | §2 Клиент, §13: менее чем за два дня переносит или отменяет только оператор; оператор записывает в системе, клиент и представитель — по ссылке | services/scheduling/api.py::cancel:41 — by из query; scheduling/service.py::cancel_booking:193 доверяет by; api.py::book:35 — booked_by=operator принимается от любого обладателя токена<br>БД: bookings_booked_by_check — только допустимые значения, не источник | R-SCHED-CANCEL-02, R-SCHED-BOOK-03, R-SCHED-RESCHEDULE-01 | Нужно ли закрыть публичным эндпоинтам значения by и booked_by, отличные от client и representative, и пускать оператора только через book_by_operator с проверкой закрепления? |
+-| D-05 | high | После проверки заявка с частичной оплатой меняет площадку, а счёт остаётся старым | §7: до оплаты счёт аннулируется и выставляется по прайсу и реквизитам новой площадки; после оплаты смена — только через возврат | services/applications/service.py::change_venue:199 блокирует paid только на awaiting_issue и books_out; services/billing/consumers.py::on_venue_changed:13 аннулирует счёт только при paid_amount = 0<br>БД: trg_invoices_cancel_guard не даёт аннулировать счёт с платежом | R-APP-VENUE-CHANGE-02, R-APP-VENUE-CHANGE-03, R-BILL-VENUE-CHANGE-01 | Запрещать ли смену площадки при любой привязанной оплате (paid_amount > 0) до её возврата или отвязки? |
++| D-05 | high | После проверки заявка с частичной оплатой меняет площадку, а счёт остаётся старым | §7: до оплаты счёт аннулируется и выставляется по прайсу и реквизитам новой площадки; после оплаты смена — только через возврат | services/applications/service.py::change_venue:201 блокирует paid только на awaiting_issue и books_out; services/billing/consumers.py::on_venue_changed:13 аннулирует счёт только при paid_amount = 0<br>БД: trg_invoices_cancel_guard не даёт аннулировать счёт с платежом | R-APP-VENUE-CHANGE-02, R-APP-VENUE-CHANGE-03, R-BILL-VENUE-CHANGE-01 | Запрещать ли смену площадки при любой привязанной оплате (paid_amount > 0) до её возврата или отвязки? |
+ | D-06 | high | Возвращённая на проверку из-за обновления клиента заявка сразу уходит в архив по старому сроку | §6: другие заявки клиента, не дошедшие до записи, снова уходят на проверку; §5: архив — если месяц с начала проверки оператор не получил данные | services/applications/consumers.py::on_client_updated:51 не сбрасывает review_started_at; services/applications/jobs.py::archive_stale:14 архивирует on_review с review_started_at старше REVIEW_ARCHIVE_DAYS | R-APP-CLIENT-03, R-APP-ARCHIVE-01, R-APP-REVIEW-01 | С какого момента считать месяц для повторной проверки после обновления данных клиента — с первой проверки или с возврата на проверку? |
+ | D-07 | high | Без настроенной ставки штраф не создаётся, и заявку можно закрыть | §14: штраф начисляется за утерю, порчу и просрочку; пока штрафы не погашены, заявку закрыть нельзя | services/billing/service.py::create_fine:164 поднимает DomainError, если ставки нет, внутри обработчиков on_loan_overdue:39, on_loan_lost:44, on_loan_damaged:49; guard settled видит 0 открытых штрафов<br>БД: fine_rates_amount_check допускает 0, а invoices_amount_check требует amount > 0 | R-BILL-FINE-02, R-BILL-FINE-SETTLED-01, R-SCHEMA-ADMIN-01 | Что делать при отсутствии ставки — блокировать выдачу книг, пока ставки не настроены, или создавать штраф без суммы, который ждёт настройки? Как гасить штраф с нулевой ставкой? |
+ | D-08 | medium | Ставки штрафов, шаблоны и прочие настройки админки не связаны с ролью администратора | §2 Администратор, §17: надбавки, работу в долг, штрафы, шаблоны, реквизиты и максимум мест настраивает только администратор | services/applications/admin.py::set_representative_terms:13, set_venue_requisites:24, set_venue_max_capacity:32, set_sphere_active:48 и services/notifications/service.py::set_template:15 — без исполнителя и без HTTP-входа; сеттера fine_rates нет | R-APP-ADMIN-01, R-APP-ADMIN-02, R-APP-ADMIN-03, R-APP-ADMIN-04, R-NOTIF-TEMPLATE-07, R-SCHEMA-ADMIN-01 | Будет ли в проекте админка с проверкой роли admin, или настройки сознательно ведутся вне системы (миграциями или скриптами)? |
+-| D-09 | medium | Запрет смены площадки для social и debt после ссылки есть только в триггере; текст R-SCHED-VENUE-CHANGE-01 неточен | §7, §9: social и debt меняют площадку только до формирования ссылки; после выдачи — никому | services/applications/service.py::change_venue:199 доменной проверки нет; на flush (строка 219) срабатывает триггер с check_violation вместо DomainError<br>БД: trg_applications_venue_lock / forbid_venue_change запрещает смену на books_out, closed и closed_duplicate для всех видов, а для social/debt — вне draft, on_review, needs_rework и archived. Поэтому сценарий «debt/social на books_out меняет площадку» из R-SCHED-VENUE-CHANGE-01 в БД невозможен | R-APP-VENUE-CHANGE-02, R-SCHED-VENUE-CHANGE-01 | Перенести ли запрет в сервис (с доменным сообщением) и поправить формулировку расхождения в R-SCHED-VENUE-CHANGE-01? |
++| D-09 | resolved | Запрет смены площадки для social и debt после ссылки был только в триггере | Решение: social меняет площадку до выдачи книг (в том числе после формирования ссылки); debt — только до формирования ссылки; после выдачи — никому | services/applications/service.py::change_venue:208-213 проверяет books_out и debt вне DEBT_VENUE_EDITABLE_STAGES с DomainError<br>БД: forbid_venue_change (миграция 0002) запрещает смену на books_out, closed и closed_duplicate для всех видов, а для debt — вне draft, on_review, needs_rework и archived | R-APP-VENUE-CHANGE-02, R-SCHED-VENUE-CHANGE-01 | — |
+ | D-10 | medium | Платную заявку без выставленного счёта автоархив не берёт | §9 Платная: в архив, если за месяц с начала проверки не получены данные для счёта; §5: «месяц» | services/applications/jobs.py::archive_stale:20 — только on_review и needs_rework; awaiting_invoice никогда не архивируется; срок — 30 дней из settings.REVIEW_ARCHIVE_DAYS | R-APP-ARCHIVE-01 | Должна ли заявка, которая месяц висит в «Ожидает счёта», уходить в архив, и от какой даты считать этот месяц? Месяц — это календарный месяц или 30 дней? |
+-| D-11 | medium | Ручной архив оператором возможен при частичной оплате; отметка «клиент передумал» не ставится | §5: оператор отправляет в архив неоплаченную заявку, если клиент передумал; оплаченную — через возврат у главного бухгалтера; история хранит «клиент передумал» | services/applications/service.py::archive:246 принимает actor и outcome от вызывающего, оплату не проверяет; при actor≠operator закрепление не проверяется. bpm/application_process.yaml:39 разрешает оператору awaiting_payment->archived. Значение client_declined в коде не используется, HTTP-маршрута архива нет<br>БД: attempts_outcome_check допускает client_declined — мёртвое значение | R-APP-ARCHIVE-03, R-APP-ARCHIVE-02 | Запрещать ли оператору архив при paid_amount > 0 и фиксировать ли outcome=client_declined при ручном архиве вместо произвольного значения? |
++| D-11 | medium | Ручной архив оператором возможен при частичной оплате; отметка «клиент передумал» не ставится | §5: оператор отправляет в архив неоплаченную заявку, если клиент передумал; оплаченную — через возврат у главного бухгалтера; история хранит «клиент передумал» | services/applications/service.py::archive:252 принимает actor и outcome от вызывающего, оплату не проверяет; при actor≠operator закрепление не проверяется. bpm/application_process.yaml:39 разрешает оператору awaiting_payment->archived. Значение client_declined в коде не используется, HTTP-маршрута архива нет<br>БД: attempts_outcome_check допускает client_declined — мёртвое значение | R-APP-ARCHIVE-03, R-APP-ARCHIVE-02 | Запрещать ли оператору архив при paid_amount > 0 и фиксировать ли outcome=client_declined при ручном архиве вместо произвольного значения? |
+ | D-12 | medium | Возврат платежа «для смены площадки» всегда уводит заявку в архив | §2 Главный бухгалтер, §7: возврат оформляется при смене площадки после оплаты или если клиент передумал; смена площадки после оплаты — через возврат и новую оплату | services/applications/consumers.py::on_payment_refunded:73 на awaiting_issue всегда архивирует с outcome=refund; после этого unarchive:265 не даёт сменить площадку, потому что booking_reached_at заполнен. Сменить площадку можно только так: возврат из архива → проверка → awaiting_payment → change_venue | R-APP-PAY-04, R-APP-PAY-04, R-APP-UNARCHIVE-02 | Нужен ли отдельный сценарий «возврат ради смены площадки» без архива и закрытия попытки? |
+ | D-13 | medium | Отвязка или возврат платежа после полной оплаты не откатывают выдачу и штраф | §9, §11: выдачу по платной заявке открывает только полная оплата; штраф гасится оплатой | services/billing/service.py::unlink_payment:132 не публикует событие; refund_payment:143 по счёту на штраф не возвращает fines.status в open; issue_fine_invoice:177 не проверяет, оплачен ли штраф и есть ли по нему действующий счёт<br>БД: uq_invoices_one_active_books действует только для kind='books' | R-BILL-UNLINK-01, R-BILL-REFUND-01, R-BILL-FINE-INVOICE-01, R-BILL-FINE-PAY-01 | Должна ли отвязка или возврат оплаты возвращать заявку в «Ожидает оплаты», а штраф — в open? Можно ли выставлять второй счёт на тот же штраф? |
+-| D-14 | medium | Возврат из архива аннулирует счёт до проверки и по цене без надбавки | §5: если до архива был неоплаченный счёт, новый выставляется после проверки, только если сумма изменилась | services/applications/service.py::unarchive:265 сравнивает books_price без markup_pct; services/billing/consumers.py::on_unarchived:27 сразу аннулирует счёт, а при частичной оплате cancel_invoice поднимает DomainError внутри обработчика<br>БД: trg_invoices_cancel_guard | R-APP-UNARCHIVE-03, R-BILL-UNARCHIVE-01 | Сравнивать полную сумму счёта (с надбавкой) и аннулировать после проверки, а не при возврате? Что делать с частично оплаченным счётом? |
++| D-14 | medium | Возврат из архива аннулирует счёт до проверки и по цене без надбавки | §5: если до архива был неоплаченный счёт, новый выставляется после проверки, только если сумма изменилась | services/applications/service.py::unarchive:271 сравнивает books_price без markup_pct; services/billing/consumers.py::on_unarchived:27 сразу аннулирует счёт, а при частичной оплате cancel_invoice поднимает DomainError внутри обработчика<br>БД: trg_invoices_cancel_guard | R-APP-UNARCHIVE-03, R-BILL-UNARCHIVE-01 | Сравнивать полную сумму счёта (с надбавкой) и аннулировать после проверки, а не при возврате? Что делать с частично оплаченным счётом? |
+ | D-15 | medium | Частично оплаченный счёт заявки-дубля остаётся действующим | §6: выставленный по второй заявке счёт аннулируется | services/billing/consumers.py::on_closed_duplicate:20 аннулирует только счета с paid_amount = 0<br>БД: trg_invoices_cancel_guard | R-BILL-DUPLICATE-01, R-APP-DEDUP-02 | Должен ли главный бухгалтер получать задачу на возврат частичной оплаты по дублю? |
+ | D-16 | medium | Срок просрочки задан литералом и отсчитывается от issued_at, а не от due_at | §14: срок пользования — месяц с даты выдачи; срыв система отмечает автоматически | services/scheduling/jobs.py::flag_overdue:16 — timedelta(days=30) вместо settings.LOAN_PERIOD_DAYS или loans.due_at; книгу, возвращённую с опозданием до запуска задачи, не штрафуют | R-SCHED-OVERDUE-01, R-SCHED-ISSUE-02, R-CHAT-EVENTS-08 | Считать ли просрочку по loans.due_at и начислять ли штраф при позднем возврате в return_book? |
+ | D-17 | medium | Фоновые задачи не запускаются из репозитория | §5, §14: автоархив и отметка срыва срока выполняются автоматически | services/applications/jobs.py::archive_stale:14 и services/scheduling/jobs.py::flag_overdue:10 вызываются только из тестов; планировщика нет | R-APP-ARCHIVE-01, R-APP-ARCHIVE-02, R-BILL-ARCHIVE-01, R-SCHED-OVERDUE-01 | Где и с какой периодичностью запускаются задачи (в docstring — раз в час), и кто за этим следит? |
+@@ -31,9 +31,9 @@
+ | D-20 | low | Бухгалтер может взять заявку любого этапа и вида, кроме debt | §2 Бухгалтер: берёт в работу платные заявки, прошедшие проверку; §3: у социальной заявки бухгалтера нет, пока не понадобится штраф | services/billing/service.py::take_application:17 проверяет только kind≠debt<br>БД: PK billing.accountant_assignments(application_id) | R-BILL-ASSIGN-01, R-BILL-ASSIGN-02 | Ограничить ли закрепление этапами от awaiting_invoice (для paid) и наличием штрафа (для social)? |
+ | D-21 | medium | Социальные заявки между собой не дедуплицируются | §6: две заявки клиента по одной сфере — остаётся одна; исключение только между социальными и платными | services/applications/consumers.py::on_review_passed:43 вызывает close_duplicates только для debt; для social вызова нет | R-APP-DEDUP-01 | Должна ли вторая социальная заявка клиента по той же сфере закрываться как дубль? |
+ | D-22 | medium | Нет истории действий «кто и когда» | §16: все значимые действия сохраняются в истории заявки, удалить её нельзя | libs/bpm/engine.py::transition:53 не сохраняет actor; services/applications/listeners.py::_domain_events пишет stage_changed без исполнителя<br>БД: неизменяем только chat.messages (trg_chat_messages_immutable) | R-SCHEMA-HIST-01, R-CHAT-EVENTS-02, R-CHAT-EVENTS-07 | Считать ли ленту чата историей заявки (тогда в событиях нужен исполнитель) или нужен отдельный журнал аудита? |
+-| D-23 | medium | Заявку и данные клиента видит кто угодно; клиент заводится повторно | §16: проверяющий оператор видит только свою площадку; §2 Клиент: заявку не видит; §6: клиент заводится один раз | services/applications/api.py::get:55 без проверки; services/applications/service.py::create_client:63 без проверки дублей и роли<br>БД: у applications.clients нет уникальных ключей | R-SCHEMA-ACCESS-01, R-SCHEMA-CLIENT-01 | По какому признаку считать клиента тем же (паспорт, ФИО и дата рождения), и нужен ли уникальный индекс? |
++| D-23 | medium | Заявку и данные клиента видит кто угодно; клиент заводится повторно | §16: проверяющий оператор видит только свою площадку; §2 Клиент: заявку не видит; §6: клиент заводится один раз | services/applications/api.py::get:55 без проверки; services/applications/service.py::create_client:65 без проверки дублей и роли<br>БД: у applications.clients нет уникальных ключей | R-SCHEMA-ACCESS-01, R-SCHEMA-CLIENT-01 | По какому признаку считать клиента тем же (паспорт, ФИО и дата рождения), и нужен ли уникальный индекс? |
+ | D-24 | low | Письма об отмене уходят по архивной заявке и не содержат новой ссылки | §5: пока заявка в архиве, письма не отправляются; §7: при смене площадки — письмо об отмене и новая ссылка | services/notifications/consumers.py::on_booking_cancelled:21 передаёт только starts_at; services/notifications/service.py::send:42 не проверяет этап | R-NOTIF-RESET-01, R-NOTIF-RENDER-02 | Отправлять ли письмо об отмене в момент архивации и добавлять ли в письмо после смены площадки новую ссылку? |
+-| D-25 | low | Книги и заявка — упрощения в смене книг и освобождении книг | §4: смена книг после счёта до оплаты — аннулировать и выставить счёт заново; §8: книги освобождаются после отметки о возврате | services/applications/service.py::change_books:239 — только draft и needs_rework; services/scheduling/service.py::issue_books:223 удаляет holds при выдаче | R-APP-BOOKS-01, R-SCHED-ISSUE-03 | Достаточно ли менять книги после проверки только через архив, и подтверждаете ли, что после выдачи книги учитываются в scheduling.loans, а не в holds? |
++| D-25 | low | Книги и заявка — упрощения в смене книг и освобождении книг | §4: смена книг после счёта до оплаты — аннулировать и выставить счёт заново; §8: книги освобождаются после отметки о возврате | services/applications/service.py::change_books:245 — только draft и needs_rework; services/scheduling/service.py::issue_books:223 удаляет holds при выдаче | R-APP-BOOKS-01, R-SCHED-ISSUE-03 | Достаточно ли менять книги после проверки только через архив, и подтверждаете ли, что после выдачи книги учитываются в scheduling.loans, а не в holds? |
+ | D-26 | low | Чат неполон относительно схемы | §15: в чат попадают все события (назначения, платежи, перенос, неявка); к сообщениям прикрепляют файлы | services/chat/consumers.py::EVENT_TEXT — нет payment.fully_paid, payment.refunded, loan.lost, loan.damaged, books.issued и назначений; у chat.messages только body<br>БД: messages_check | R-CHAT-EVENTS-06, R-CHAT-EVENTS-07, R-CHAT-POST-03, R-SCHED-FINE-01 | Какие события обязательны в чате для первой версии и нужны ли вложения? |
+ | D-27 | low | Ограничение БД без правила — уникальное имя сферы | §1: сфера — тематический раздел; об уникальности названия не сказано | <br>БД: spheres_name_key (UNIQUE spheres.name) | R-SCHEMA-SPHERE-01 | Подтверждаете ли, что название сферы глобально уникально (а не в пределах площадки)? |
+ | D-28 | low | Удаление заявки не запрещено в БД | §4: удалить заявку нельзя | операции удаления нет<br>БД: application_books и attempts — ON DELETE CASCADE; триггера, запрещающего DELETE, нет | R-SCHEMA-APP-02, R-SCHEMA-APP-01 | Добавить ли триггер, запрещающий DELETE заявок и UPDATE operator_id? |
+@@ -94,7 +94,6 @@
+ - R-APP-DEDUP-01: Схема: остаётся та заявка, что первой дошла до записи. Код: OPEN_STAGES включает awaiting_issue, поэтому более поздний «победитель» (например, заявка в долг, прошедшая проверку после оплаты платной) закрывает уже дошедшую до записи и оплаченную заявку. Для социальных заявок дедупликация не запускается вообще.
+ - R-APP-REVIEW-02: Схема: назначает и переназначает только руководитель проверяющих. Код: роль вызывающего не проверяется, назначить может любой вызывающий.
+ - R-APP-UNARCHIVE-03: Схема: новый счёт выставляется после проверки, если сумма изменилась. Код: счёт аннулируется сразу при возврате из архива, до проверки; сравнивается только цена по прайсу без надбавки.
+-- R-APP-VENUE-CHANGE-02: Схема: social/debt меняют площадку только до формирования ссылки на запись. Код сервиса этого не проверяет — запрет срабатывает только в триггере БД на flush, без доменного сообщения.
+ - R-APP-VENUE-CHANGE-03: Схема: до оплаты счёт аннулируется и выставляется заново по прайсу и реквизитам новой площадки. Код: при частичной оплате (paid_amount > 0) счёт не аннулируется, а заявка остаётся в awaiting_payment со счётом на реквизиты и цены старой площадки.
+ - R-BILL-ASSIGN-01: Схема: бухгалтер берёт в работу платные заявки, прошедшие проверку. Код не проверяет этап и роль: заявку можно взять на любом этапе, в том числе в черновике или после закрытия.
+ - R-BILL-CANCEL-02: Схема: аннулирует счёт бухгалтер, закреплённый за заявкой. Код cancel_invoice не проверяет роль и закрепление, причину не требует. HTTP-маршрута для него нет: вызывается только подписчиками.
+@@ -121,7 +120,7 @@
+ - R-SCHED-LINK-03: Схема: по закрытой заявке ссылка не работает. Код: на закрытие заявки (books_out->closed) модуль не подписан, ссылка на сдачу (purpose=return) после закрытия остаётся активной.
+ - R-SCHED-OVERDUE-01: Срок просрочки зашит литералом timedelta(days=30), а не берётся из LOAN_PERIOD_DAYS или loans.due_at. Если настройку изменить, due_at и момент начисления штрафа разойдутся. Схема: «месяц с выдачи», а не фиксированные 30 дней. Книга, возвращённая с опозданием до запуска задачи, штраф не получает.
+ - R-SCHED-RETURN-01: Возврат не связан с записью на сдачу: return_book не требует записи и не закрывает её, поэтому запись с purpose=return остаётся в статусе active после приёма книг.
+-- R-SCHED-VENUE-CHANGE-01: Схема: у социальных заявок и заявок в долг площадку меняют только до формирования ссылки, после выдачи — никогда. Код change_venue блокирует смену только для paid на awaiting_issue и books_out. У debt/social на этапе books_out смена проходит: записи на сдачу отменяются, ссылка на сдачу гаснет, а новая не выпускается (выпуск только при awaiting_issue) — клиент не может записаться на сдачу. Письмо об отмене уходит по шаблону старой площадки (venue_id окна).
++- R-SCHED-VENUE-CHANGE-01: Письмо об отмене уходит по шаблону старой площадки (venue_id окна).
+ - R-SCHEMA-ACCESS-01: в проекте не реализовано: GET /applications/{application_id} (services/applications/api.py::get) отдаёт заявку без идентификации и проверки роли
+ - R-SCHEMA-ADMIN-01: в проекте не реализовано: billing.fine_rates только читается в services/billing/service.py::create_fine; функции или эндпоинта для записи ставок нет ни в applications/admin.py, ни в billing
+ - R-SCHEMA-APP-01: реализовано неявно: operator_id задаётся только при создании и в коде нигде не меняется; в БД защиты нет — trg_applications_core_immutable охраняет только sphere_id и representative_id
+diff --git a/docs/roles.md b/docs/roles.md
+index 966da33..791b14e 100644
+--- a/docs/roles.md
++++ b/docs/roles.md
+@@ -14,7 +14,7 @@
+ - R-APP-BOOKS-01 [draft] Книги меняют только в черновике или на доработке
+ - R-APP-REVIEW-01 [draft] Отправка на проверку фиксирует начало проверки один раз
+ - R-APP-VENUE-CHANGE-01 [draft] Смену площадки выполняет оператор заявки; закрытую заявку не меняют
+-- R-APP-VENUE-CHANGE-02 [draft] Платной заявке после оплаты площадку не меняют; после выдачи книг — никому
++- R-APP-VENUE-CHANGE-02 [draft] Платной заявке после оплаты и заявке в долг после ссылки на запись площадку не меняют; после выдачи книг — никому
+ - R-APP-VENUE-CHANGE-03 [draft] Смена площадки переназначает проверяющего оператора и запускает реакции billing, scheduling и chat
+ - R-APP-ARCHIVE-03 [draft] Ручной архив и его последствия — закрытие попытки, сброс записей, сообщение в чат
+ - R-APP-UNARCHIVE-01 [draft] Возврат из архива начинает новую попытку и новую проверку
+@@ -264,18 +264,18 @@
+ 
+ | Функция | Роль | Проверки доступа |
+ |---|---|---|
+-| [`service.py::_require_operator`](../services/applications/service.py#L38) | Оператор | заявка закреплена за другим оператором |
+-| [`service.py::approve`](../services/applications/service.py#L167) | Проверяющий | заявку проверяет другой проверяющий |
+-| [`service.py::archive`](../services/applications/service.py#L246) | Оператор | — |
+-| [`service.py::assign_reviewer`](../services/applications/service.py#L122) | Проверяющий | — |
+-| [`service.py::change_books`](../services/applications/service.py#L234) | Оператор | — |
+-| [`service.py::change_venue`](../services/applications/service.py#L199) | Оператор | — |
+-| [`service.py::close`](../services/applications/service.py#L307) | Проверяющий оператор | заявку закрывает проверяющий оператор её площадки |
+-| [`service.py::create_application`](../services/applications/service.py#L70) | Оператор | — |
+-| [`service.py::return_for_rework`](../services/applications/service.py#L189) | Проверяющий | заявку проверяет другой проверяющий |
+-| [`service.py::submit_for_review`](../services/applications/service.py#L113) | Оператор | — |
+-| [`service.py::unarchive`](../services/applications/service.py#L265) | Оператор | — |
+-| [`service.py::update_client`](../services/applications/service.py#L131) | Проверяющий | обновляет данные клиента только проверяющий заявки |
++| [`service.py::_require_operator`](../services/applications/service.py#L40) | Оператор | заявка закреплена за другим оператором |
++| [`service.py::approve`](../services/applications/service.py#L169) | Проверяющий | заявку проверяет другой проверяющий |
++| [`service.py::archive`](../services/applications/service.py#L252) | Оператор | — |
++| [`service.py::assign_reviewer`](../services/applications/service.py#L124) | Проверяющий | — |
++| [`service.py::change_books`](../services/applications/service.py#L240) | Оператор | — |
++| [`service.py::change_venue`](../services/applications/service.py#L201) | Оператор | — |
++| [`service.py::close`](../services/applications/service.py#L313) | Проверяющий оператор | заявку закрывает проверяющий оператор её площадки |
++| [`service.py::create_application`](../services/applications/service.py#L72) | Оператор | — |
++| [`service.py::return_for_rework`](../services/applications/service.py#L191) | Проверяющий | заявку проверяет другой проверяющий |
++| [`service.py::submit_for_review`](../services/applications/service.py#L115) | Оператор | — |
++| [`service.py::unarchive`](../services/applications/service.py#L271) | Оператор | — |
++| [`service.py::update_client`](../services/applications/service.py#L133) | Проверяющий | обновляет данные клиента только проверяющий заявки |
+ | [`service.py::_require_accountant`](../services/billing/service.py#L29) | Бухгалтер | заявка закреплена за другим бухгалтером |
+ | [`service.py::issue_books_invoice`](../services/billing/service.py#L35) | Бухгалтер | — |
+ | [`service.py::issue_fine_invoice`](../services/billing/service.py#L177) | Бухгалтер | — |
+diff --git a/docs/rules/applications.md b/docs/rules/applications.md
+index e3a54e3..5084342 100644
+--- a/docs/rules/applications.md
++++ b/docs/rules/applications.md
+@@ -10,7 +10,7 @@
+ 
+ При создании заявки вид задаётся один раз: если оператор отметил заявку социальной — social, иначе debt, если представителю разрешено работать в долг (debt_allowed), иначе paid. Последующая смена debt_allowed у представителя на вид существующих заявок не влияет. Допустимые значения вида ограничены CHECK в БД.
+ 
+-- Реализация: [`services/applications/service.py::create_application:90-93`](../../services/applications/service.py#L90)
++- Реализация: [`services/applications/service.py::create_application:92-95`](../../services/applications/service.py#L92)
+ - БД: [`applications_kind_check`](../../migrations/versions/0001_initial.py#L85)
+ - Тесты: `tests/test_kinds.py::test_debt_kind_comes_from_representative`, `tests/test_kinds.py::test_social_application_skips_invoice`
+ - Роли: Оператор
+@@ -22,7 +22,7 @@
+ 
+ Создание заявки, смена площадки и смена площадки при возврате из архива требуют, чтобы на площадке была запись venue_spheres для сферы заявки с active=true; иначе DomainError «на площадке нет сферы заявки».
+ 
+-- Реализация: [`services/applications/service.py::_check_sphere_at_venue:44-46`](../../services/applications/service.py#L44), [`services/applications/service.py::create_application:87-87`](../../services/applications/service.py#L87)
++- Реализация: [`services/applications/service.py::_check_sphere_at_venue:46-48`](../../services/applications/service.py#L46), [`services/applications/service.py::create_application:89-89`](../../services/applications/service.py#L89)
+ - Тесты: `tests/test_venue_change.py::test_new_venue_must_have_sphere`
+ - Роли: Оператор
+ - Связанные: R-APP-ADMIN-04, R-APP-VENUE-CHANGE-01, R-APP-UNARCHIVE-02
+@@ -33,7 +33,7 @@
+ 
+ Список книг не может быть пустым («в заявке нет книг»); каждая книга должна принадлежать сфере заявки и иметь цену в прайсе площадки заявки, иначе DomainError. Проверка выполняется при создании, смене книг, смене площадки и при возврате из архива с новыми площадкой или книгами.
+ 
+-- Реализация: [`services/applications/service.py::_check_books:50-60`](../../services/applications/service.py#L50)
++- Реализация: [`services/applications/service.py::_check_books:52-62`](../../services/applications/service.py#L52)
+ - БД: [`prices_price_check`](../../migrations/versions/0001_initial.py#L58)
+ - Роли: Оператор
+ - Связанные: R-APP-CREATE-02, R-APP-BOOKS-01
+@@ -44,7 +44,7 @@
+ 
+ Новая заявка создаётся в этапе draft; оператор-создатель закрепляется за ней, site_checker_id берётся из площадки, создаётся попытка №1 с датой начала. Номер попытки уникален в пределах заявки (UNIQUE в БД).
+ 
+-- Реализация: [`services/applications/service.py::create_application:94-109`](../../services/applications/service.py#L94)
++- Реализация: [`services/applications/service.py::create_application:96-111`](../../services/applications/service.py#L96)
+ - БД: [`attempts_application_id_no_key`](../../migrations/versions/0001_initial.py#L109), [`applications_stage_check`](../../migrations/versions/0001_initial.py#L86)
+ - Тесты: `tests/test_paid_flow.py::test_paid_application_full_path`
+ - Роли: Оператор
+@@ -56,7 +56,7 @@
+ 
+ Отправка на проверку, смена площадки, смена книг, ручной архив и возврат из архива доступны только оператору, закреплённому за заявкой (operator_id); иначе AccessDenied «заявка закреплена за другим оператором».
+ 
+-- Реализация: [`services/applications/service.py::_require_operator:39-40`](../../services/applications/service.py#L39), [`services/applications/service.py::submit_for_review:115-115`](../../services/applications/service.py#L115), [`services/applications/service.py::change_venue:203-203`](../../services/applications/service.py#L203), [`services/applications/service.py::change_books:238-238`](../../services/applications/service.py#L238), [`services/applications/service.py::archive:255-256`](../../services/applications/service.py#L255), [`services/applications/service.py::unarchive:274-274`](../../services/applications/service.py#L274)
++- Реализация: [`services/applications/service.py::_require_operator:41-42`](../../services/applications/service.py#L41), [`services/applications/service.py::submit_for_review:117-117`](../../services/applications/service.py#L117), [`services/applications/service.py::change_venue:205-205`](../../services/applications/service.py#L205), [`services/applications/service.py::change_books:244-244`](../../services/applications/service.py#L244), [`services/applications/service.py::archive:261-262`](../../services/applications/service.py#L261), [`services/applications/service.py::unarchive:280-280`](../../services/applications/service.py#L280)
+ - Тесты: `tests/test_review.py::test_operator_works_only_with_own_applications`
+ - Роли: Оператор
+ 
+@@ -75,7 +75,7 @@
+ 
+ Оператор заявки может заменить список книг только на этапах draft и needs_rework; иначе DomainError «книги меняют в черновике или на доработке». Новые книги проходят проверку сферы и прайса.
+ 
+-- Реализация: [`services/applications/service.py::change_books:239-242`](../../services/applications/service.py#L239)
++- Реализация: [`services/applications/service.py::change_books:245-248`](../../services/applications/service.py#L245)
+ - Роли: Оператор
+ - Связанные: R-APP-CREATE-03, R-APP-UNARCHIVE-02
+ - ⚠ Расхождение со схемой: Схема (§4): если после выставления счёта до оплаты меняются книги, счёт аннулируется и выставляется заново. Код: после проверки книги меняются только через архив и возврат из него (R-APP-UNARCHIVE-02); других путей смены книг нет.
+@@ -86,7 +86,7 @@
+ 
+ Оператор заявки переводит её из draft или needs_rework в on_review. Поле review_started_at заполняется только при первой отправке и не сбрасывается при возврате с доработки — от него считается срок автоархива (сбрасывается только при возврате из архива).
+ 
+-- Реализация: [`services/applications/service.py::submit_for_review:116-118`](../../services/applications/service.py#L116), [`draft->on_review`](../../bpm/application_process.yaml#L20), [`needs_rework->on_review`](../../bpm/application_process.yaml#L20)
++- Реализация: [`services/applications/service.py::submit_for_review:118-120`](../../services/applications/service.py#L118), [`draft->on_review`](../../bpm/application_process.yaml#L20), [`needs_rework->on_review`](../../bpm/application_process.yaml#L20)
+ - Тесты: `tests/test_review.py::test_incomplete_client_goes_to_rework`, `tests/test_archive.py::test_stuck_review_goes_to_archive_after_month`
+ - Роли: Оператор
+ - Связанные: R-APP-ARCHIVE-01, R-APP-ACCESS-01
+@@ -97,7 +97,7 @@
+ 
+ Назначить или переназначить проверяющего можно, пока заявка в draft, on_review или needs_rework; иначе DomainError «проверяющего назначают до прохождения проверки». Проверка роли (руководитель проверяющих) в коде отсутствует — указана только в docstring.
+ 
+-- Реализация: [`services/applications/service.py::assign_reviewer:125-127`](../../services/applications/service.py#L125)
++- Реализация: [`services/applications/service.py::assign_reviewer:127-129`](../../services/applications/service.py#L127)
+ - Тесты: `tests/test_review.py::test_only_assigned_reviewer_approves`
+ - Роли: Руководитель проверяющих
+ - Связанные: R-APP-REVIEW-03
+@@ -109,7 +109,7 @@
+ 
+ Без назначенного проверяющего заявку подтвердить нельзя (DomainError «на заявку не назначен проверяющий»); подтверждение и возврат на доработку выполняет только reviewer_id заявки, иначе AccessDenied «заявку проверяет другой проверяющий». Возврат переводит on_review -> needs_rework.
+ 
+-- Реализация: [`services/applications/service.py::approve:169-172`](../../services/applications/service.py#L169), [`services/applications/service.py::return_for_rework:193-195`](../../services/applications/service.py#L193), [`on_review->needs_rework`](../../bpm/application_process.yaml#L21)
++- Реализация: [`services/applications/service.py::approve:171-174`](../../services/applications/service.py#L171), [`services/applications/service.py::return_for_rework:195-197`](../../services/applications/service.py#L195), [`on_review->needs_rework`](../../bpm/application_process.yaml#L21)
+ - Тесты: `tests/test_review.py::test_approve_requires_assigned_reviewer`, `tests/test_review.py::test_only_assigned_reviewer_approves`, `tests/test_review.py::test_incomplete_client_goes_to_rework`
+ - Роли: Проверяющий
+ - Связанные: R-APP-REVIEW-02, R-APP-REVIEW-04
+@@ -120,7 +120,7 @@
+ 
+ При подтверждении проверяются обязательные поля клиента из REQUIRED_CLIENT_FIELDS (full_name, passport, birth_date); если чего-то нет — DomainError «не хватает данных клиента: …».
+ 
+-- Реализация: [`services/applications/service.py::approve:173-175`](../../services/applications/service.py#L173), [`services/applications/review.py::missing_client_fields:6-7`](../../services/applications/review.py#L6)
++- Реализация: [`services/applications/service.py::approve:175-177`](../../services/applications/service.py#L175), [`services/applications/review.py::missing_client_fields:6-7`](../../services/applications/review.py#L6)
+ - Настройки: `services/applications/review.py::REQUIRED_CLIENT_FIELDS`
+ - Тесты: `tests/test_review.py::test_incomplete_client_goes_to_rework`
+ - Роли: Проверяющий
+@@ -132,7 +132,7 @@
+ 
+ После подтверждения платная заявка уходит в awaiting_payment, если по ней есть действующий счёт за книги (после возврата из архива или повторной проверки), иначе в awaiting_invoice; заявки в долг и социальные сразу уходят в awaiting_issue и становятся готовыми к записи. Публикуется application.review_passed.
+ 
+-- Реализация: [`services/applications/service.py::approve:177-185`](../../services/applications/service.py#L177), [`on_review->awaiting_invoice`](../../bpm/application_process.yaml#L23), [`on_review->awaiting_payment`](../../bpm/application_process.yaml#L24), [`on_review->awaiting_issue`](../../bpm/application_process.yaml#L25), [`guard:has_active_invoice`](../../bpm/application_process.yaml)
++- Реализация: [`services/applications/service.py::approve:179-187`](../../services/applications/service.py#L179), [`on_review->awaiting_invoice`](../../bpm/application_process.yaml#L23), [`on_review->awaiting_payment`](../../bpm/application_process.yaml#L24), [`on_review->awaiting_issue`](../../bpm/application_process.yaml#L25), [`guard:has_active_invoice`](../../bpm/application_process.yaml)
+ - Тесты: `tests/test_paid_flow.py::test_paid_application_full_path`, `tests/test_kinds.py::test_debt_application_skips_invoice`, `tests/test_kinds.py::test_social_application_skips_invoice`
+ - Роли: Проверяющий
+ - Связанные: R-APP-BOOKING-01, R-APP-DEDUP-01
+@@ -143,7 +143,7 @@
+ 
+ При переходе в awaiting_issue (после проверки debt/social или после полной оплаты paid) заполняется booking_reached_at (один раз) и публикуется application.ready_for_booking; scheduling по нему формирует публичную ссылку на запись (issue_link).
+ 
+-- Реализация: [`services/applications/service.py::mark_ready_for_booking:158-164`](../../services/applications/service.py#L158), [`services/scheduling/consumers.py::on_ready_for_booking:13-13`](../../services/scheduling/consumers.py#L13)
++- Реализация: [`services/applications/service.py::mark_ready_for_booking:160-166`](../../services/applications/service.py#L160), [`services/scheduling/consumers.py::on_ready_for_booking:13-13`](../../services/scheduling/consumers.py#L13)
+ - Тесты: `tests/test_kinds.py::test_debt_application_skips_invoice`, `tests/test_paid_flow.py::test_paid_application_full_path`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-APP-REVIEW-05, R-APP-PAY-03, R-APP-UNARCHIVE-02
+@@ -154,7 +154,7 @@
+ 
+ Если указана заявка-источник, обновить клиента может только её проверяющий (AccessDenied иначе). Разрешены только поля CLIENT_EDITABLE_FIELDS (full_name, passport, birth_date, email), прочие — DomainError «неизвестные поля клиента». Без source_application_id проверка прав не выполняется.
+ 
+-- Реализация: [`services/applications/service.py::update_client:140-153`](../../services/applications/service.py#L140)
++- Реализация: [`services/applications/service.py::update_client:142-155`](../../services/applications/service.py#L142)
+ - Настройки: `services/applications/service.py::CLIENT_EDITABLE_FIELDS`
+ - Тесты: `tests/test_review.py::test_incomplete_client_goes_to_rework`
+ - Роли: Проверяющий
+@@ -244,7 +244,7 @@
+ 
+ Переход books_out -> closed выполняет только site_checker заявки (AccessDenied иначе) и только при guard settled: нет открытых выдач (scheduling.open_loans_count) и непогашенных штрафов (billing.open_fines_count).
+ 
+-- Реализация: [`services/applications/service.py::close:309-311`](../../services/applications/service.py#L309), [`services/applications/guards.py::settled:12-14`](../../services/applications/guards.py#L12), [`books_out->closed`](../../bpm/application_process.yaml#L35), [`guard:settled`](../../bpm/application_process.yaml)
++- Реализация: [`services/applications/service.py::close:315-317`](../../services/applications/service.py#L315), [`services/applications/guards.py::settled:12-14`](../../services/applications/guards.py#L12), [`books_out->closed`](../../bpm/application_process.yaml#L35), [`guard:settled`](../../bpm/application_process.yaml)
+ - Тесты: `tests/test_paid_flow.py::test_cannot_close_with_books_out`, `tests/test_paid_flow.py::test_paid_application_full_path`
+ - Роли: Проверяющий оператор
+ - Связанные: R-APP-ISSUE-01
+@@ -255,35 +255,41 @@
+ 
+ Площадку меняет только закреплённый оператор; для заявок closed и closed_duplicate — DomainError «заявка закрыта». На новой площадке должна быть активна сфера заявки и все книги должны быть в её прайсе. Смена на ту же площадку ничего не делает.
+ 
+-- Реализация: [`services/applications/service.py::change_venue:203-214`](../../services/applications/service.py#L203)
++- Реализация: [`services/applications/service.py::change_venue:205-220`](../../services/applications/service.py#L205)
+ - БД: [`trg_applications_venue_lock`](../../migrations/versions/0001_initial.py#L141)
+ - Настройки: `services/applications/service.py::TERMINAL_STAGES`
+ - Тесты: `tests/test_venue_change.py::test_new_venue_must_have_sphere`
+ - Роли: Оператор
+ - Связанные: R-APP-CREATE-02, R-APP-CREATE-03, R-APP-VENUE-CHANGE-02, R-APP-VENUE-CHANGE-03
+ 
+-## R-APP-VENUE-CHANGE-02 — Платной заявке после оплаты площадку не меняют; после выдачи книг — никому
++## R-APP-VENUE-CHANGE-02 — Платной заявке после оплаты и заявке в долг после ссылки на запись площадку не меняют; после выдачи книг — никому
+ 
+ `draft` · invariant · §7 Площадки и цены
+ 
+-Код запрещает смену площадки платной заявки на этапах PAID_VENUE_LOCKED_STAGES (awaiting_issue, books_out): «после оплаты площадку меняют только через возврат платежа». Триггер БД дополнительно запрещает смену для любой заявки на books_out, closed, closed_duplicate, а для social и debt — на любом этапе, кроме draft, on_review, needs_rework, archived (после формирования ссылки на запись). Для social/debt запрет есть только в БД — пользователь получит ошибку check_violation, а не DomainError.
++Код запрещает смену площадки:
++- платной заявке на этапах PAID_VENUE_LOCKED_STAGES (awaiting_issue, books_out) — «после оплаты площадку меняют только через возврат платежа»;
++- любой заявке на books_out — «после выдачи книг площадку не меняют»;
++- заявке в долг (debt) вне DEBT_VENUE_EDITABLE_STAGES (draft, on_review, needs_rework, archived), то есть после формирования ссылки на запись — «заявке в долг площадку меняют только до формирования ссылки на запись».
+ 
+-- Реализация: [`services/applications/service.py::change_venue:206-207`](../../services/applications/service.py#L206)
+-- БД: [`trg_applications_venue_lock`](../../migrations/versions/0001_initial.py#L141), [`forbid_venue_change`](../../migrations/versions/0001_initial.py#L125)
+-- Настройки: `services/applications/service.py::PAID_VENUE_LOCKED_STAGES`
+-- Тесты: `tests/test_venue_change.py::test_paid_venue_change_after_payment_forbidden`
++Социальной заявке (social) площадку меняют на любом этапе до выдачи книг, в том числе на awaiting_issue, когда ссылка на запись уже сформирована: запись сбрасывается и выпускается новая ссылка (R-APP-VENUE-CHANGE-03, R-SCHED-VENUE-CHANGE-01).
++
++Триггер БД `forbid_venue_change` дублирует запрет: для любой заявки на books_out, closed, closed_duplicate, а для debt — на любом этапе, кроме draft, on_review, needs_rework, archived. Обход сервиса получит check_violation. До миграции 0002 триггер так же запрещал смену и для social.
++
++- Реализация: [`services/applications/service.py::change_venue:208-213`](../../services/applications/service.py#L208)
++- БД: [`trg_applications_venue_lock`](../../migrations/versions/0001_initial.py#L141), [`forbid_venue_change`](../../migrations/versions/0002_social_venue_change.py#L15)
++- Настройки: `services/applications/service.py::PAID_VENUE_LOCKED_STAGES`, `services/applications/service.py::DEBT_VENUE_EDITABLE_STAGES`
++- Тесты: `tests/test_venue_change.py::test_paid_venue_change_after_payment_forbidden`, `tests/test_venue_change.py::test_social_venue_change_after_booking_link`, `tests/test_venue_change.py::test_social_venue_change_after_issue_forbidden`, `tests/test_venue_change.py::test_debt_venue_change_after_booking_link_forbidden`, `tests/test_venue_change.py::test_venue_lock_trigger_by_kind`
+ - Роли: Оператор
+-- Связанные: R-APP-VENUE-CHANGE-01, R-APP-PAY-04
+-- ⚠ Расхождение со схемой: Схема: social/debt меняют площадку только до формирования ссылки на запись. Код сервиса этого не проверяет — запрет срабатывает только в триггере БД на flush, без доменного сообщения.
++- Связанные: R-APP-VENUE-CHANGE-01, R-APP-VENUE-CHANGE-03, R-APP-PAY-04, R-SCHED-VENUE-CHANGE-01
+ 
+ ## R-APP-VENUE-CHANGE-03 — Смена площадки переназначает проверяющего оператора и запускает реакции billing, scheduling и chat
+ 
+ `draft` · effect · §7 Площадки и цены
+ 
+-При смене площадки за заявкой закрепляется site_checker новой площадки и публикуется application.venue_changed. Billing аннулирует действующий счёт за книги без оплат (дальше invoice.cancelled возвращает заявку в awaiting_invoice); scheduling сбрасывает записи и, если заявка в awaiting_issue, выдаёт новую ссылку; чат фиксирует смену.
++При смене площадки за заявкой закрепляется site_checker новой площадки и публикуется application.venue_changed. Billing аннулирует действующий счёт за книги без оплат (дальше invoice.cancelled возвращает заявку в awaiting_invoice); scheduling сбрасывает записи и, если заявка в awaiting_issue (на этом этапе площадку меняют только социальным заявкам), выдаёт новую ссылку; чат фиксирует смену.
+ 
+-- Реализация: [`services/applications/service.py::change_venue:216-230`](../../services/applications/service.py#L216), [`services/billing/consumers.py::on_venue_changed:14-16`](../../services/billing/consumers.py#L14), [`services/scheduling/consumers.py::on_venue_changed:18-21`](../../services/scheduling/consumers.py#L18), [`services/chat/consumers.py::_handler:24-25`](../../services/chat/consumers.py#L24), [`awaiting_payment->awaiting_invoice`](../../bpm/application_process.yaml#L28)
+-- Тесты: `tests/test_venue_change.py::test_venue_change_reassigns_site_checker`, `tests/test_venue_change.py::test_venue_change_before_payment_reissues_invoice`
++- Реализация: [`services/applications/service.py::change_venue:222-236`](../../services/applications/service.py#L222), [`services/billing/consumers.py::on_venue_changed:14-16`](../../services/billing/consumers.py#L14), [`services/scheduling/consumers.py::on_venue_changed:18-21`](../../services/scheduling/consumers.py#L18), [`services/chat/consumers.py::_handler:24-25`](../../services/chat/consumers.py#L24), [`awaiting_payment->awaiting_invoice`](../../bpm/application_process.yaml#L28)
++- Тесты: `tests/test_venue_change.py::test_venue_change_reassigns_site_checker`, `tests/test_venue_change.py::test_venue_change_before_payment_reissues_invoice`, `tests/test_venue_change.py::test_social_venue_change_after_booking_link`
+ - Роли: Оператор
+ - Связанные: R-APP-PAY-02, R-APP-VENUE-CHANGE-01
+ - ⚠ Расхождение со схемой: Схема: до оплаты счёт аннулируется и выставляется заново по прайсу и реквизитам новой площадки. Код: при частичной оплате (paid_amount > 0) счёт не аннулируется, а заявка остаётся в awaiting_payment со счётом на реквизиты и цены старой площадки.
+@@ -322,7 +328,7 @@ archive_stale архивирует платные заявки на awaiting_pay
+ 
+ Оператор заявки отправляет в архив заявку на этапах draft, on_review, needs_rework, awaiting_invoice или awaiting_payment (любой вид); из awaiting_issue в архив уводит только chief_accountant (возврат платежа); после books_out архив невозможен. Архив закрывает текущую попытку (ended_at, outcome) и публикует application.archived — scheduling сбрасывает записи, чат фиксирует событие.
+ 
+-- Реализация: [`services/applications/service.py::archive:255-261`](../../services/applications/service.py#L255), [`services/scheduling/consumers.py::on_archived:26-26`](../../services/scheduling/consumers.py#L26), [`draft->archived`](../../bpm/application_process.yaml#L39), [`on_review->archived`](../../bpm/application_process.yaml#L37), [`needs_rework->archived`](../../bpm/application_process.yaml#L37), [`awaiting_invoice->archived`](../../bpm/application_process.yaml#L39), [`awaiting_payment->archived`](../../bpm/application_process.yaml#L38), [`awaiting_issue->archived`](../../bpm/application_process.yaml#L40)
++- Реализация: [`services/applications/service.py::archive:261-267`](../../services/applications/service.py#L261), [`services/scheduling/consumers.py::on_archived:26-26`](../../services/scheduling/consumers.py#L26), [`draft->archived`](../../bpm/application_process.yaml#L39), [`on_review->archived`](../../bpm/application_process.yaml#L37), [`needs_rework->archived`](../../bpm/application_process.yaml#L37), [`awaiting_invoice->archived`](../../bpm/application_process.yaml#L39), [`awaiting_payment->archived`](../../bpm/application_process.yaml#L38), [`awaiting_issue->archived`](../../bpm/application_process.yaml#L40)
+ - БД: [`attempts_outcome_check`](../../migrations/versions/0001_initial.py#L108)
+ - Тесты: `tests/test_archive.py::test_paid_application_cannot_be_archived_by_operator_after_payment`, `tests/test_archive.py::test_unarchive_starts_new_attempt_and_review`
+ - Роли: Оператор, Главный бухгалтер, Система (события и фоновые задачи)
+@@ -334,7 +340,7 @@ archive_stale архивирует платные заявки на awaiting_pay
+ 
+ Только оператор заявки и только из этапа archived (иначе DomainError «заявка не в архиве») возвращает заявку: добавляется попытка с номером N+1, review_started_at сбрасывается на текущий момент, заявка переходит в on_review. Число попыток не ограничено.
+ 
+-- Реализация: [`services/applications/service.py::unarchive:274-303`](../../services/applications/service.py#L274), [`archived->on_review`](../../bpm/application_process.yaml#L41)
++- Реализация: [`services/applications/service.py::unarchive:280-309`](../../services/applications/service.py#L280), [`archived->on_review`](../../bpm/application_process.yaml#L41)
+ - БД: [`attempts_application_id_no_key`](../../migrations/versions/0001_initial.py#L109)
+ - Тесты: `tests/test_archive.py::test_unarchive_starts_new_attempt_and_review`
+ - Роли: Оператор
+@@ -346,7 +352,7 @@ archive_stale архивирует платные заявки на awaiting_pay
+ 
+ Новые площадку или книги при возврате из архива можно указать, только если booking_reached_at пуст; иначе DomainError «заявка уже доходила до записи». Новые значения проходят проверку сферы и прайса, при смене площадки переназначается site_checker. Сфера остаётся прежней.
+ 
+-- Реализация: [`services/applications/service.py::unarchive:279-292`](../../services/applications/service.py#L279)
++- Реализация: [`services/applications/service.py::unarchive:285-298`](../../services/applications/service.py#L285)
+ - БД: [`trg_applications_venue_lock`](../../migrations/versions/0001_initial.py#L141)
+ - Роли: Оператор
+ - Связанные: R-APP-BOOKING-01, R-APP-CORE-01, R-APP-UNARCHIVE-03
+@@ -357,7 +363,7 @@ archive_stale архивирует платные заявки на awaiting_pay
+ 
+ unarchive сравнивает стоимость книг по прайсу площадки до и после изменений (books_price, без надбавки) и публикует application.unarchived с amount_changed. Billing при изменении суммы аннулирует действующий счёт за книги, иначе сбрасывает payment_clock_started_at на текущий момент.
+ 
+-- Реализация: [`services/applications/service.py::unarchive:277-303`](../../services/applications/service.py#L277), [`services/billing/consumers.py::on_unarchived:28-35`](../../services/billing/consumers.py#L28)
++- Реализация: [`services/applications/service.py::unarchive:283-309`](../../services/applications/service.py#L283), [`services/billing/consumers.py::on_unarchived:28-35`](../../services/billing/consumers.py#L28)
+ - Роли: Оператор
+ - Связанные: R-APP-UNARCHIVE-01, R-APP-ARCHIVE-02, R-APP-CALC-01
+ - ⚠ Расхождение со схемой: Схема: новый счёт выставляется после проверки, если сумма изменилась. Код: счёт аннулируется сразу при возврате из архива, до проверки; сравнивается только цена по прайсу без надбавки.
+@@ -455,6 +461,6 @@ set_venue_max_capacity отклоняет значение меньше 1 (Domai
+ 
+ set_sphere_active включает или выключает пару площадка–сфера (создаёт запись, если её нет). Неактивная сфера блокирует создание заявки, смену площадки на эту площадку и возврат из архива со сменой площадки или книг; на действующие заявки отключение не влияет.
+ 
+-- Реализация: [`services/applications/admin.py::set_sphere_active:50-54`](../../services/applications/admin.py#L50), [`services/applications/service.py::_check_sphere_at_venue:44-46`](../../services/applications/service.py#L44)
++- Реализация: [`services/applications/admin.py::set_sphere_active:50-54`](../../services/applications/admin.py#L50), [`services/applications/service.py::_check_sphere_at_venue:46-48`](../../services/applications/service.py#L46)
+ - Роли: Администратор
+ - Связанные: R-APP-CREATE-02
+diff --git a/docs/rules/scheduling.md b/docs/rules/scheduling.md
+index 5697d25..e83bb63 100644
+--- a/docs/rules/scheduling.md
++++ b/docs/rules/scheduling.md
+@@ -338,12 +338,13 @@ flag_overdue выбирает выдачи со статусом out без фл
+ 
+ `draft` · effect · §7 Площадки и цены
+ 
+-На application.venue_changed модуль сбрасывает записи (reason=venue_changed: письмо об отмене, освобождение книг, гашение ссылок). Если заявка на этапе awaiting_issue, выпускается новая ссылка purpose=issue. Проверяющий оператор новой площадки назначается в applications.change_venue.
++На application.venue_changed модуль сбрасывает записи (reason=venue_changed: письмо об отмене, освобождение книг, гашение ссылок). Если заявка на этапе awaiting_issue, выпускается новая ссылка purpose=issue — так бывает только у социальной заявки, которой площадку меняют после формирования ссылки (R-APP-VENUE-CHANGE-02); клиент записывается заново на окна новой площадки. Проверяющий оператор новой площадки назначается в applications.change_venue.
+ 
+ - Реализация: [`services/scheduling/consumers.py::on_venue_changed:17-21`](../../services/scheduling/consumers.py#L17), [`services/scheduling/service.py::reset_bookings:286-299`](../../services/scheduling/service.py#L286)
+ - Роли: Оператор
+-- Связанные: R-SCHED-RESET-01, R-SCHED-LINK-01
+-- ⚠ Расхождение со схемой: Схема: у социальных заявок и заявок в долг площадку меняют только до формирования ссылки, после выдачи — никогда. Код change_venue блокирует смену только для paid на awaiting_issue и books_out. У debt/social на этапе books_out смена проходит: записи на сдачу отменяются, ссылка на сдачу гаснет, а новая не выпускается (выпуск только при awaiting_issue) — клиент не может записаться на сдачу. Письмо об отмене уходит по шаблону старой площадки (venue_id окна).
++- Тесты: `tests/test_venue_change.py::test_social_venue_change_after_booking_link`
++- Связанные: R-SCHED-RESET-01, R-SCHED-LINK-01, R-APP-VENUE-CHANGE-02
++- ⚠ Расхождение со схемой: Письмо об отмене уходит по шаблону старой площадки (venue_id окна).
+ 
+ ## R-SCHED-CLOSE-01 — Заявку нельзя закрыть, пока есть книги на руках
+ 
+diff --git a/docs/rules/schema.md b/docs/rules/schema.md
+index 363a192..964d7f1 100644
+--- a/docs/rules/schema.md
++++ b/docs/rules/schema.md
+@@ -37,7 +37,7 @@
+ 
+ Нового клиента заводит оператор. Клиент заводится в системе один раз, и его данные общие для всех его заявок.
+ 
+-- Реализация: [`services/applications/service.py::create_client`](../../services/applications/service.py#L63)
++- Реализация: [`services/applications/service.py::create_client`](../../services/applications/service.py#L65)
+ - Роли: Оператор
+ - ⚠ Расхождение со схемой: реализовано частично: create_client не проверяет роль; у applications.clients нет уникальности (паспорт, ФИО+дата рождения), поэтому один и тот же клиент может быть заведён дважды — и тогда дедупликация по client_id+sphere_id не сработает
+ 
+@@ -47,7 +47,7 @@
+ 
+ Оператор — создатель заявки. Переназначить оператора нельзя: на время отсутствия оператор передаёт свою учётную запись коллеге.
+ 
+-- Реализация: [`services/applications/service.py::create_application`](../../services/applications/service.py#L70)
++- Реализация: [`services/applications/service.py::create_application`](../../services/applications/service.py#L72)
+ - Роли: Оператор
+ - ⚠ Расхождение со схемой: реализовано неявно: operator_id задаётся только при создании и в коде нигде не меняется; в БД защиты нет — trg_applications_core_immutable охраняет только sphere_id и representative_id
+ 
+diff --git a/migrations/versions/0002_social_venue_change.py b/migrations/versions/0002_social_venue_change.py
+new file mode 100644
+index 0000000..5d27352
+--- /dev/null
++++ b/migrations/versions/0002_social_venue_change.py
+@@ -0,0 +1,40 @@
++"""social applications may change venue until books are issued
++
++Revision ID: 0002
++Revises: 0001
++"""
++
++from alembic import op
++
++revision = "0002"
++down_revision = "0001"
++branch_labels = None
++depends_on = None
++
++
++def _forbid_venue_change(locked_kinds: str) -> str:
++    return f"""
++CREATE OR REPLACE FUNCTION applications.forbid_venue_change() RETURNS trigger AS $$
++BEGIN
++    IF NEW.venue_id IS DISTINCT FROM OLD.venue_id THEN
++        IF OLD.stage IN ('books_out','closed','closed_duplicate') THEN
++            RAISE EXCEPTION 'venue change forbidden after books were issued'
++                USING ERRCODE = 'check_violation';
++        END IF;
++        IF OLD.kind IN ({locked_kinds})
++           AND OLD.stage NOT IN ('draft','on_review','needs_rework','archived') THEN
++            RAISE EXCEPTION 'venue change forbidden after booking link for % application', OLD.kind
++                USING ERRCODE = 'check_violation';
++        END IF;
++    END IF;
++    RETURN NEW;
++END $$ LANGUAGE plpgsql
++"""
++
++
++def upgrade() -> None:
++    op.get_bind().exec_driver_sql(_forbid_venue_change("'debt'"))
++
++
++def downgrade() -> None:
++    op.get_bind().exec_driver_sql(_forbid_venue_change("'social','debt'"))
+diff --git a/services/applications/service.py b/services/applications/service.py
+index fb24228..835a76f 100644
+--- a/services/applications/service.py
++++ b/services/applications/service.py
+@@ -24,6 +24,8 @@ from services.applications.review import missing_client_fields
+ from services.billing import public as billing
+ 
+ PAID_VENUE_LOCKED_STAGES = ("awaiting_issue", "books_out")
++# Заявке в долг площадку меняют только до формирования ссылки на запись.
++DEBT_VENUE_EDITABLE_STAGES = ("draft", "on_review", "needs_rework", "archived")
+ TERMINAL_STAGES = ("closed", "closed_duplicate")
+ CLIENT_EDITABLE_FIELDS = ("full_name", "passport", "birth_date", "email")
+ 
+@@ -205,6 +207,10 @@ async def change_venue(
+         raise DomainError("заявка закрыта")
+     if app.kind == "paid" and app.stage in PAID_VENUE_LOCKED_STAGES:
+         raise DomainError("после оплаты площадку меняют только через возврат платежа")
++    if app.stage == "books_out":
++        raise DomainError("после выдачи книг площадку не меняют")
++    if app.kind == "debt" and app.stage not in DEBT_VENUE_EDITABLE_STAGES:
++        raise DomainError("заявке в долг площадку меняют только до формирования ссылки на запись")
+     if new_venue_id == app.venue_id:
+         return app
+     venue = await session.get(Venue, new_venue_id)
+diff --git a/tests/test_venue_change.py b/tests/test_venue_change.py
+index 9d00238..e775762 100644
+--- a/tests/test_venue_change.py
++++ b/tests/test_venue_change.py
+@@ -1,23 +1,38 @@
++from datetime import timedelta
++
+ import pytest
++from sqlalchemy import select, update
++from sqlalchemy.exc import DBAPIError
+ 
++from libs import db
+ from libs.errors import DomainError
+ from services.applications import service as apps
++from services.applications.models import Application
+ from services.billing.public import active_books_invoice
++from services.scheduling.models import Booking
+ from tests.factories import (
+     BOOK_L1,
+     CHECKER,
++    HISTORY,
+     KZN,
+     LAW,
++    MSK,
+     OPERATOR,
++    REP_DEBT,
++    T0,
+     TVR,
+     act,
+     application,
++    book,
+     invoice,
++    issue,
+     new_application,
+     paid_application,
+     pass_review,
+     read,
++    slot,
+     stage,
++    token,
+ )
+ 
+ 
+@@ -53,3 +68,60 @@ async def test_paid_venue_change_after_payment_forbidden() -> None:
+     app_id, _ = await paid_application()
+     with pytest.raises(DomainError, match="возврат платежа"):
+         await act(apps.change_venue, app_id, OPERATOR, KZN)
++
++
++async def test_social_venue_change_after_booking_link() -> None:
++    app_id = await new_application(social=True)
++    await pass_review(app_id)
++    old_token = await token(app_id)
++    booking_id = await book(app_id, await slot(MSK, HISTORY, T0 + timedelta(days=3)))
++
++    await act(apps.change_venue, app_id, OPERATOR, KZN)
++
++    app = await application(app_id)
++    assert (app.stage, app.venue_id, app.site_checker_id) == ("awaiting_issue", KZN, CHECKER[KZN])
++    async with db.sessionmaker()() as s:
++        assert (await s.get(Booking, booking_id)).status != "active"
++    new_token = await token(app_id)
++    assert new_token is not None and new_token != old_token
++    await book(app_id, await slot(KZN, HISTORY, T0 + timedelta(days=4)))
++
++
++async def test_social_venue_change_after_issue_forbidden() -> None:
++    app_id = await new_application(social=True)
++    await pass_review(app_id)
++    await issue(app_id)
++    with pytest.raises(DomainError, match="выдачи книг"):
++        await act(apps.change_venue, app_id, OPERATOR, KZN)
++
++
++async def test_debt_venue_change_after_booking_link_forbidden() -> None:
++    app_id = await new_application(rep=REP_DEBT)
++    await pass_review(app_id)
++    assert await stage(app_id) == "awaiting_issue"
++    with pytest.raises(DomainError, match="ссылки на запись"):
++        await act(apps.change_venue, app_id, OPERATOR, KZN)
++
++
++async def _update_venue_directly(app_id: int, venue_id: int) -> None:
++    async with db.sessionmaker().begin() as s:
++        await s.execute(update(Application).where(Application.id == app_id).values(venue_id=venue_id))
++
++
++async def test_venue_lock_trigger_by_kind() -> None:
++    social_id = await new_application(social=True)
++    await pass_review(social_id)
++    await _update_venue_directly(social_id, KZN)
++    async with db.sessionmaker()() as s:
++        assert await s.scalar(select(Application.venue_id).where(Application.id == social_id)) == KZN
++
++    debt_id = await new_application(rep=REP_DEBT)
++    await pass_review(debt_id)
++    with pytest.raises(DBAPIError, match="booking link for debt"):
++        await _update_venue_directly(debt_id, KZN)
++
++    issued_id = await new_application(social=True)
++    await pass_review(issued_id)
++    await issue(issued_id)
++    with pytest.raises(DBAPIError, match="after books were issued"):
++        await _update_venue_directly(issued_id, KZN)

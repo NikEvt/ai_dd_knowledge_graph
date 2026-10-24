@@ -1,0 +1,581 @@
+# Эталон правил тестового проекта library-erp на ревизии v0.
+#
+# Ссылки на узлы:
+#   code:   <файл>::<символ>             — функция, класс или константа
+#   db:     <имя ограничения/триггера/индекса/функции>
+#   event:  <топик>                       — издатели и подписчики см. events.yaml
+#   bpm:    <from>-><to>                  — переход в bpm/application_process.yaml
+#   config: <файл>::<имя>
+# hidden — категории неочевидных связей из evaluation_plan.md (H1–H7).
+# tested_by — скрытые регрессионные тесты (library-eval/hidden_tests/regression).
+
+rules:
+  # --- Заявка --------------------------------------------------------------------------
+  - id: GT-APP-01
+    text: Вид заявки определяется при создании — социальная по решению оператора, «в долг», если администратор разрешил представителю работать в долг, иначе платная.
+    hidden: [H4]
+    implemented_by:
+      - code: services/applications/service.py::create_application
+      - db: applications.representatives.debt_allowed
+      - code: services/applications/admin.py::set_representative_terms
+    tested_by: [test_gt_applications.py::test_gt_debt_kind_from_admin_flag]
+
+  - id: GT-APP-02
+    text: Сферу и представителя заявки сменить нельзя.
+    hidden: [H1]
+    implemented_by:
+      - db: trg_applications_core_immutable
+      - db: applications.forbid_core_change
+    tested_by: [test_gt_applications.py::test_gt_app_sphere_and_representative_immutable]
+
+  - id: GT-APP-03
+    text: Заявку можно создать, только если сфера есть и активна на площадке, а книги принадлежат сфере и есть в прайсе площадки.
+    implemented_by:
+      - code: services/applications/service.py::_check_sphere_at_venue
+      - code: services/applications/service.py::_check_books
+      - code: services/applications/service.py::create_application
+    tested_by:
+      - test_gt_applications.py::test_gt_app_new_application_needs_sphere_at_venue
+      - test_gt_applications.py::test_gt_app_inactive_sphere_blocks_new_but_not_existing
+
+  - id: GT-APP-04
+    text: Оператор работает только с заявками, за которыми закреплён.
+    implemented_by:
+      - code: services/applications/service.py::_require_operator
+
+  - id: GT-APP-05
+    text: Книги в заявке меняются только в черновике и на доработке.
+    implemented_by:
+      - code: services/applications/service.py::change_books
+    tested_by: [test_gt_applications.py::test_gt_books_change_only_in_draft_or_rework]
+
+  - id: GT-ADM-01
+    text: Если площадка перестаёт работать со сферой, действующие заявки доводятся до конца, новые создать нельзя.
+    implemented_by:
+      - code: services/applications/admin.py::set_sphere_active
+      - db: applications.venue_spheres.active
+      - code: services/applications/service.py::_check_sphere_at_venue
+    tested_by: [test_gt_applications.py::test_gt_app_inactive_sphere_blocks_new_but_not_existing]
+
+  # --- Проверка и данные клиента --------------------------------------------------------
+  - id: GT-REV-01
+    text: Подтвердить заявку может только назначенный на неё проверяющий; без назначения проверка не проходит.
+    implemented_by:
+      - code: services/applications/service.py::approve
+      - code: services/applications/service.py::assign_reviewer
+
+  - id: GT-REV-02
+    text: Заявка проходит проверку, только если у клиента заполнены обязательные данные (ФИО, паспорт, дата рождения).
+    implemented_by:
+      - code: services/applications/review.py::REQUIRED_CLIENT_FIELDS
+      - code: services/applications/review.py::missing_client_fields
+      - code: services/applications/service.py::approve
+    tested_by: [test_gt_applications.py::test_gt_review_incomplete_client_blocks_approve]
+
+  - id: GT-REV-03
+    text: Данные клиента обновляет только проверяющий заявки; изменяемые поля ограничены списком.
+    implemented_by:
+      - code: services/applications/service.py::update_client
+      - code: services/applications/service.py::CLIENT_EDITABLE_FIELDS
+
+  - id: GT-REV-04
+    text: Изменение отслеживаемых данных клиента возвращает на проверку другие его заявки, ещё не дошедшие до записи (ожидают счёта или оплаты). Заявки на этапе записи и дальше не трогаются. Смена email не считается изменением данных.
+    hidden: [H6, H7, H2]
+    implemented_by:
+      - code: services/applications/listeners.py::_domain_events
+      - code: services/applications/listeners.py::TRACKED_FIELDS
+      - event: client.updated
+      - code: services/applications/consumers.py::on_client_updated
+      - bpm: "[awaiting_invoice, awaiting_payment]->on_review"
+    tested_by:
+      - test_gt_applications.py::test_gt_client_update_sends_other_apps_to_review
+      - test_gt_applications.py::test_gt_client_update_does_not_touch_booking_stage
+      - test_gt_applications.py::test_gt_client_email_change_does_not_resend_to_review
+
+  - id: GT-REV-05
+    text: Платная заявка после проверки ждёт счёта; если действующий счёт сохранился (возврат из архива без изменения суммы) — сразу ждёт оплаты.
+    hidden: [H3]
+    implemented_by:
+      - code: services/applications/service.py::approve
+      - bpm: on_review->awaiting_payment
+      - code: services/billing/guards.py::has_active_invoice
+    tested_by: [test_gt_billing.py::test_gt_unarchive_same_amount_keeps_invoice_and_restarts_clock]
+
+  # --- Процесс ------------------------------------------------------------------------
+  - id: GT-BPM-01
+    text: Заявки в долг и социальные после проверки сразу готовы к записи, без счёта и оплаты.
+    hidden: [H3]
+    implemented_by:
+      - bpm: on_review->awaiting_issue
+      - code: services/applications/service.py::approve
+      - code: services/applications/service.py::mark_ready_for_booking
+
+  - id: GT-BPM-02
+    text: Платная заявка переходит к записи на выдачу только после полной оплаты счёта за книги.
+    hidden: [H3, H2]
+    implemented_by:
+      - bpm: awaiting_payment->awaiting_issue
+      - code: services/billing/guards.py::fully_paid
+      - code: services/billing/service.py::link_payment
+      - event: payment.fully_paid
+      - code: services/applications/consumers.py::on_fully_paid
+    tested_by: [test_gt_billing.py::test_gt_partial_payment_keeps_waiting]
+
+  - id: GT-BPM-03
+    text: Закрыть заявку можно, только когда все книги возвращены или списаны и все штрафы погашены.
+    hidden: [H3]
+    implemented_by:
+      - bpm: books_out->closed
+      - code: services/applications/guards.py::settled
+      - code: services/scheduling/public.py::open_loans_count
+      - code: services/billing/public.py::open_fines_count
+      - code: services/applications/service.py::close
+    tested_by:
+      - test_gt_billing.py::test_gt_fine_for_lost_book
+      - test_gt_billing.py::test_gt_fine_invoice_and_close_for_paid
+
+  - id: GT-BPM-04
+    text: Каждая смена этапа заявки попадает в чат как событие.
+    hidden: [H6, H2]
+    implemented_by:
+      - code: services/applications/listeners.py::_domain_events
+      - event: application.stage_changed
+      - code: services/chat/consumers.py::EVENT_TEXT
+    tested_by: [test_gt_scheduling.py::test_gt_chat_events_logged]
+
+  # --- Смена площадки ---------------------------------------------------------------------
+  - id: GT-VEN-01
+    text: Платную заявку можно перенести на другую площадку только до оплаты.
+    implemented_by:
+      - code: services/applications/service.py::change_venue
+      - code: services/applications/service.py::PAID_VENUE_LOCKED_STAGES
+    tested_by: [test_gt_applications.py::test_gt_venue_paid_after_payment_forbidden]
+
+  - id: GT-VEN-02
+    text: Социальную заявку и заявку в долг можно перенести на другую площадку только до формирования ссылки на запись (черновик, проверка, доработка, архив).
+    hidden: [H1]
+    implemented_by:
+      - db: trg_applications_venue_lock
+      - db: applications.forbid_venue_change
+    tested_by:
+      - test_gt_applications.py::test_gt_venue_social_locked_after_link
+      - test_gt_applications.py::test_gt_venue_debt_locked_after_link
+
+  - id: GT-VEN-03
+    text: После выдачи книг площадку сменить нельзя.
+    hidden: [H1]
+    implemented_by:
+      - db: trg_applications_venue_lock
+      - db: applications.forbid_venue_change
+    tested_by: [test_gt_applications.py::test_gt_venue_forbidden_after_issue]
+
+  - id: GT-VEN-04
+    text: На новой площадке должна быть сфера заявки и прайс на её книги.
+    implemented_by:
+      - code: services/applications/service.py::change_venue
+      - code: services/applications/service.py::_check_sphere_at_venue
+      - code: services/applications/service.py::_check_books
+
+  - id: GT-VEN-05
+    text: При смене площадки за заявкой закрепляется проверяющий оператор новой площадки.
+    implemented_by:
+      - code: services/applications/service.py::change_venue
+    tested_by: [test_gt_applications.py::test_gt_venue_paid_before_payment_reissues_invoice]
+
+  - id: GT-VEN-06
+    text: При смене площадки неоплаченный счёт аннулируется, заявка возвращается к ожиданию счёта и счёт выставляется заново по прайсу и реквизитам новой площадки.
+    hidden: [H2]
+    implemented_by:
+      - event: application.venue_changed
+      - code: services/billing/consumers.py::on_venue_changed
+      - code: services/billing/service.py::cancel_invoice
+      - event: invoice.cancelled
+      - code: services/applications/consumers.py::on_invoice_cancelled
+      - bpm: awaiting_payment->awaiting_invoice
+    tested_by: [test_gt_applications.py::test_gt_venue_paid_before_payment_reissues_invoice]
+
+  - id: GT-VEN-07
+    text: Если при смене площадки клиент записан, запись отменяется, книги освобождаются, клиент и представитель получают письмо об отмене, формируется новая ссылка, событие попадает в чат. На v0 ветка недостижима (смена площадки после записи запрещена для всех видов).
+    hidden: [H2]
+    implemented_by:
+      - event: application.venue_changed
+      - code: services/scheduling/consumers.py::on_venue_changed
+      - code: services/scheduling/service.py::reset_bookings
+      - code: services/scheduling/service.py::issue_link
+      - event: booking.cancelled
+      - code: services/notifications/consumers.py::on_booking_cancelled
+      - code: services/chat/consumers.py::EVENT_TEXT
+
+  # --- Дедупликация -------------------------------------------------------------------
+  - id: GT-DUP-01
+    text: По одной сфере у клиента остаётся одна заявка — первая дошедшая до записи; вторая закрывается окончательно как дубль (без архива), попытка закрывается с исходом duplicate.
+    hidden: [H7]
+    implemented_by:
+      - code: services/applications/dedup.py::close_duplicates
+      - code: services/applications/dedup.py::OPEN_STAGES
+      - bpm: "*->closed_duplicate"
+
+  - id: GT-DUP-02
+    text: Платная заявка «доходит до записи» в момент полной оплаты — тогда закрываются её дубли.
+    hidden: [H2, H7]
+    implemented_by:
+      - event: payment.fully_paid
+      - code: services/applications/consumers.py::on_fully_paid
+      - code: services/applications/dedup.py::close_duplicates
+    tested_by: [test_gt_applications.py::test_gt_dedup_paid_payment_closes_duplicate]
+
+  - id: GT-DUP-03
+    text: Заявка в долг «доходит до записи» в момент прохождения проверки.
+    hidden: [H2]
+    implemented_by:
+      - code: services/applications/service.py::approve
+      - event: application.review_passed
+      - code: services/applications/consumers.py::on_review_passed
+    tested_by: [test_gt_applications.py::test_gt_dedup_debt_review_closes_duplicate]
+
+  - id: GT-DUP-04
+    text: Социальные заявки и заявки платные/в долг не пересекаются — правило дублей между ними не действует.
+    implemented_by:
+      - code: services/applications/dedup.py::_same_track
+      - code: services/applications/consumers.py::on_review_passed
+    tested_by: [test_gt_applications.py::test_gt_dedup_social_paid_independent]
+
+  - id: GT-DUP-05
+    text: У закрытого дубля аннулируются неоплаченные счета, отменяются записи и гасится ссылка.
+    hidden: [H2]
+    implemented_by:
+      - event: application.closed_duplicate
+      - code: services/billing/consumers.py::on_closed_duplicate
+      - code: services/scheduling/consumers.py::on_closed_duplicate
+    tested_by: [test_gt_applications.py::test_gt_dedup_paid_payment_closes_duplicate]
+
+  - id: GT-DUP-06
+    text: Заявки одного клиента по разным сферам друг на друга не влияют.
+    implemented_by:
+      - code: services/applications/dedup.py::close_duplicates
+    tested_by: [test_gt_applications.py::test_gt_dedup_other_sphere_independent]
+
+  # --- Архив и попытки ----------------------------------------------------------------
+  - id: GT-ARC-01
+    text: Любая заявка уходит в архив (исход no_data), если с начала проверки прошёл месяц, а она всё ещё на проверке или доработке.
+    hidden: [H5]
+    implemented_by:
+      - code: services/applications/jobs.py::archive_stale
+      - config: libs/settings.py::REVIEW_ARCHIVE_DAYS
+      - bpm: "[on_review, needs_rework]->archived"
+    tested_by: [test_gt_billing.py::test_gt_archive_review_timeout_any_kind]
+
+  - id: GT-ARC-02
+    text: Платная заявка уходит в архив (исход unpaid), если счёт не оплачен полностью за месяц с момента начала отсчёта оплаты.
+    hidden: [H5]
+    implemented_by:
+      - code: services/applications/jobs.py::archive_stale
+      - config: libs/settings.py::PAYMENT_ARCHIVE_DAYS
+      - db: billing.invoices.payment_clock_started_at
+      - bpm: awaiting_payment->archived
+
+  - id: GT-ARC-03
+    text: Социальная заявка и заявка в долг после формирования ссылки, а платная после оплаты, сами в архив не уходят.
+    hidden: [H5]
+    implemented_by:
+      - code: services/applications/jobs.py::archive_stale
+    tested_by: [test_gt_billing.py::test_gt_archive_link_issued_social_never_auto_archived]
+
+  - id: GT-ARC-04
+    text: Оператор отправляет в архив только неоплаченную заявку; оплаченная уходит в архив через возврат платежа.
+    hidden: [H3]
+    implemented_by:
+      - code: services/applications/service.py::archive
+      - bpm: "[draft, on_review, needs_rework, awaiting_invoice, awaiting_payment]->archived"
+
+  - id: GT-ARC-05
+    text: Из архива заявку достаёт её оператор; начинается новая попытка и новая проверка, срок проверки отсчитывается заново; площадку и книги можно сменить, только если заявка не доходила до записи.
+    implemented_by:
+      - code: services/applications/service.py::unarchive
+      - bpm: archived->on_review
+
+  - id: GT-ARC-06
+    text: После возврата из архива неоплаченный счёт сохраняется, если сумма не изменилась (месяц на оплату отсчитывается заново), иначе аннулируется.
+    hidden: [H2]
+    implemented_by:
+      - event: application.unarchived
+      - code: services/billing/consumers.py::on_unarchived
+    tested_by:
+      - test_gt_billing.py::test_gt_unarchive_same_amount_keeps_invoice_and_restarts_clock
+      - test_gt_billing.py::test_gt_unarchive_changed_books_cancels_invoice
+
+  - id: GT-ARC-07
+    text: Уход в архив отменяет записи, освобождает книги и гасит ссылку на запись.
+    hidden: [H2]
+    implemented_by:
+      - event: application.archived
+      - code: services/scheduling/consumers.py::on_archived
+      - code: services/scheduling/service.py::reset_bookings
+    tested_by: [test_gt_scheduling.py::test_gt_archive_releases_booking]
+
+  - id: GT-ARC-08
+    text: Возврат оплаты по счёту за книги (клиент передумал) отправляет оплаченную заявку в архив с исходом refund.
+    hidden: [H2]
+    implemented_by:
+      - code: services/billing/service.py::refund_payment
+      - event: payment.refunded
+      - code: services/applications/consumers.py::on_payment_refunded
+      - bpm: awaiting_issue->archived
+    tested_by: [test_gt_billing.py::test_gt_refund_after_payment_archives_with_refund]
+
+  # --- Счета и платежи ------------------------------------------------------------------
+  - id: GT-BIL-01
+    text: Счёт выставляет только закреплённый бухгалтер; бухгалтер закрепляет себя сам и может забрать заявку у коллеги; у заявки в долг бухгалтера нет.
+    implemented_by:
+      - code: services/billing/service.py::take_application
+      - code: services/billing/service.py::_require_accountant
+
+  - id: GT-BIL-02
+    text: Счёт за книги — только по платной заявке, прошедшей проверку, и только при заполненных реквизитах площадки.
+    implemented_by:
+      - code: services/billing/service.py::issue_books_invoice
+
+  - id: GT-BIL-03
+    text: Сумма счёта = цена книг по прайсу площадки + надбавка представителя; фиксируется при выставлении и не пересчитывается.
+    implemented_by:
+      - code: services/billing/service.py::issue_books_invoice
+      - code: services/applications/public.py::books_price
+      - code: services/applications/public.py::markup_pct
+    tested_by:
+      - test_gt_billing.py::test_gt_invoice_amount_includes_markup
+      - test_gt_billing.py::test_gt_invoice_price_fixed_after_issue
+
+  - id: GT-BIL-04
+    text: У заявки в каждый момент не больше одного действующего счёта за книги.
+    hidden: [H1]
+    implemented_by:
+      - db: uq_invoices_one_active_books
+    tested_by: [test_gt_billing.py::test_gt_one_active_books_invoice]
+
+  - id: GT-BIL-05
+    text: Счёт с привязанным платежом аннулировать нельзя.
+    hidden: [H1]
+    implemented_by:
+      - code: services/billing/service.py::cancel_invoice
+      - db: trg_invoices_cancel_guard
+    tested_by: [test_gt_billing.py::test_gt_cannot_cancel_invoice_with_payment]
+
+  - id: GT-BIL-06
+    text: Платёж нельзя привязать к аннулированному счёту.
+    hidden: [H1]
+    implemented_by:
+      - code: services/billing/service.py::link_payment
+      - db: trg_payments_active_invoice
+    tested_by: [test_gt_billing.py::test_gt_payment_to_cancelled_invoice_forbidden]
+
+  - id: GT-BIL-07
+    text: Переплата отмечается на платеже и требует решения главного бухгалтера.
+    implemented_by:
+      - code: services/billing/service.py::link_payment
+    tested_by: [test_gt_billing.py::test_gt_overpayment_flagged]
+
+  - id: GT-BIL-08
+    text: Отвязать или вернуть платёж можно только с причиной.
+    hidden: [H1]
+    implemented_by:
+      - code: services/billing/service.py::unlink_payment
+      - code: services/billing/service.py::refund_payment
+      - db: billing.payments CHECK (unlinked_at IS NULL OR unlink_reason IS NOT NULL)
+
+  # --- Штрафы -------------------------------------------------------------------------
+  - id: GT-FIN-01
+    text: Штрафы за просрочку, утерю и порчу начисляются по ставкам администратора для пары представитель + площадка.
+    hidden: [H2, H4]
+    implemented_by:
+      - event: loan.overdue
+      - event: loan.lost
+      - event: loan.damaged
+      - code: services/billing/consumers.py::on_loan_overdue
+      - code: services/billing/service.py::create_fine
+      - db: billing.fine_rates
+    tested_by: [test_gt_billing.py::test_gt_fine_for_lost_book]
+
+  - id: GT-FIN-02
+    text: По платной и социальной заявке на штраф выставляется счёт; его полная оплата гасит штраф.
+    implemented_by:
+      - code: services/billing/service.py::issue_fine_invoice
+      - code: services/billing/service.py::link_payment
+    tested_by: [test_gt_billing.py::test_gt_fine_invoice_and_close_for_paid]
+
+  - id: GT-FIN-03
+    text: По заявке в долг счёт на штраф не выставляется; погашение отмечает оператор.
+    implemented_by:
+      - code: services/billing/service.py::issue_fine_invoice
+      - code: services/billing/service.py::mark_fine_paid_outside
+    tested_by: [test_gt_billing.py::test_gt_debt_fine_paid_outside_by_operator]
+
+  # --- Выдача и возврат ---------------------------------------------------------------
+  - id: GT-LOAN-01
+    text: Срок пользования книгами — LOAN_PERIOD_DAYS (30) дней с даты выдачи, записывается в due_at.
+    hidden: [H4]
+    implemented_by:
+      - config: libs/settings.py::LOAN_PERIOD_DAYS
+      - code: services/scheduling/service.py::issue_books
+    tested_by: [test_gt_billing.py::test_gt_loan_due_30_days]
+
+  - id: GT-LOAN-02
+    text: Срыв срока отмечает фоновая задача — через 30 дней с выдачи; это порождает штраф и событие в чате. Задача считает срок сама (жёстко 30 дней), а не по LOAN_PERIOD_DAYS или due_at.
+    hidden: [H5, H2]
+    implemented_by:
+      - code: services/scheduling/jobs.py::flag_overdue
+      - event: loan.overdue
+      - code: services/billing/consumers.py::on_loan_overdue
+      - code: services/chat/consumers.py::EVENT_TEXT
+    tested_by: [test_gt_billing.py::test_gt_overdue_after_30_days]
+
+  - id: GT-LOAN-03
+    text: Книги выдаёт проверяющий оператор площадки заявки, на этапе ожидания выдачи и в дату записи; выдача освобождает закрепление, формирует ссылку на сдачу и переводит заявку в «Книги у клиента».
+    hidden: [H2]
+    implemented_by:
+      - code: services/scheduling/service.py::issue_books
+      - event: books.issued
+      - code: services/applications/consumers.py::on_books_issued
+      - bpm: awaiting_issue->books_out
+
+  - id: GT-LOAN-04
+    text: Возврат отмечается по каждой книге; частичный возврат допустим; утерянная книга списывается.
+    implemented_by:
+      - code: services/scheduling/service.py::return_book
+      - code: services/scheduling/service.py::mark_lost
+
+  # --- Расписание и запись ------------------------------------------------------------
+  - id: GT-SCH-01
+    text: Число мест в окне не больше максимума площадки из админки. Проверка — триггер БД по реплике лимита в scheduling, реплика обновляется событием из админки.
+    hidden: [H1, H2]
+    implemented_by:
+      - db: trg_slot_capacity_limit
+      - db: scheduling.check_slot_capacity
+      - db: scheduling.venue_limits
+      - code: services/applications/admin.py::set_venue_max_capacity
+      - event: venue.settings_changed
+      - code: services/scheduling/consumers.py::on_venue_settings_changed
+    tested_by:
+      - test_gt_scheduling.py::test_gt_slot_capacity_limited_by_venue_max
+      - test_gt_scheduling.py::test_gt_admin_max_capacity_reaches_scheduling
+
+  - id: GT-SCH-02
+    text: Проверяющий оператор может только уменьшить число мест в окне и не ниже числа записанных.
+    implemented_by:
+      - code: services/scheduling/service.py::reduce_capacity
+
+  - id: GT-SCH-03
+    text: Проверяющий оператор работает только с расписанием и заявками своей площадки.
+    implemented_by:
+      - code: services/scheduling/service.py::_require_site_checker
+    tested_by: [test_gt_scheduling.py::test_gt_checker_only_own_venue]
+
+  - id: GT-SCH-04
+    text: Окна не создаются в прошлом; записаться можно только в будущее окно площадки и сферы заявки со свободными местами.
+    implemented_by:
+      - code: services/scheduling/service.py::create_slot
+      - code: services/scheduling/service.py::book
+      - code: services/scheduling/service.py::free_slots
+
+  - id: GT-SCH-05
+    text: Клиент и представитель переносят и отменяют визит не позднее чем за 2 дня; оператор — в любое время.
+    implemented_by:
+      - code: services/scheduling/service.py::cancel_booking
+      - config: libs/settings.py::CLIENT_RESCHEDULE_MIN_DAYS
+    tested_by: [test_gt_scheduling.py::test_gt_operator_can_cancel_late]
+
+  - id: GT-SCH-06
+    text: С записи за книгами книги закреплены за заявкой; при отмене, переносе и неявке остаются закреплёнными; освобождаются при смене площадки, уходе в архив и выдаче.
+    hidden: [H2]
+    implemented_by:
+      - code: services/scheduling/service.py::book
+      - code: services/scheduling/service.py::reset_bookings
+      - code: services/scheduling/service.py::issue_books
+      - db: scheduling.holds
+    tested_by: [test_gt_scheduling.py::test_gt_booking_holds_books_until_issue]
+
+  - id: GT-SCH-07
+    text: У заявки одна действующая запись и одна действующая ссылка на запись.
+    hidden: [H1]
+    implemented_by:
+      - db: uq_bookings_one_active
+      - db: uq_booking_links_one_active
+      - code: services/scheduling/service.py::issue_link
+
+  - id: GT-SCH-08
+    text: Неявка отменяет запись (уходит письмо об отмене), попытку не закрывает — клиент записывается снова.
+    implemented_by:
+      - code: services/scheduling/service.py::mark_no_show
+    tested_by: [test_gt_scheduling.py::test_gt_no_show_sends_cancel_email]
+
+  - id: GT-SCH-09
+    text: Окно с записанными клиентами убирается только с отменой записей и письмами об отмене.
+    implemented_by:
+      - code: services/scheduling/service.py::remove_slot
+    tested_by: [test_gt_scheduling.py::test_gt_removed_slot_cancels_booking_with_email]
+
+  - id: GT-SCH-10
+    text: Ссылка на запись за книгами формируется, когда заявка готова к выдаче.
+    hidden: [H2]
+    implemented_by:
+      - code: services/applications/service.py::mark_ready_for_booking
+      - event: application.ready_for_booking
+      - code: services/scheduling/consumers.py::on_ready_for_booking
+
+  # --- Письма -------------------------------------------------------------------------
+  - id: GT-NOT-01
+    text: Письма получают только клиент и представитель; типы — о записи и об отмене; перенос — это отмена и новая запись.
+    hidden: [H2]
+    implemented_by:
+      - event: booking.created
+      - event: booking.cancelled
+      - code: services/notifications/consumers.py::on_booking_created
+      - code: services/notifications/consumers.py::on_booking_cancelled
+      - code: services/applications/public.py::recipients
+      - code: services/scheduling/service.py::reschedule
+
+  - id: GT-NOT-02
+    text: Шаблоны писем задаются по площадке и группе — только paid и social.
+    hidden: [H1]
+    implemented_by:
+      - db: templates_kind_group_check
+      - db: notifications.templates UNIQUE (venue_id, kind_group, type)
+      - code: services/notifications/service.py::set_template
+
+  - id: GT-NOT-03
+    text: Заявки в долг используют шаблоны платных заявок.
+    hidden: [H4]
+    implemented_by:
+      - config: services/notifications/config.py::TEMPLATE_GROUP
+      - code: services/notifications/service.py::find_template
+    tested_by: [test_gt_scheduling.py::test_gt_debt_uses_paid_templates]
+
+  # --- Чат ----------------------------------------------------------------------------
+  - id: GT-CHAT-01
+    text: Сообщения чата нельзя редактировать и удалять.
+    hidden: [H1]
+    implemented_by:
+      - db: trg_chat_messages_immutable
+      - db: chat.forbid_message_changes
+    tested_by: [test_gt_scheduling.py::test_gt_chat_messages_immutable]
+
+  - id: GT-CHAT-02
+    text: Писать в чат могут только закреплённые сотрудники (оператор, проверяющий, бухгалтер, проверяющий оператор); после закрытия заявки чат только для чтения.
+    implemented_by:
+      - code: services/chat/service.py::post_message
+      - code: services/chat/service.py::participants
+      - code: services/billing/public.py::accountant_of
+
+  - id: GT-CHAT-03
+    text: Администратор читает чат любой заявки; главный бухгалтер и руководитель проверяющих чат не видят.
+    implemented_by:
+      - code: services/chat/service.py::list_messages
+      - code: services/chat/service.py::NO_CHAT_ROLES
+    tested_by: [test_gt_scheduling.py::test_gt_chat_reviewer_lead_cannot_read]
+
+  - id: GT-CHAT-04
+    text: В чат автоматически попадают события заявки — смена этапа, площадки, архив, счета, платежи, запись и отмена, дубль, просрочка.
+    hidden: [H2]
+    implemented_by:
+      - code: services/chat/consumers.py::EVENT_TEXT
+      - code: services/chat/consumers.py::_handler
+    tested_by: [test_gt_scheduling.py::test_gt_chat_events_logged]

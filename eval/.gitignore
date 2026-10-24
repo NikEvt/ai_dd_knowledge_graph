@@ -1,0 +1,17 @@
+logs/
+.env
+node_modules/
+
+# Ruflo local secrets and runtime data
+.env.local
+.env.*.local
+.claude-flow/data/
+.claude-flow/logs/
+.claude-flow/sessions/
+# Ruflo: рантайм и память не коммитим, выгружаем в logs/ruflo
+.swarm/
+.claude-flow/data/
+.claude-flow/logs/
+.claude-flow/sessions/
+.claude-flow/*.pid
+ruvector.db

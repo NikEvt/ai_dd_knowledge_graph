@@ -1,0 +1,37 @@
+diff --git a/knowledge/model/db.json b/knowledge/model/db.json
+index 45b1280..c095f31 100644
+--- a/knowledge/model/db.json
++++ b/knowledge/model/db.json
+@@ -65,6 +65,11 @@
+    "src": "fine_rates_kind_check",
+    "type": "constrains"
+   },
++  {
++   "dst": "billing.fines",
++   "src": "fines_amount_cap",
++   "type": "constrains"
++  },
+   {
+    "dst": "billing.fines",
+    "src": "fines_amount_check",
+@@ -586,6 +591,20 @@
+    "table": "billing.fine_rates",
+    "type": "db_constraint"
+   },
++  {
++   "columns": [
++    "amount"
++   ],
++   "definition": "CHECK ((amount <= (100000)::numeric))",
++   "hash": "b436a5ae6349",
++   "id": "fines_amount_cap",
++   "kind": "check",
++   "line": 16,
++   "name": "fines_amount_cap",
++   "path": "migrations/versions/0002_fine_amount_cap.py",
++   "table": "billing.fines",
++   "type": "db_constraint"
++  },
+   {
+    "columns": [
+     "amount"

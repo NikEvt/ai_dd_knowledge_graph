@@ -1,0 +1,31 @@
+{
+  "task": "T02",
+  "recall": 1.0,
+  "hidden_recall": 1.0,
+  "hit": [
+    "libs/settings.py::LOAN_PERIOD_DAYS",
+    "libs/settings.py::PAYMENT_ARCHIVE_DAYS",
+    "libs/settings.py::REVIEW_ARCHIVE_DAYS",
+    "loan.overdue",
+    "services/applications/guards.py::settled",
+    "services/billing/consumers.py::on_loan_overdue",
+    "services/chat/consumers.py::EVENT_TEXT",
+    "services/scheduling/jobs.py::flag_overdue",
+    "services/scheduling/service.py::issue_books"
+  ],
+  "missed": [],
+  "extra": [
+    "billing.fines",
+    "books_out->closed",
+    "scheduling.loans",
+    "services/applications/jobs.py::archive_stale",
+    "services/applications/service.py::close",
+    "services/billing/service.py::create_fine",
+    "services/scheduling/models.py::Loan",
+    "tests/factories.py::issue",
+    "tests/factories.py::seed",
+    "tests/test_loans.py::test_overdue_after_loan_period"
+  ],
+  "cost_usd": 0.8959048000000001,
+  "input_tokens": 561099
+}

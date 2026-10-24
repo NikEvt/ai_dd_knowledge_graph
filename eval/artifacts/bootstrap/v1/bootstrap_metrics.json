@@ -1,0 +1,31 @@
+{
+  "rev": "v1",
+  "gt_rules": 68,
+  "matched_gt_rules": 68,
+  "rule_recall": 0.985,
+  "rule_recall_full_only": 0.971,
+  "rule_recall_by_hidden_category": {
+    "H1": 1.0,
+    "H2": 0.97,
+    "H3": 1.0,
+    "H4": 1.0,
+    "H5": 0.88,
+    "H6": 1.0,
+    "H7": 1.0
+  },
+  "missed_gt_rules": [],
+  "model_rules_judged": 162,
+  "rule_precision": 0.991,
+  "wrong_share_verified": 0.0,
+  "n_verified": 22,
+  "wrong_share_draft": 0.0,
+  "n_draft": 140,
+  "wrong_model_rules": [],
+  "doc_qa_accuracy": 0.983,
+  "doc_qa_failed": [
+    "Q04"
+  ],
+  "cost_bootstrap": 2.3627822,
+  "cost_docqa": 1.1874913999999999,
+  "cost_docqa_judge": 0.1803775
+}

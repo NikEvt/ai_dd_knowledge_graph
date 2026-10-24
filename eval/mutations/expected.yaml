@@ -1,0 +1,8 @@
+# Ожидаемая реакция CI решения на PR с мутацией (модель знаний в PR не обновлена).
+M1: {significant: true, expect: "suspect для правил с link_payment (переплата)"}
+M2: {significant: true, expect: "suspect для правил с approve / missing_client_fields — транзитивно через вспомогательную функцию"}
+M3: {significant: true, expect: "ошибка: новое ограничение БД без правила"}
+M4: {significant: true, expect: "сигнал: у события нет подписчиков / модель событий устарела"}
+M5: {significant: false, expect: "без suspect: только переименование локальной переменной"}
+M6: {significant: false, expect: "без suspect: только комментарии"}
+M0: {significant: false, expect: "контроль: CI полностью зелёный"}

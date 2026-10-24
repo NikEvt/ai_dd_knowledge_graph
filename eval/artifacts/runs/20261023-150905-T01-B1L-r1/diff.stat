@@ -1,0 +1,14 @@
+ .DS_Store                                       | Bin 0 -> 6148 bytes
+ docs/config.md                                  |   7 ++-
+ docs/entities/applications.applications.md      |   4 +-
+ docs/events.md                                  |  10 +--
+ docs/process.md                                 |  28 ++++-----
+ docs/reconciliation.md                          |  21 +++----
+ docs/roles.md                                   |  26 ++++----
+ docs/rules/applications.md                      |  66 ++++++++++----------
+ docs/rules/scheduling.md                        |   7 ++-
+ docs/rules/schema.md                            |   4 +-
+ migrations/versions/0002_social_venue_change.py |  38 ++++++++++++
+ services/applications/service.py                |   5 ++
+ tests/test_venue_change.py                      |  79 ++++++++++++++++++++++++
+ 13 files changed, 211 insertions(+), 84 deletions(-)

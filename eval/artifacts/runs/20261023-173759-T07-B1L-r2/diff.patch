@@ -1,0 +1,699 @@
+diff --git a/docs/config.md b/docs/config.md
+index a583dd7..23298af 100644
+--- a/docs/config.md
++++ b/docs/config.md
+@@ -8,10 +8,10 @@
+ |---|---|---|---|
+ | [`engine.py::PROCESS_FILE`](../libs/bpm/engine.py#L13) | `Path(__file__).resolve().parents[2] / 'bpm' / 'application_process.yaml'` |  | [`engine.py::process`](../libs/bpm/engine.py#L33) |
+ | [`relay.py::STREAM_PREFIX`](../libs/events/relay.py#L13) | `events:` |  | [`relay.py::consume_forever`](../libs/events/relay.py#L39)<br>[`relay.py::relay_forever`](../libs/events/relay.py#L16) |
+-| [`settings.py::CLIENT_RESCHEDULE_MIN_DAYS`](../libs/settings.py#L14) | `2` | Клиент может перенести или отменить визит не позднее чем за столько дней. | [`service.py::cancel_booking`](../services/scheduling/service.py#L193) |
++| [`settings.py::CLIENT_RESCHEDULE_MIN_DAYS`](../libs/settings.py#L14) | `2` | Клиент может перенести или отменить визит не позднее чем за столько дней. | [`service.py::cancel_booking`](../services/scheduling/service.py#L194) |
+ | [`settings.py::DATABASE_URL`](../libs/settings.py#L4) | `os.environ.get('DATABASE_URL', f'postgresql+asyncpg://erp:erp@localhost:{DB_POR…` |  | [`db.py::engine`](../libs/db.py#L27) |
+ | [`settings.py::DB_PORT`](../libs/settings.py#L3) | `os.environ.get('DB_PORT', '55432')` |  | — |
+-| [`settings.py::LOAN_PERIOD_DAYS`](../libs/settings.py#L8) | `30` | Срок пользования книгами с даты выдачи. | [`service.py::issue_books`](../services/scheduling/service.py#L223) |
++| [`settings.py::LOAN_PERIOD_DAYS`](../libs/settings.py#L8) | `30` | Срок пользования книгами с даты выдачи. | [`service.py::issue_books`](../services/scheduling/service.py#L224) |
+ | [`settings.py::PAYMENT_ARCHIVE_DAYS`](../libs/settings.py#L12) | `30` | Платная заявка уходит в архив, если счёт не оплачен за столько дней. | [`jobs.py::archive_stale`](../services/applications/jobs.py#L14) |
+ | [`settings.py::REDIS_URL`](../libs/settings.py#L5) | `os.environ.get('REDIS_URL', f"redis://localhost:{os.environ.get('REDIS_PORT', '…` |  | [`relay.py::consume_forever`](../libs/events/relay.py#L39)<br>[`relay.py::relay_forever`](../libs/events/relay.py#L16) |
+ | [`settings.py::REVIEW_ARCHIVE_DAYS`](../libs/settings.py#L10) | `30` | Заявка уходит в архив, если с начала проверки прошло столько дней, а данные не получены. | [`jobs.py::archive_stale`](../services/applications/jobs.py#L14) |
+@@ -98,7 +98,7 @@
+ | [`settings.py::RUNS_COMPLETED_METRIC`](../services/reports/settings.py#L25) | `reports.runs_completed` | Служебная метрика: число построенных отчётов за день в разрезе кода отчёта. | [`consumers.py::count_completed_run`](../services/reports/consumers.py#L21) |
+ | [`settings.py::RUNS_PAGE_LIMIT`](../services/reports/settings.py#L22) | `100` | Сколько запусков отдаёт список за один раз. | [`service.py::list_runs`](../services/reports/service.py#L345) |
+ | [`settings.py::RUN_TIMEOUT_MINUTES`](../services/reports/settings.py#L6) | `30` | Запуск, который строится дольше этого, считается зависшим и помечается неуспешным. | [`jobs.py::fail_stuck_runs`](../services/reports/jobs.py#L42) |
+-| [`service.py::CLIENT_SIDE`](../services/scheduling/service.py#L14) | `['client', 'representative']` |  | [`service.py::cancel_booking`](../services/scheduling/service.py#L193) |
++| [`service.py::CLIENT_SIDE`](../services/scheduling/service.py#L14) | `['client', 'representative']` |  | [`service.py::cancel_booking`](../services/scheduling/service.py#L194) |
+ | [`listeners.py::TRACKED_FIELDS`](../services/staff/listeners.py#L9) | `['full_name', 'passport', 'snils', 'birth_date', 'role']` |  | [`listeners.py::_employee_changes`](../services/staff/listeners.py#L13) |
+ | [`service.py::EDITABLE_FIELDS`](../services/staff/service.py#L24) | `['full_name', 'passport', 'snils', 'birth_date', 'role']` |  | [`service.py::update_employee`](../services/staff/service.py#L125) |
+ | [`settings.py::BRIEFING_VALID_DAYS`](../services/staff/settings.py#L25) | `30` | Инструктаж годится для оформления допуска, если проведён не раньше чем столько дней назад. | [`service.py::_fresh_briefing`](../services/staff/service.py#L486)<br>[`service.py::grant_clearance`](../services/staff/service.py#L496) |
+diff --git a/docs/entities/README.md b/docs/entities/README.md
+index d775404..23d01f2 100644
+--- a/docs/entities/README.md
++++ b/docs/entities/README.md
+@@ -67,7 +67,7 @@
+ | [scheduling.bookings](scheduling.bookings.md) | 7 | 4 | models.py::Booking |
+ | [scheduling.holds](scheduling.holds.md) | 2 | 0 | models.py::Hold |
+ | [scheduling.loans](scheduling.loans.md) | 9 | 1 | models.py::Loan |
+-| [scheduling.slots](scheduling.slots.md) | 6 | 2 | models.py::Slot |
++| [scheduling.slots](scheduling.slots.md) | 7 | 2 | models.py::Slot |
+ | [scheduling.venue_limits](scheduling.venue_limits.md) | 2 | 1 | models.py::VenueLimit |
+ | [staff.alerts](staff.alerts.md) | 8 | 2 | models.py::Alert |
+ | [staff.assignments](staff.assignments.md) | 5 | 3 | models.py::Assignment |
+diff --git a/docs/entities/scheduling.slots.md b/docs/entities/scheduling.slots.md
+index 28e50b2..23236b1 100644
+--- a/docs/entities/scheduling.slots.md
++++ b/docs/entities/scheduling.slots.md
+@@ -9,6 +9,7 @@
+ - sphere_id: integer NOT NULL
+ - starts_at: timestamp with time zone NOT NULL
+ - capacity: integer NOT NULL
++- capacity_reduced: boolean NOT NULL DEFAULT false — проверяющий оператор уменьшил число мест, окно не следует за максимумом площадки ([`migrations/versions/0002_slot_capacity_reduced.py:16`](../../migrations/versions/0002_slot_capacity_reduced.py#L16))
+ - removed: boolean NOT NULL
+ 
+ ## Связи (FK)
+@@ -24,8 +25,9 @@
+ 
+ ## Пишут (код)
+ - services/scheduling/service.py::create_slot
+-- services/scheduling/service.py::reduce_capacity [capacity]
++- services/scheduling/service.py::reduce_capacity [capacity, capacity_reduced]
+ - services/scheduling/service.py::remove_slot [removed]
++- services/scheduling/service.py::apply_venue_max_capacity [capacity]
+ 
+ ## Правила
+ - R-SCHED-SITE-CHECKER-01 [draft] Проверяющий оператор работает только со своей площадкой
+@@ -34,3 +36,4 @@
+ - R-SCHED-SLOT-03 [draft] Число мест в окне не больше максимума площадки (контроль в БД)
+ - R-SCHED-SLOT-04 [draft] Проверяющий оператор может только уменьшить число мест в окне
+ - R-SCHED-SLOT-05 [draft] Удаление окна отменяет записи на него
++- R-SCHED-VENUE-LIMIT-02 [draft] Новый максимум площадки переносится на будущие окна со старым максимумом
+diff --git a/docs/entities/scheduling.venue_limits.md b/docs/entities/scheduling.venue_limits.md
+index 9dc5ed2..f62dd91 100644
+--- a/docs/entities/scheduling.venue_limits.md
++++ b/docs/entities/scheduling.venue_limits.md
+@@ -14,8 +14,9 @@
+ - services/scheduling/models.py::VenueLimit:11 (orm_model)
+ 
+ ## Пишут (код)
+-- services/scheduling/consumers.py::on_venue_settings_changed [max_capacity]
++- services/scheduling/service.py::apply_venue_max_capacity [max_capacity] (вызывается из services/scheduling/consumers.py::on_venue_settings_changed)
+ 
+ ## Правила
+ - R-APP-ADMIN-03 [draft] Максимум мест в окне площадки положителен и передаётся в scheduling событием
+ - R-SCHED-VENUE-LIMIT-01 [draft] Максимум мест площадки реплицируется из админки событием
++- R-SCHED-VENUE-LIMIT-02 [draft] Новый максимум площадки переносится на будущие окна со старым максимумом
+diff --git a/docs/events.md b/docs/events.md
+index c9993e8..0296dcf 100644
+--- a/docs/events.md
++++ b/docs/events.md
+@@ -165,16 +165,16 @@ flowchart LR
+ 
+ | Событие | Публикует | Обрабатывает | Данные | Эффекты |
+ |---|---|---|---|---|
+-| `application.archived` | [`service.py::archive`](../services/applications/service.py#L246) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_archived`](../services/scheduling/consumers.py#L25) | application_id, outcome | effect:chat.event_log |
+-| `application.closed_duplicate` | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) | [`consumers.py::on_closed_duplicate`](../services/billing/consumers.py#L20)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_closed_duplicate`](../services/scheduling/consumers.py#L30) | application_id, winner_id | effect:chat.event_log |
+-| `application.ready_for_booking` | [`service.py::mark_ready_for_booking`](../services/applications/service.py#L157) | [`consumers.py::on_ready_for_booking`](../services/scheduling/consumers.py#L12) | application_id, sphere_id, venue_id | — |
++| `application.archived` | [`service.py::archive`](../services/applications/service.py#L246) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_archived`](../services/scheduling/consumers.py#L24) | application_id, outcome | effect:chat.event_log |
++| `application.closed_duplicate` | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) | [`consumers.py::on_closed_duplicate`](../services/billing/consumers.py#L20)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_closed_duplicate`](../services/scheduling/consumers.py#L29) | application_id, winner_id | effect:chat.event_log |
++| `application.ready_for_booking` | [`service.py::mark_ready_for_booking`](../services/applications/service.py#L157) | [`consumers.py::on_ready_for_booking`](../services/scheduling/consumers.py#L11) | application_id, sphere_id, venue_id | — |
+ | `application.review_passed` | [`service.py::approve`](../services/applications/service.py#L167) | [`consumers.py::on_review_passed`](../services/applications/consumers.py#L43) | application_id, kind | — |
+ | `application.stage_changed` | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) | [`consumers.py::_handler`](../services/chat/consumers.py#L23) | application_id, from, to | effect:chat.event_log |
+ | `application.unarchived` | [`service.py::unarchive`](../services/applications/service.py#L265) | [`consumers.py::on_unarchived`](../services/billing/consumers.py#L27)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23) | amount_changed, application_id | effect:chat.event_log |
+-| `application.venue_changed` | [`service.py::change_venue`](../services/applications/service.py#L199) | [`consumers.py::on_venue_changed`](../services/billing/consumers.py#L13)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_venue_changed`](../services/scheduling/consumers.py#L17) | application_id, kind, new_venue_id, old_venue_id, stage | effect:chat.event_log |
+-| `booking.cancelled` | [`service.py::_cancel`](../services/scheduling/service.py#L178) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_booking_cancelled`](../services/notifications/consumers.py#L21) | application_id, booking_id, reason, starts_at, venue_id | effect:chat.event_log, effect:email.cancel |
+-| `booking.created` | [`service.py::book`](../services/scheduling/service.py#L126) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_booking_created`](../services/notifications/consumers.py#L10) | application_id, booking_id, purpose, starts_at, venue_id | effect:chat.event_log, effect:email.booking |
+-| `books.issued` | [`service.py::issue_books`](../services/scheduling/service.py#L223) | [`consumers.py::on_books_issued`](../services/applications/consumers.py#L67) | application_id | — |
++| `application.venue_changed` | [`service.py::change_venue`](../services/applications/service.py#L199) | [`consumers.py::on_venue_changed`](../services/billing/consumers.py#L13)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_venue_changed`](../services/scheduling/consumers.py#L16) | application_id, kind, new_venue_id, old_venue_id, stage | effect:chat.event_log |
++| `booking.cancelled` | [`service.py::_cancel`](../services/scheduling/service.py#L179) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_booking_cancelled`](../services/notifications/consumers.py#L21) | application_id, booking_id, reason, starts_at, venue_id | effect:chat.event_log, effect:email.cancel |
++| `booking.created` | [`service.py::book`](../services/scheduling/service.py#L127) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_booking_created`](../services/notifications/consumers.py#L10) | application_id, booking_id, purpose, starts_at, venue_id | effect:chat.event_log, effect:email.booking |
++| `books.issued` | [`service.py::issue_books`](../services/scheduling/service.py#L224) | [`consumers.py::on_books_issued`](../services/applications/consumers.py#L67) | application_id | — |
+ | `client.updated` | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L51) | client_id, fields, source_application_id | — |
+ | `halls.booking_cancelled` | [`service.py::_cancel`](../services/halls/service.py#L217) | [`consumers.py::on_booking_cancelled`](../services/halls/consumers.py#L35) | booking_id, reason, starts_at, venue_id | — |
+ | `halls.booking_confirmed` | [`service.py::apply_payments`](../services/halls/service.py#L372) | [`consumers.py::on_booking_confirmed`](../services/halls/consumers.py#L25) |  | — |
+@@ -209,8 +209,8 @@ flowchart LR
+ | `lectures.venue_limit_changed` | [`service.py::set_venue_capacity_limit`](../services/lectures/service.py#L75) | [`consumers.py::on_venue_limit_changed`](../services/lectures/consumers.py#L16) | max_capacity, venue_id | — |
+ | `lectures.waitlist_expired` | [`jobs.py::close_waitlists`](../services/lectures/jobs.py#L11) | [`consumers.py::on_waitlist_expired`](../services/lectures/consumers.py#L113) | event_id, listener_id, waitlist_id | — |
+ | `lectures.waitlist_promoted` | [`service.py::fill_from_waitlist`](../services/lectures/service.py#L436) | [`consumers.py::on_waitlist_promoted`](../services/lectures/consumers.py#L71) | event_id, listener_id, registration_id, waitlist_id | — |
+-| `loan.damaged` | [`service.py::return_book`](../services/scheduling/service.py#L267) | [`consumers.py::on_loan_damaged`](../services/billing/consumers.py#L49) | application_id, loan_id | — |
+-| `loan.lost` | [`service.py::mark_lost`](../services/scheduling/service.py#L279) | [`consumers.py::on_loan_lost`](../services/billing/consumers.py#L44) | application_id, loan_id | — |
++| `loan.damaged` | [`service.py::return_book`](../services/scheduling/service.py#L268) | [`consumers.py::on_loan_damaged`](../services/billing/consumers.py#L49) | application_id, loan_id | — |
++| `loan.lost` | [`service.py::mark_lost`](../services/scheduling/service.py#L280) | [`consumers.py::on_loan_lost`](../services/billing/consumers.py#L44) | application_id, loan_id | — |
+ | `loan.overdue` | [`jobs.py::flag_overdue`](../services/scheduling/jobs.py#L10) | [`consumers.py::on_loan_overdue`](../services/billing/consumers.py#L39)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23) | application_id, book_id, loan_id | effect:chat.event_log |
+ | `marketing.campaign_finished` | [`service.py::deliver_messages`](../services/marketing/service.py#L382) | [`consumers.py::on_campaign_finished`](../services/marketing/consumers.py#L20) | audience_id, campaign_id, finished_at | — |
+ | `marketing.campaign_launched` | [`service.py::start`](../services/marketing/service.py#L295) | [`consumers.py::on_campaign_launched`](../services/marketing/consumers.py#L10) | audience_id, campaign_id, venue_id | — |
+@@ -263,4 +263,4 @@ flowchart LR
+ | `subscriptions.payment_completed` | [`service.py::record_payment`](../services/subscriptions/service.py#L272) | [`consumers.py::on_payment_completed`](../services/subscriptions/consumers.py#L40) | invoice_id, subscription_id | — |
+ | `subscriptions.refund_required` | [`service.py::apply_payment`](../services/subscriptions/service.py#L358)<br>[`service.py::void_open_invoices`](../services/subscriptions/service.py#L303) | [`consumers.py::on_refund_required`](../services/subscriptions/consumers.py#L86) | amount, invoice_id, subscription_id | — |
+ | `subscriptions.renewed` | [`service.py::apply_payment`](../services/subscriptions/service.py#L358) | [`consumers.py::on_renewed`](../services/subscriptions/consumers.py#L52) | paid_until, subscription_id | — |
+-| `venue.settings_changed` | [`admin.py::set_venue_max_capacity`](../services/applications/admin.py#L32) | [`consumers.py::on_venue_settings_changed`](../services/scheduling/consumers.py#L35) | max_capacity, old_max_capacity, venue_id | — |
++| `venue.settings_changed` | [`admin.py::set_venue_max_capacity`](../services/applications/admin.py#L32) | [`consumers.py::on_venue_settings_changed`](../services/scheduling/consumers.py#L34) | max_capacity, old_max_capacity, venue_id | — |
+diff --git a/docs/reconciliation.md b/docs/reconciliation.md
+index 2cd6fe9..288dbf6 100644
+--- a/docs/reconciliation.md
++++ b/docs/reconciliation.md
+@@ -10,9 +10,9 @@
+ | ID | Важность | Расхождение | Схема | Код / БД | Правила | Вопрос |
+ |---|---|---|---|---|---|---|
+ | D-01 | high | Дедупликация закрывает заявку, которая уже дошла до записи | §6: остаётся та заявка, что первой дошла до записи (платная — при полной оплате, в долг — при прохождении проверки) | services/applications/dedup.py::OPEN_STAGES:10 включает awaiting_issue; dedup.py::close_duplicates:25 вызывается из consumers.py::on_review_passed:43 и on_fully_paid:31 без проверки, что у других заявок booking_reached_at пуст<br>БД: ix_applications_client_sphere — обычный индекс, не уникальный | R-APP-DEDUP-01, R-APP-DEDUP-02, R-BILL-PROCESS-01 | Если у клиента уже есть оплаченная заявка на «Ожидает выдачи», должна ли более поздняя заявка в долг закрыться сама как дубль, а не закрывать оплаченную? |
+-| D-02 | high | Ссылка на запись нигде не отправляется клиенту | §13: ссылка формируется и уходит на «Ожидает выдачи» и когда книги у клиента; §1: клиент работает только по ссылке из письма | services/scheduling/consumers.py::on_ready_for_booking:12 и scheduling/service.py::issue_books:223 создают ссылку; notifications подписан только на booking.created и booking.cancelled (notifications/consumers.py:9,20)<br>БД: emails_type_check, templates_type_check — только booking и cancel | R-SCHEMA-NOTIF-01, R-SCHEMA-NOTIF-02, R-SCHED-LINK-01, R-NOTIF-TYPES-01, R-NOTIF-RENDER-02 | Как клиент получает токен ссылки — нужен ли тип письма «ссылка на запись» (за книгами и на сдачу), в том числе после смены площадки? |
++| D-02 | high | Ссылка на запись нигде не отправляется клиенту | §13: ссылка формируется и уходит на «Ожидает выдачи» и когда книги у клиента; §1: клиент работает только по ссылке из письма | services/scheduling/consumers.py::on_ready_for_booking:11 и scheduling/service.py::issue_books:224 создают ссылку; notifications подписан только на booking.created и booking.cancelled (notifications/consumers.py:9,20)<br>БД: emails_type_check, templates_type_check — только booking и cancel | R-SCHEMA-NOTIF-01, R-SCHEMA-NOTIF-02, R-SCHED-LINK-01, R-NOTIF-TYPES-01, R-NOTIF-RENDER-02 | Как клиент получает токен ссылки — нужен ли тип письма «ссылка на запись» (за книгами и на сдачу), в том числе после смены площадки? |
+ | D-03 | high | Роли и закрепление сотрудников в большинстве действий не проверяются | §2, §3, §17: проверяющего назначает только руководитель проверяющих; привязку, отвязку и возврат платежа выполняет только главный бухгалтер; аннулирует счёт закреплённый бухгалтер; данные клиента обновляет проверяющий | applications/service.py::assign_reviewer:122 (без исполнителя); update_client:131 (без source_application_id проверки нет); billing/service.py::link_payment:98 (chief_id из тела запроса), unlink_payment:132, refund_payment:143, cancel_invoice:75 (без исполнителя); chat/api.py::list_:35 (role из query) | R-APP-REVIEW-02, R-APP-CLIENT-01, R-BILL-PAYMENT-03, R-BILL-REFUND-01, R-BILL-UNLINK-01, R-BILL-CANCEL-02, R-CHAT-AUTH-01, R-SCHEMA-ROLE-01 | Где должна проверяться роль — в сервисах (тогда нужен справочник сотрудников) или во внешнем шлюзе аутентификации, которому сервисы доверяют? |
+-| D-04 | high | Ограничение «за два дня» и признак оператора обходятся параметром запроса | §2 Клиент, §13: менее чем за два дня переносит или отменяет только оператор; оператор записывает в системе, клиент и представитель — по ссылке | services/scheduling/api.py::cancel:41 — by из query; scheduling/service.py::cancel_booking:193 доверяет by; api.py::book:35 — booked_by=operator принимается от любого обладателя токена<br>БД: bookings_booked_by_check — только допустимые значения, не источник | R-SCHED-CANCEL-02, R-SCHED-BOOK-03, R-SCHED-RESCHEDULE-01 | Нужно ли закрыть публичным эндпоинтам значения by и booked_by, отличные от client и representative, и пускать оператора только через book_by_operator с проверкой закрепления? |
++| D-04 | high | Ограничение «за два дня» и признак оператора обходятся параметром запроса | §2 Клиент, §13: менее чем за два дня переносит или отменяет только оператор; оператор записывает в системе, клиент и представитель — по ссылке | services/scheduling/api.py::cancel:41 — by из query; scheduling/service.py::cancel_booking:194 доверяет by; api.py::book:35 — booked_by=operator принимается от любого обладателя токена<br>БД: bookings_booked_by_check — только допустимые значения, не источник | R-SCHED-CANCEL-02, R-SCHED-BOOK-03, R-SCHED-RESCHEDULE-01 | Нужно ли закрыть публичным эндпоинтам значения by и booked_by, отличные от client и representative, и пускать оператора только через book_by_operator с проверкой закрепления? |
+ | D-05 | high | После проверки заявка с частичной оплатой меняет площадку, а счёт остаётся старым | §7: до оплаты счёт аннулируется и выставляется по прайсу и реквизитам новой площадки; после оплаты смена — только через возврат | services/applications/service.py::change_venue:199 блокирует paid только на awaiting_issue и books_out; services/billing/consumers.py::on_venue_changed:13 аннулирует счёт только при paid_amount = 0<br>БД: trg_invoices_cancel_guard не даёт аннулировать счёт с платежом | R-APP-VENUE-CHANGE-02, R-APP-VENUE-CHANGE-03, R-BILL-VENUE-CHANGE-01 | Запрещать ли смену площадки при любой привязанной оплате (paid_amount > 0) до её возврата или отвязки? |
+ | D-06 | high | Возвращённая на проверку из-за обновления клиента заявка сразу уходит в архив по старому сроку | §6: другие заявки клиента, не дошедшие до записи, снова уходят на проверку; §5: архив — если месяц с начала проверки оператор не получил данные | services/applications/consumers.py::on_client_updated:51 не сбрасывает review_started_at; services/applications/jobs.py::archive_stale:14 архивирует on_review с review_started_at старше REVIEW_ARCHIVE_DAYS | R-APP-CLIENT-03, R-APP-ARCHIVE-01, R-APP-REVIEW-01 | С какого момента считать месяц для повторной проверки после обновления данных клиента — с первой проверки или с возврата на проверку? |
+ | D-07 | high | Без настроенной ставки штраф не создаётся, и заявку можно закрыть | §14: штраф начисляется за утерю, порчу и просрочку; пока штрафы не погашены, заявку закрыть нельзя | services/billing/service.py::create_fine:164 поднимает DomainError, если ставки нет, внутри обработчиков on_loan_overdue:39, on_loan_lost:44, on_loan_damaged:49; guard settled видит 0 открытых штрафов<br>БД: fine_rates_amount_check допускает 0, а invoices_amount_check требует amount > 0 | R-BILL-FINE-02, R-BILL-FINE-SETTLED-01, R-SCHEMA-ADMIN-01 | Что делать при отсутствии ставки — блокировать выдачу книг, пока ставки не настроены, или создавать штраф без суммы, который ждёт настройки? Как гасить штраф с нулевой ставкой? |
+@@ -26,18 +26,18 @@
+ | D-15 | medium | Частично оплаченный счёт заявки-дубля остаётся действующим | §6: выставленный по второй заявке счёт аннулируется | services/billing/consumers.py::on_closed_duplicate:20 аннулирует только счета с paid_amount = 0<br>БД: trg_invoices_cancel_guard | R-BILL-DUPLICATE-01, R-APP-DEDUP-02 | Должен ли главный бухгалтер получать задачу на возврат частичной оплаты по дублю? |
+ | D-16 | medium | Срок просрочки задан литералом и отсчитывается от issued_at, а не от due_at | §14: срок пользования — месяц с даты выдачи; срыв система отмечает автоматически | services/scheduling/jobs.py::flag_overdue:16 — timedelta(days=30) вместо settings.LOAN_PERIOD_DAYS или loans.due_at; книгу, возвращённую с опозданием до запуска задачи, не штрафуют | R-SCHED-OVERDUE-01, R-SCHED-ISSUE-02, R-CHAT-EVENTS-08 | Считать ли просрочку по loans.due_at и начислять ли штраф при позднем возврате в return_book? |
+ | D-17 | medium | Фоновые задачи не запускаются из репозитория | §5, §14: автоархив и отметка срыва срока выполняются автоматически | services/applications/jobs.py::archive_stale:14 и services/scheduling/jobs.py::flag_overdue:10 вызываются только из тестов; планировщика нет | R-APP-ARCHIVE-01, R-APP-ARCHIVE-02, R-BILL-ARCHIVE-01, R-SCHED-OVERDUE-01 | Где и с какой периодичностью запускаются задачи (в docstring — раз в час), и кто за этим следит? |
+-| D-18 | medium | Окно можно переполнить параллельными записями | §12: максимум мест на окно задаёт администратор; §2 Клиент: нельзя записаться на занятое время | services/scheduling/service.py::book:136 считает записи без блокировки<br>БД: ограничения на число записей в окне нет; trg_slot_capacity_limit проверяет только capacity окна, а не записи | R-SCHED-BOOK-01, R-SCHED-SLOT-03 | Нужна ли блокировка окна (SELECT … FOR UPDATE) или триггер на bookings? |
+-| D-19 | medium | После закрытия заявки ссылка на сдачу и запись на сдачу остаются активными | §13: по закрытой заявке ссылка не работает | scheduling не подписан на переход books_out->closed; services/scheduling/service.py::return_book:267 не закрывает запись с purpose=return<br>БД: uq_booking_links_one_active | R-SCHED-LINK-03, R-SCHED-RETURN-01 | Гасить ли ссылку и записи на сдачу при закрытии заявки (или при возврате последней книги)? |
++| D-18 | medium | Окно можно переполнить параллельными записями | §12: максимум мест на окно задаёт администратор; §2 Клиент: нельзя записаться на занятое время | services/scheduling/service.py::book:137 считает записи без блокировки<br>БД: ограничения на число записей в окне нет; trg_slot_capacity_limit проверяет только capacity окна, а не записи | R-SCHED-BOOK-01, R-SCHED-SLOT-03 | Нужна ли блокировка окна (SELECT … FOR UPDATE) или триггер на bookings? |
++| D-19 | medium | После закрытия заявки ссылка на сдачу и запись на сдачу остаются активными | §13: по закрытой заявке ссылка не работает | scheduling не подписан на переход books_out->closed; services/scheduling/service.py::return_book:268 не закрывает запись с purpose=return<br>БД: uq_booking_links_one_active | R-SCHED-LINK-03, R-SCHED-RETURN-01 | Гасить ли ссылку и записи на сдачу при закрытии заявки (или при возврате последней книги)? |
+ | D-20 | low | Бухгалтер может взять заявку любого этапа и вида, кроме debt | §2 Бухгалтер: берёт в работу платные заявки, прошедшие проверку; §3: у социальной заявки бухгалтера нет, пока не понадобится штраф | services/billing/service.py::take_application:17 проверяет только kind≠debt<br>БД: PK billing.accountant_assignments(application_id) | R-BILL-ASSIGN-01, R-BILL-ASSIGN-02 | Ограничить ли закрепление этапами от awaiting_invoice (для paid) и наличием штрафа (для social)? |
+ | D-21 | medium | Социальные заявки между собой не дедуплицируются | §6: две заявки клиента по одной сфере — остаётся одна; исключение только между социальными и платными | services/applications/consumers.py::on_review_passed:43 вызывает close_duplicates только для debt; для social вызова нет | R-APP-DEDUP-01 | Должна ли вторая социальная заявка клиента по той же сфере закрываться как дубль? |
+ | D-22 | medium | Нет истории действий «кто и когда» | §16: все значимые действия сохраняются в истории заявки, удалить её нельзя | libs/bpm/engine.py::transition:53 не сохраняет actor; services/applications/listeners.py::_domain_events пишет stage_changed без исполнителя<br>БД: неизменяем только chat.messages (trg_chat_messages_immutable) | R-SCHEMA-HIST-01, R-CHAT-EVENTS-02, R-CHAT-EVENTS-07 | Считать ли ленту чата историей заявки (тогда в событиях нужен исполнитель) или нужен отдельный журнал аудита? |
+ | D-23 | medium | Заявку и данные клиента видит кто угодно; клиент заводится повторно | §16: проверяющий оператор видит только свою площадку; §2 Клиент: заявку не видит; §6: клиент заводится один раз | services/applications/api.py::get:55 без проверки; services/applications/service.py::create_client:63 без проверки дублей и роли<br>БД: у applications.clients нет уникальных ключей | R-SCHEMA-ACCESS-01, R-SCHEMA-CLIENT-01 | По какому признаку считать клиента тем же (паспорт, ФИО и дата рождения), и нужен ли уникальный индекс? |
+ | D-24 | low | Письма об отмене уходят по архивной заявке и не содержат новой ссылки | §5: пока заявка в архиве, письма не отправляются; §7: при смене площадки — письмо об отмене и новая ссылка | services/notifications/consumers.py::on_booking_cancelled:21 передаёт только starts_at; services/notifications/service.py::send:42 не проверяет этап | R-NOTIF-RESET-01, R-NOTIF-RENDER-02 | Отправлять ли письмо об отмене в момент архивации и добавлять ли в письмо после смены площадки новую ссылку? |
+-| D-25 | low | Книги и заявка — упрощения в смене книг и освобождении книг | §4: смена книг после счёта до оплаты — аннулировать и выставить счёт заново; §8: книги освобождаются после отметки о возврате | services/applications/service.py::change_books:239 — только draft и needs_rework; services/scheduling/service.py::issue_books:223 удаляет holds при выдаче | R-APP-BOOKS-01, R-SCHED-ISSUE-03 | Достаточно ли менять книги после проверки только через архив, и подтверждаете ли, что после выдачи книги учитываются в scheduling.loans, а не в holds? |
++| D-25 | low | Книги и заявка — упрощения в смене книг и освобождении книг | §4: смена книг после счёта до оплаты — аннулировать и выставить счёт заново; §8: книги освобождаются после отметки о возврате | services/applications/service.py::change_books:239 — только draft и needs_rework; services/scheduling/service.py::issue_books:224 удаляет holds при выдаче | R-APP-BOOKS-01, R-SCHED-ISSUE-03 | Достаточно ли менять книги после проверки только через архив, и подтверждаете ли, что после выдачи книги учитываются в scheduling.loans, а не в holds? |
+ | D-26 | low | Чат неполон относительно схемы | §15: в чат попадают все события (назначения, платежи, перенос, неявка); к сообщениям прикрепляют файлы | services/chat/consumers.py::EVENT_TEXT — нет payment.fully_paid, payment.refunded, loan.lost, loan.damaged, books.issued и назначений; у chat.messages только body<br>БД: messages_check | R-CHAT-EVENTS-06, R-CHAT-EVENTS-07, R-CHAT-POST-03, R-SCHED-FINE-01 | Какие события обязательны в чате для первой версии и нужны ли вложения? |
+ | D-27 | low | Ограничение БД без правила — уникальное имя сферы | §1: сфера — тематический раздел; об уникальности названия не сказано | <br>БД: spheres_name_key (UNIQUE spheres.name) | R-SCHEMA-SPHERE-01 | Подтверждаете ли, что название сферы глобально уникально (а не в пределах площадки)? |
+ | D-28 | low | Удаление заявки не запрещено в БД | §4: удалить заявку нельзя | операции удаления нет<br>БД: application_books и attempts — ON DELETE CASCADE; триггера, запрещающего DELETE, нет | R-SCHEMA-APP-02, R-SCHEMA-APP-01 | Добавить ли триггер, запрещающий DELETE заявок и UPDATE operator_id? |
+-| D-29 | low | Снижение максимума площадки не трогает уже созданные окна | §12: в окне не больше мест, чем максимум площадки | services/scheduling/consumers.py::on_venue_settings_changed:35 обновляет только venue_limits<br>БД: trg_slot_capacity_limit срабатывает только на INSERT и UPDATE OF capacity | R-SCHED-VENUE-LIMIT-01, R-SCHED-SLOT-03 | Уменьшать ли capacity существующих будущих окон, если администратор снизил максимум? |
++| D-29 | low | Снижение максимума площадки не трогает окна, где мест было меньше старого максимума | §12: в окне не больше мест, чем максимум площадки | services/scheduling/service.py::apply_venue_max_capacity:303 переносит новый максимум только на будущие окна с capacity, равным старому максимуму, и без capacity_reduced; окна с явно заданным или уменьшенным числом мест между новым и старым максимумом остаются больше нового максимума<br>БД: trg_slot_capacity_limit срабатывает только на INSERT и UPDATE OF capacity | R-SCHED-VENUE-LIMIT-01, R-SCHED-VENUE-LIMIT-02, R-SCHED-SLOT-03 | Обрезать ли до нового максимума и остальные будущие окна, у которых мест больше него? |
+ 
+ ## Детерминированная сверка
+ 
+diff --git a/docs/roles.md b/docs/roles.md
+index 0f69d8d..30bdf44 100644
+--- a/docs/roles.md
++++ b/docs/roles.md
+@@ -152,6 +152,7 @@
+ - R-NOTIF-TEMPLATE-06 [draft] Сохранение шаблона создаёт его или заменяет текст
+ - R-NOTIF-TEMPLATE-07 [draft] Настройка шаблонов не ограничена ролью администратора
+ - R-SCHED-VENUE-LIMIT-01 [draft] Максимум мест площадки реплицируется из админки событием
++- R-SCHED-VENUE-LIMIT-02 [draft] Новый максимум площадки переносится на будущие окна со старым максимумом
+ - R-SCHEMA-ADMIN-01 [draft] Размеры штрафов по представителю и площадке задаёт администратор в админке
+ - R-SUBSCRIPTIONS-PLAN-01 [draft] Тариф создаётся только известного вида, с положительной ценой и уникальным кодом
+ - R-SUBSCRIPTIONS-PLAN-02 [draft] Архивный тариф не продаётся и не показывается, но действующие абонементы на нём продлеваются
+@@ -422,19 +423,19 @@
+ | [`service.py::cancel_run`](../services/reports/service.py#L320) | — | отменить запуск может только тот, кто его запросил |
+ | [`service.py::deactivate_schedule`](../services/reports/service.py#L415) | — | отключить выгрузку может её автор или владелец отчёта |
+ | [`service.py::mark_read`](../services/reports/service.py#L490) | — | уведомление адресовано другому сотруднику |
+-| [`service.py::_link_by_token`](../services/scheduling/service.py#L95) | Клиент | — |
+-| [`service.py::_loan_for_checker`](../services/scheduling/service.py#L255) | Проверяющий оператор | книги принимает проверяющий оператор площадки заявки |
++| [`service.py::_link_by_token`](../services/scheduling/service.py#L96) | Клиент | — |
++| [`service.py::_loan_for_checker`](../services/scheduling/service.py#L256) | Проверяющий оператор | книги принимает проверяющий оператор площадки заявки |
+ | [`service.py::_require_site_checker`](../services/scheduling/service.py#L17) | Проверяющий оператор | проверяющий оператор работает только со своей площадкой |
+-| [`service.py::book`](../services/scheduling/service.py#L126) | Клиент | — |
+-| [`service.py::book_by_operator`](../services/scheduling/service.py#L166) | Оператор | заявка закреплена за другим оператором |
++| [`service.py::book`](../services/scheduling/service.py#L127) | Клиент | — |
++| [`service.py::book_by_operator`](../services/scheduling/service.py#L167) | Оператор | заявка закреплена за другим оператором |
+ | [`service.py::create_slot`](../services/scheduling/service.py#L23) | Проверяющий оператор | — |
+-| [`service.py::free_slots`](../services/scheduling/service.py#L102) | Клиент | — |
+-| [`service.py::issue_books`](../services/scheduling/service.py#L223) | Проверяющий оператор | книги выдаёт проверяющий оператор площадки заявки |
+-| [`service.py::mark_lost`](../services/scheduling/service.py#L279) | Проверяющий оператор | — |
+-| [`service.py::mark_no_show`](../services/scheduling/service.py#L213) | Проверяющий оператор | — |
++| [`service.py::free_slots`](../services/scheduling/service.py#L103) | Клиент | — |
++| [`service.py::issue_books`](../services/scheduling/service.py#L224) | Проверяющий оператор | книги выдаёт проверяющий оператор площадки заявки |
++| [`service.py::mark_lost`](../services/scheduling/service.py#L280) | Проверяющий оператор | — |
++| [`service.py::mark_no_show`](../services/scheduling/service.py#L214) | Проверяющий оператор | — |
+ | [`service.py::reduce_capacity`](../services/scheduling/service.py#L52) | Проверяющий оператор | — |
+-| [`service.py::remove_slot`](../services/scheduling/service.py#L66) | Проверяющий оператор | — |
+-| [`service.py::return_book`](../services/scheduling/service.py#L267) | Проверяющий оператор | — |
++| [`service.py::remove_slot`](../services/scheduling/service.py#L67) | Проверяющий оператор | — |
++| [`service.py::return_book`](../services/scheduling/service.py#L268) | Проверяющий оператор | — |
+ | [`service.py::_require_hr`](../services/staff/service.py#L51) | — | кадровые операции выполняет только отдел кадров |
+ | [`service.py::_require_responsible`](../services/staff/service.py#L58) | — | сменами площадки управляет только ответственный за площадку |
+ | [`service.py::mark_alert_read`](../services/staff/service.py#L626) | — | уведомление адресовано другому сотруднику |
+diff --git a/docs/rules/applications.md b/docs/rules/applications.md
+index 50fc264..956fbae 100644
+--- a/docs/rules/applications.md
++++ b/docs/rules/applications.md
+@@ -143,7 +143,7 @@
+ 
+ При переходе в awaiting_issue (после проверки debt/social или после полной оплаты paid) заполняется booking_reached_at (один раз) и публикуется application.ready_for_booking; scheduling по нему формирует публичную ссылку на запись (issue_link).
+ 
+-- Реализация: [`services/applications/service.py::mark_ready_for_booking:158-164`](../../services/applications/service.py#L158), [`services/scheduling/consumers.py::on_ready_for_booking:13-13`](../../services/scheduling/consumers.py#L13)
++- Реализация: [`services/applications/service.py::mark_ready_for_booking:158-164`](../../services/applications/service.py#L158), [`services/scheduling/consumers.py::on_ready_for_booking:12-12`](../../services/scheduling/consumers.py#L12)
+ - Тесты: `tests/test_kinds.py::test_debt_application_skips_invoice`, `tests/test_paid_flow.py::test_paid_application_full_path`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-APP-REVIEW-05, R-APP-PAY-03, R-APP-UNARCHIVE-02
+@@ -282,7 +282,7 @@
+ 
+ При смене площадки за заявкой закрепляется site_checker новой площадки и публикуется application.venue_changed. Billing аннулирует действующий счёт за книги без оплат (дальше invoice.cancelled возвращает заявку в awaiting_invoice); scheduling сбрасывает записи и, если заявка в awaiting_issue, выдаёт новую ссылку; чат фиксирует смену.
+ 
+-- Реализация: [`services/applications/service.py::change_venue:216-230`](../../services/applications/service.py#L216), [`services/billing/consumers.py::on_venue_changed:14-16`](../../services/billing/consumers.py#L14), [`services/scheduling/consumers.py::on_venue_changed:18-21`](../../services/scheduling/consumers.py#L18), [`services/chat/consumers.py::_handler:24-25`](../../services/chat/consumers.py#L24), [`awaiting_payment->awaiting_invoice`](../../bpm/application_process.yaml#L28)
++- Реализация: [`services/applications/service.py::change_venue:216-230`](../../services/applications/service.py#L216), [`services/billing/consumers.py::on_venue_changed:14-16`](../../services/billing/consumers.py#L14), [`services/scheduling/consumers.py::on_venue_changed:17-20`](../../services/scheduling/consumers.py#L17), [`services/chat/consumers.py::_handler:24-25`](../../services/chat/consumers.py#L24), [`awaiting_payment->awaiting_invoice`](../../bpm/application_process.yaml#L28)
+ - Тесты: `tests/test_venue_change.py::test_venue_change_reassigns_site_checker`, `tests/test_venue_change.py::test_venue_change_before_payment_reissues_invoice`
+ - Роли: Оператор
+ - Связанные: R-APP-PAY-02, R-APP-VENUE-CHANGE-01
+@@ -322,7 +322,7 @@ archive_stale архивирует платные заявки на awaiting_pay
+ 
+ Оператор заявки отправляет в архив заявку на этапах draft, on_review, needs_rework, awaiting_invoice или awaiting_payment (любой вид); из awaiting_issue в архив уводит только chief_accountant (возврат платежа); после books_out архив невозможен. Архив закрывает текущую попытку (ended_at, outcome) и публикует application.archived — scheduling сбрасывает записи, чат фиксирует событие.
+ 
+-- Реализация: [`services/applications/service.py::archive:255-261`](../../services/applications/service.py#L255), [`services/scheduling/consumers.py::on_archived:26-26`](../../services/scheduling/consumers.py#L26), [`draft->archived`](../../bpm/application_process.yaml#L39), [`on_review->archived`](../../bpm/application_process.yaml#L37), [`needs_rework->archived`](../../bpm/application_process.yaml#L37), [`awaiting_invoice->archived`](../../bpm/application_process.yaml#L39), [`awaiting_payment->archived`](../../bpm/application_process.yaml#L38), [`awaiting_issue->archived`](../../bpm/application_process.yaml#L40)
++- Реализация: [`services/applications/service.py::archive:255-261`](../../services/applications/service.py#L255), [`services/scheduling/consumers.py::on_archived:25-25`](../../services/scheduling/consumers.py#L25), [`draft->archived`](../../bpm/application_process.yaml#L39), [`on_review->archived`](../../bpm/application_process.yaml#L37), [`needs_rework->archived`](../../bpm/application_process.yaml#L37), [`awaiting_invoice->archived`](../../bpm/application_process.yaml#L39), [`awaiting_payment->archived`](../../bpm/application_process.yaml#L38), [`awaiting_issue->archived`](../../bpm/application_process.yaml#L40)
+ - БД: [`attempts_outcome_check`](../../migrations/versions/0001_initial.py#L108)
+ - Тесты: `tests/test_archive.py::test_paid_application_cannot_be_archived_by_operator_after_payment`, `tests/test_archive.py::test_unarchive_starts_new_attempt_and_review`
+ - Роли: Оператор, Главный бухгалтер, Система (события и фоновые задачи)
+@@ -381,7 +381,7 @@ close_duplicates вызывается при полной оплате плат
+ 
+ По application.closed_duplicate billing аннулирует все действующие счета заявки без оплат, scheduling сбрасывает записи, чат фиксирует закрытие как дубль. Оплаченные счета дубля остаются действующими.
+ 
+-- Реализация: [`services/billing/consumers.py::on_closed_duplicate:21-23`](../../services/billing/consumers.py#L21), [`services/scheduling/consumers.py::on_closed_duplicate:31-31`](../../services/scheduling/consumers.py#L31), [`services/chat/consumers.py::_handler:24-25`](../../services/chat/consumers.py#L24)
++- Реализация: [`services/billing/consumers.py::on_closed_duplicate:21-23`](../../services/billing/consumers.py#L21), [`services/scheduling/consumers.py::on_closed_duplicate:30-30`](../../services/scheduling/consumers.py#L30), [`services/chat/consumers.py::_handler:24-25`](../../services/chat/consumers.py#L24)
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-APP-DEDUP-01
+ 
+@@ -443,9 +443,10 @@ set_venue_requisites записывает реквизиты организац
+ 
+ `draft` · config · §2 Администратор
+ 
+-set_venue_max_capacity отклоняет значение меньше 1 (DomainError, плюс CHECK в БД), сохраняет max_slot_capacity и публикует venue.settings_changed; scheduling обновляет VenueLimit площадки, которым ограничивается число мест в окнах.
++set_venue_max_capacity отклоняет значение меньше 1 (DomainError, плюс CHECK в БД), сохраняет max_slot_capacity и публикует venue.settings_changed; scheduling обновляет VenueLimit площадки, которым ограничивается число мест в окнах, и переносит новый максимум на будущие окна со старым максимумом (R-SCHED-VENUE-LIMIT-02).
+ 
+-- Реализация: [`services/applications/admin.py::set_venue_max_capacity:36-44`](../../services/applications/admin.py#L36), [`services/scheduling/consumers.py::on_venue_settings_changed:36-40`](../../services/scheduling/consumers.py#L36)
++- Реализация: [`services/applications/admin.py::set_venue_max_capacity:36-44`](../../services/applications/admin.py#L36), [`services/scheduling/consumers.py::on_venue_settings_changed:35-35`](../../services/scheduling/consumers.py#L35), [`services/scheduling/service.py::apply_venue_max_capacity:303-328`](../../services/scheduling/service.py#L303)
++- Тесты: `tests/test_scheduling.py::test_venue_maximum_change_updates_future_slots_with_old_maximum`
+ - БД: [`venues_max_slot_capacity_check`](../../migrations/versions/0001_initial.py#L33)
+ - Роли: Администратор
+ 
+diff --git a/docs/rules/scheduling.md b/docs/rules/scheduling.md
+index 5697d25..f309444 100644
+--- a/docs/rules/scheduling.md
++++ b/docs/rules/scheduling.md
+@@ -10,7 +10,7 @@
+ 
+ Создать окно, уменьшить в нём число мест, убрать окно и отметить неявку может только проверяющий оператор площадки окна (venue.site_checker_id). Иначе — AccessDenied «проверяющий оператор работает только со своей площадкой». Проверка общая, в _require_site_checker.
+ 
+-- Реализация: [`services/scheduling/service.py::_require_site_checker:17-20`](../../services/scheduling/service.py#L17), [`services/scheduling/service.py::create_slot:32`](../../services/scheduling/service.py#L32), [`services/scheduling/service.py::reduce_capacity:56`](../../services/scheduling/service.py#L56), [`services/scheduling/service.py::remove_slot:70`](../../services/scheduling/service.py#L70), [`services/scheduling/service.py::mark_no_show:218`](../../services/scheduling/service.py#L218)
++- Реализация: [`services/scheduling/service.py::_require_site_checker:17-20`](../../services/scheduling/service.py#L17), [`services/scheduling/service.py::create_slot:32`](../../services/scheduling/service.py#L32), [`services/scheduling/service.py::reduce_capacity:56`](../../services/scheduling/service.py#L56), [`services/scheduling/service.py::remove_slot:71`](../../services/scheduling/service.py#L71), [`services/scheduling/service.py::mark_no_show:219`](../../services/scheduling/service.py#L219)
+ - Роли: Проверяющий оператор
+ - Связанные: R-SCHED-SLOT-01, R-SCHED-SLOT-04, R-SCHED-SLOT-05, R-SCHED-NO-SHOW-01
+ 
+@@ -53,13 +53,13 @@
+ 
+ `draft` · guard · §12 Расписание площадок
+ 
+-reduce_capacity принимает только значение строго меньше текущего capacity окна («проверяющий оператор может только уменьшить число мест») и не меньше числа действующих записей в окне («в окне уже записано больше клиентов»). Действующие записи — bookings со статусом active.
++reduce_capacity принимает только значение строго меньше текущего capacity окна («проверяющий оператор может только уменьшить число мест») и не меньше числа действующих записей в окне («в окне уже записано больше клиентов»). Действующие записи — bookings со статусом active. Уменьшенное окно получает признак capacity_reduced = true и больше не следует за изменениями максимума площадки (R-SCHED-VENUE-LIMIT-02).
+ 
+-- Реализация: [`services/scheduling/service.py::reduce_capacity:57-61`](../../services/scheduling/service.py#L57), [`services/scheduling/service.py::_active_bookings:46-49`](../../services/scheduling/service.py#L46)
+-- БД: [`trg_slot_capacity_limit`](../../migrations/versions/0001_initial.py#L259), [`slots_capacity_check`](../../migrations/versions/0001_initial.py#L240)
+-- Тесты: `tests/test_scheduling.py::test_checker_can_only_reduce_capacity`
++- Реализация: [`services/scheduling/service.py::reduce_capacity:57-62`](../../services/scheduling/service.py#L57), [`services/scheduling/service.py::_active_bookings:46-49`](../../services/scheduling/service.py#L46)
++- БД: [`trg_slot_capacity_limit`](../../migrations/versions/0001_initial.py#L259), [`slots_capacity_check`](../../migrations/versions/0001_initial.py#L240), [`slots.capacity_reduced`](../../migrations/versions/0002_slot_capacity_reduced.py#L16)
++- Тесты: `tests/test_scheduling.py::test_checker_can_only_reduce_capacity`, `tests/test_scheduling.py::test_slot_reduced_by_checker_keeps_capacity_even_when_it_matches_old_maximum`
+ - Роли: Проверяющий оператор
+-- Связанные: R-SCHED-SITE-CHECKER-01, R-SCHED-SLOT-03
++- Связанные: R-SCHED-SITE-CHECKER-01, R-SCHED-SLOT-03, R-SCHED-VENUE-LIMIT-02
+ 
+ ## R-SCHED-SLOT-05 — Удаление окна отменяет записи на него
+ 
+@@ -67,7 +67,7 @@ reduce_capacity принимает только значение строго м
+ 
+ Окно удаляется мягко (slots.removed = true). Сначала все действующие записи на окно отменяются с причиной slot_removed, на каждую публикуется booking.cancelled. Из-за этого клиент и представитель получают письмо об отмене, в чат заявки пишется событие. Закреплённые книги и ссылка на запись остаются.
+ 
+-- Реализация: [`services/scheduling/service.py::remove_slot:71-76`](../../services/scheduling/service.py#L71), [`services/scheduling/service.py::_cancel:178-190`](../../services/scheduling/service.py#L178)
++- Реализация: [`services/scheduling/service.py::remove_slot:72-77`](../../services/scheduling/service.py#L72), [`services/scheduling/service.py::_cancel:179-191`](../../services/scheduling/service.py#L179)
+ - Роли: Проверяющий оператор
+ - Связанные: R-SCHED-CANCEL-01, R-SCHED-SITE-CHECKER-01
+ 
+@@ -75,12 +75,24 @@ reduce_capacity принимает только значение строго м
+ 
+ `draft` · effect · §2 Администратор; §12 Расписание площадок
+ 
+-Подписчик venue.settings_changed (публикует admin.set_venue_max_capacity) создаёт или обновляет строку scheduling.venue_limits с новым max_capacity. Уже созданные окна не пересчитываются: триггер срабатывает только на INSERT или изменение capacity, поэтому после снижения максимума окна со старым, большим числом мест остаются. CHECK требует max_capacity > 0.
++Подписчик venue.settings_changed (публикует admin.set_venue_max_capacity) вызывает apply_venue_max_capacity: она создаёт или обновляет строку scheduling.venue_limits с новым max_capacity и пересчитывает окна площадки по R-SCHED-VENUE-LIMIT-02. CHECK требует max_capacity > 0.
+ 
+-- Реализация: [`services/scheduling/consumers.py::on_venue_settings_changed:35-40`](../../services/scheduling/consumers.py#L35)
++- Реализация: [`services/scheduling/consumers.py::on_venue_settings_changed:34-35`](../../services/scheduling/consumers.py#L34), [`services/scheduling/service.py::apply_venue_max_capacity:303-328`](../../services/scheduling/service.py#L303)
+ - БД: [`venue_limits_max_capacity_check`](../../migrations/versions/0001_initial.py#L232)
+ - Роли: Администратор
+-- Связанные: R-SCHED-SLOT-02, R-SCHED-SLOT-03
++- Связанные: R-SCHED-SLOT-02, R-SCHED-SLOT-03, R-SCHED-VENUE-LIMIT-02
++
++## R-SCHED-VENUE-LIMIT-02 — Новый максимум площадки переносится на будущие окна со старым максимумом
++
++`draft` · effect · §2 Администратор; §12 Расписание площадок
++
++При изменении максимума площадки окна этой площадки, у которых capacity равно прежнему max_capacity из venue_limits, получают новый максимум — и при увеличении, и при уменьшении. Не меняются: окна, где проверяющий оператор уменьшил число мест (slots.capacity_reduced, даже если их capacity совпадает со старым максимумом), окна с началом не позже текущего момента и удалённые окна. Сначала сохраняется venue_limits, затем окна — иначе при увеличении триггер trg_slot_capacity_limit отклонил бы новое capacity. При уменьшении максимума действующие записи окна не отменяются: если их больше нового capacity, новые записи в окно просто не принимаются (R-SCHED-BOOK-01).
++
++- Реализация: [`services/scheduling/service.py::apply_venue_max_capacity:303-328`](../../services/scheduling/service.py#L303)
++- БД: [`trg_slot_capacity_limit`](../../migrations/versions/0001_initial.py#L259), [`slots.capacity_reduced`](../../migrations/versions/0002_slot_capacity_reduced.py#L16)
++- Тесты: `tests/test_scheduling.py::test_venue_maximum_change_updates_future_slots_with_old_maximum`, `tests/test_scheduling.py::test_venue_maximum_change_skips_past_slots`, `tests/test_scheduling.py::test_slot_reduced_by_checker_keeps_capacity_even_when_it_matches_old_maximum`
++- Роли: Администратор
++- Связанные: R-SCHED-VENUE-LIMIT-01, R-SCHED-SLOT-04, R-SCHED-SLOT-03
+ 
+ ## R-SCHED-LINK-01 — Ссылка на запись за книгами выдаётся при готовности к записи
+ 
+@@ -88,7 +100,7 @@ reduce_capacity принимает только значение строго м
+ 
+ На событие application.ready_for_booking (публикует mark_ready_for_booking при переходе в «Ожидает выдачи»: после проверки для debt/social, после полной оплаты для paid) модуль выпускает ссылку с purpose=issue.
+ 
+-- Реализация: [`services/scheduling/consumers.py::on_ready_for_booking:12-13`](../../services/scheduling/consumers.py#L12), [`services/scheduling/service.py::issue_link:79-86`](../../services/scheduling/service.py#L79)
++- Реализация: [`services/scheduling/consumers.py::on_ready_for_booking:11-12`](../../services/scheduling/consumers.py#L11), [`services/scheduling/service.py::issue_link:80-87`](../../services/scheduling/service.py#L80)
+ - Тесты: `tests/test_paid_flow.py::test_paid_application_full_path`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-SCHED-LINK-02, R-SCHED-ISSUE-03
+@@ -99,7 +111,7 @@ reduce_capacity принимает только значение строго м
+ 
+ issue_link гасит все прежние ссылки заявки (active=false) и создаёт новую со случайным токеном (secrets.token_urlsafe(16)). БД гарантирует уникальность токена и не больше одной активной ссылки на заявку. purpose ограничен значениями issue/return.
+ 
+-- Реализация: [`services/scheduling/service.py::issue_link:79-86`](../../services/scheduling/service.py#L79)
++- Реализация: [`services/scheduling/service.py::issue_link:80-87`](../../services/scheduling/service.py#L80)
+ - БД: [`uq_booking_links_one_active`](../../migrations/versions/0001_initial.py#L270), [`booking_links_token_key`](../../migrations/versions/0001_initial.py#L266), [`booking_links_purpose_check`](../../migrations/versions/0001_initial.py#L267)
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-SCHED-LINK-01, R-SCHED-LINK-03
+@@ -110,7 +122,7 @@ issue_link гасит все прежние ссылки заявки (active=fa
+ 
+ Просмотр свободных окон и запись по токену требуют существующую активную ссылку. Иначе — DomainError «ссылка на запись не действует». Ссылка гаснет при архивации, закрытии дублем, смене площадки и выпуске новой ссылки.
+ 
+-- Реализация: [`services/scheduling/service.py::_link_by_token:95-99`](../../services/scheduling/service.py#L95)
++- Реализация: [`services/scheduling/service.py::_link_by_token:96-100`](../../services/scheduling/service.py#L96)
+ - Роли: Клиент, Представитель клиента, Оператор
+ - Связанные: R-SCHED-RESET-01, R-SCHED-LINK-02
+ - ⚠ Расхождение со схемой: Схема: по закрытой заявке ссылка не работает. Код: на закрытие заявки (books_out->closed) модуль не подписан, ссылка на сдачу (purpose=return) после закрытия остаётся активной.
+@@ -121,7 +133,7 @@ issue_link гасит все прежние ссылки заявки (active=fa
+ 
+ free_slots возвращает окна площадки и сферы заявки, кроме удалённых, только с началом позже текущего момента и где действующих записей меньше capacity. Список отсортирован по времени.
+ 
+-- Реализация: [`services/scheduling/service.py::free_slots:102-123`](../../services/scheduling/service.py#L102), [`services/scheduling/api.py::slots:27-31`](../../services/scheduling/api.py#L27)
++- Реализация: [`services/scheduling/service.py::free_slots:103-124`](../../services/scheduling/service.py#L103), [`services/scheduling/api.py::slots:27-31`](../../services/scheduling/api.py#L27)
+ - Тесты: `tests/test_scheduling.py::test_free_slots_hide_full_windows`
+ - Роли: Клиент, Представитель клиента
+ - Связанные: R-SCHED-BOOK-01
+@@ -132,7 +144,7 @@ free_slots возвращает окна площадки и сферы заяв
+ 
+ book отклоняет удалённое окно (NotFound), окно другой площадки или сферы («окно не на площадке или не в сфере заявки»), окно в прошлом («нельзя записаться на прошедшее время») и окно, где действующих записей уже не меньше capacity («в окне нет свободных мест»).
+ 
+-- Реализация: [`services/scheduling/service.py::book:130-137`](../../services/scheduling/service.py#L130)
++- Реализация: [`services/scheduling/service.py::book:131-138`](../../services/scheduling/service.py#L131)
+ - Тесты: `tests/test_scheduling.py::test_booking_only_on_own_venue_and_sphere`
+ - Роли: Клиент, Представитель клиента, Оператор
+ - Связанные: R-SCHED-FREE-SLOTS-01, R-SCHED-BOOK-02
+@@ -144,7 +156,7 @@ book отклоняет удалённое окно (NotFound), окно дру
+ 
+ Частичный уникальный индекс uq_bookings_one_active не даёт создать вторую запись со статусом active на ту же заявку. В коде book такой проверки нет: повторная запись упадёт на ошибке целостности БД, а не на DomainError. Перенос сначала отменяет старую запись.
+ 
+-- Реализация: [`services/scheduling/service.py::book:139-151`](../../services/scheduling/service.py#L139)
++- Реализация: [`services/scheduling/service.py::book:140-152`](../../services/scheduling/service.py#L140)
+ - БД: [`uq_bookings_one_active`](../../migrations/versions/0001_initial.py#L282), [`bookings_status_check`](../../migrations/versions/0001_initial.py#L278), [`bookings_purpose_check`](../../migrations/versions/0001_initial.py#L277)
+ - Роли: Клиент, Представитель клиента, Оператор
+ - Связанные: R-SCHED-RESCHEDULE-01
+@@ -155,7 +167,7 @@ book отклоняет удалённое окно (NotFound), окно дру
+ 
+ У записи purpose берётся из ссылки (issue или return), booked_by — из тела запроса (по умолчанию client). CHECK bookings_booked_by_check допускает только client, representative, operator.
+ 
+-- Реализация: [`services/scheduling/service.py::book:139-147`](../../services/scheduling/service.py#L139), [`services/scheduling/api.py::book:35-37`](../../services/scheduling/api.py#L35)
++- Реализация: [`services/scheduling/service.py::book:140-148`](../../services/scheduling/service.py#L140), [`services/scheduling/api.py::book:35-37`](../../services/scheduling/api.py#L35)
+ - БД: [`bookings_booked_by_check`](../../migrations/versions/0001_initial.py#L279)
+ - Роли: Клиент, Представитель клиента
+ - Связанные: R-SCHED-CANCEL-02
+@@ -167,7 +179,7 @@ book отклоняет удалённое окно (NotFound), окно дру
+ 
+ При записи с purpose=issue каждая книга заявки (brief.book_ids) записывается в scheduling.holds через merge, поэтому повторная запись не создаёт дублей (PK application_id+book_id). Запись на сдачу (return) книги не закрепляет.
+ 
+-- Реализация: [`services/scheduling/service.py::book:148-150`](../../services/scheduling/service.py#L148)
++- Реализация: [`services/scheduling/service.py::book:149-151`](../../services/scheduling/service.py#L149)
+ - Роли: Клиент, Представитель клиента, Оператор
+ - Связанные: R-SCHED-HOLD-02, R-SCHED-RESET-01
+ 
+@@ -177,7 +189,7 @@ book отклоняет удалённое окно (NotFound), окно дру
+ 
+ _cancel меняет только статус записи и публикует событие, scheduling.holds не трогает. Книги освобождаются только в reset_bookings (смена площадки, архив, дубль) и при выдаче.
+ 
+-- Реализация: [`services/scheduling/service.py::_cancel:178-190`](../../services/scheduling/service.py#L178)
++- Реализация: [`services/scheduling/service.py::_cancel:179-191`](../../services/scheduling/service.py#L179)
+ - Роли: Клиент, Представитель клиента, Оператор, Проверяющий оператор
+ - Связанные: R-SCHED-HOLD-01, R-SCHED-ISSUE-03
+ 
+@@ -187,7 +199,7 @@ _cancel меняет только статус записи и публикуе
+ 
+ После записи публикуется booking.created (application_id, booking_id, venue_id, starts_at, purpose). Подписчик notifications отправляет письмо типа booking получателям заявки по шаблону площадки и группы вида заявки. Обработчик chat пишет в чат «Запись на {starts_at}».
+ 
+-- Реализация: [`services/scheduling/service.py::book:152-162`](../../services/scheduling/service.py#L152), [`services/notifications/consumers.py::on_booking_created:10-17`](../../services/notifications/consumers.py#L10), [`services/chat/consumers.py::_handler:23-27`](../../services/chat/consumers.py#L23)
++- Реализация: [`services/scheduling/service.py::book:153-163`](../../services/scheduling/service.py#L153), [`services/notifications/consumers.py::on_booking_created:10-17`](../../services/notifications/consumers.py#L10), [`services/chat/consumers.py::_handler:23-27`](../../services/chat/consumers.py#L23)
+ - Тесты: `tests/test_notifications.py::test_booking_email_goes_to_client_and_representative`, `tests/test_notifications.py::test_social_uses_social_templates`
+ - Роли: Клиент, Представитель клиента, Оператор
+ - Связанные: R-SCHED-CANCEL-01
+@@ -198,7 +210,7 @@ _cancel меняет только статус записи и публикуе
+ 
+ book_by_operator требует, чтобы заявка была закреплена за этим оператором («заявка закреплена за другим оператором») и у неё была действующая ссылка («по заявке нет действующей ссылки на запись»). Дальше выполняется обычная запись с booked_by=operator.
+ 
+-- Реализация: [`services/scheduling/service.py::book_by_operator:169-175`](../../services/scheduling/service.py#L169)
++- Реализация: [`services/scheduling/service.py::book_by_operator:170-176`](../../services/scheduling/service.py#L170)
+ - Роли: Оператор
+ - Связанные: R-SCHED-BOOK-01
+ 
+@@ -208,7 +220,7 @@ book_by_operator требует, чтобы заявка была закрепл
+ 
+ Любая отмена (клиентом, оператором, удалением окна, неявкой, сбросом) идёт через _cancel. Статус записи становится no_show при причине no_show, иначе cancelled. Публикуется booking.cancelled с причиной: notifications отправляет письмо типа cancel, chat пишет «Запись на … отменена (reason)».
+ 
+-- Реализация: [`services/scheduling/service.py::_cancel:178-190`](../../services/scheduling/service.py#L178), [`services/notifications/consumers.py::on_booking_cancelled:21-28`](../../services/notifications/consumers.py#L21), [`services/chat/consumers.py::_handler:23-27`](../../services/chat/consumers.py#L23)
++- Реализация: [`services/scheduling/service.py::_cancel:179-191`](../../services/scheduling/service.py#L179), [`services/notifications/consumers.py::on_booking_cancelled:21-28`](../../services/notifications/consumers.py#L21), [`services/chat/consumers.py::_handler:23-27`](../../services/chat/consumers.py#L23)
+ - БД: [`bookings_status_check`](../../migrations/versions/0001_initial.py#L278)
+ - Тесты: `tests/test_notifications.py::test_reschedule_sends_cancel_and_booking`
+ - Роли: Клиент, Представитель клиента, Оператор, Проверяющий оператор, Система (события и фоновые задачи)
+@@ -220,7 +232,7 @@ book_by_operator требует, чтобы заявка была закрепл
+ 
+ Отменить можно только действующую запись («запись не действует»). Если отменяет сторона клиента (CLIENT_SIDE = client, representative) и до начала окна меньше CLIENT_RESCHEDULE_MIN_DAYS суток (считается разница во времени, а не календарные даты) — DomainError «менее чем за два дня перенести или отменить визит может только оператор». Для остальных значений by ограничения нет.
+ 
+-- Реализация: [`services/scheduling/service.py::cancel_booking:195-203`](../../services/scheduling/service.py#L195), [`services/scheduling/api.py::cancel:41-42`](../../services/scheduling/api.py#L41)
++- Реализация: [`services/scheduling/service.py::cancel_booking:196-204`](../../services/scheduling/service.py#L196), [`services/scheduling/api.py::cancel:41-42`](../../services/scheduling/api.py#L41)
+ - Настройки: `libs/settings.py::CLIENT_RESCHEDULE_MIN_DAYS`, `services/scheduling/service.py::CLIENT_SIDE`
+ - Тесты: `tests/test_scheduling.py::test_client_cannot_cancel_less_than_two_days_before`
+ - Роли: Клиент, Представитель клиента, Оператор
+@@ -233,7 +245,7 @@ book_by_operator требует, чтобы заявка была закрепл
+ 
+ reschedule отменяет текущую запись через cancel_booking (с проверкой двух дней для стороны клиента) и записывает на новое окно по действующей ссылке заявки, с тем же booked_by. Уходят два письма: об отмене и о новой записи. Отдельного события переноса нет.
+ 
+-- Реализация: [`services/scheduling/service.py::reschedule:206-210`](../../services/scheduling/service.py#L206)
++- Реализация: [`services/scheduling/service.py::reschedule:207-211`](../../services/scheduling/service.py#L207)
+ - БД: [`uq_bookings_one_active`](../../migrations/versions/0001_initial.py#L282)
+ - Настройки: `libs/settings.py::CLIENT_RESCHEDULE_MIN_DAYS`
+ - Тесты: `tests/test_notifications.py::test_reschedule_sends_cancel_and_booking`
+@@ -246,7 +258,7 @@ reschedule отменяет текущую запись через cancel_bookin
+ 
+ Проверяющий оператор площадки окна отмечает неявку по действующей записи: статус no_show, публикуется booking.cancelled с reason=no_show (письмо об отмене, событие в чате). Ссылка и закреплённые книги остаются, этап заявки не меняется, клиент может записаться снова.
+ 
+-- Реализация: [`services/scheduling/service.py::mark_no_show:213-220`](../../services/scheduling/service.py#L213)
++- Реализация: [`services/scheduling/service.py::mark_no_show:214-221`](../../services/scheduling/service.py#L214)
+ - БД: [`bookings_status_check`](../../migrations/versions/0001_initial.py#L278)
+ - Тесты: `tests/test_scheduling.py::test_no_show_cancels_booking_and_allows_rebooking`
+ - Роли: Проверяющий оператор
+@@ -258,7 +270,7 @@ reschedule отменяет текущую запись через cancel_bookin
+ 
+ issue_books требует действующую запись с purpose=issue («нет действующей записи за книгами»). Выдаёт проверяющий оператор площадки заявки («книги выдаёт проверяющий оператор площадки заявки»). Заявка должна быть на этапе awaiting_issue («выдача возможна только на этапе «Ожидает выдачи»»), а дата окна — совпадать с текущей датой («выдача только в выбранную дату»).
+ 
+-- Реализация: [`services/scheduling/service.py::issue_books:224-235`](../../services/scheduling/service.py#L224)
++- Реализация: [`services/scheduling/service.py::issue_books:225-236`](../../services/scheduling/service.py#L225)
+ - Тесты: `tests/test_paid_flow.py::test_issue_only_on_booked_date`, `tests/test_paid_flow.py::test_paid_application_full_path`
+ - Роли: Проверяющий оператор
+ - Связанные: R-SCHED-ISSUE-02, R-SCHED-ISSUE-03
+@@ -269,7 +281,7 @@ issue_books требует действующую запись с purpose=issue
+ 
+ На каждую книгу заявки создаётся выдача (loan) со статусом out, issued_at = now и due_at = now + LOAN_PERIOD_DAYS (30) дней.
+ 
+-- Реализация: [`services/scheduling/service.py::issue_books:237-247`](../../services/scheduling/service.py#L237)
++- Реализация: [`services/scheduling/service.py::issue_books:238-248`](../../services/scheduling/service.py#L238)
+ - БД: [`loans_status_check`](../../migrations/versions/0001_initial.py#L298)
+ - Настройки: `libs/settings.py::LOAN_PERIOD_DAYS`
+ - Тесты: `tests/test_paid_flow.py::test_paid_application_full_path`
+@@ -282,7 +294,7 @@ issue_books требует действующую запись с purpose=issue
+ 
+ После выдачи запись получает статус done, все holds заявки удаляются и выпускается новая ссылка с purpose=return (прежняя гаснет). Публикуется books.issued: подписчик applications переводит заявку awaiting_issue->books_out от имени site_checker.
+ 
+-- Реализация: [`services/scheduling/service.py::issue_books:248-251`](../../services/scheduling/service.py#L248), [`services/applications/consumers.py::on_books_issued:67-69`](../../services/applications/consumers.py#L67), [`awaiting_issue->books_out`](../../bpm/application_process.yaml#L34)
++- Реализация: [`services/scheduling/service.py::issue_books:249-252`](../../services/scheduling/service.py#L249), [`services/applications/consumers.py::on_books_issued:67-69`](../../services/applications/consumers.py#L67), [`awaiting_issue->books_out`](../../bpm/application_process.yaml#L34)
+ - Тесты: `tests/test_paid_flow.py::test_paid_application_full_path`, `tests/test_kinds.py::test_social_application_skips_invoice`
+ - Роли: Проверяющий оператор
+ - Связанные: R-SCHED-ISSUE-01, R-SCHED-HOLD-02, R-SCHED-LINK-02
+@@ -294,7 +306,7 @@ issue_books требует действующую запись с purpose=issue
+ 
+ Возврат и утеря отмечаются по отдельной выдаче. Это может только проверяющий оператор площадки заявки («книги принимает проверяющий оператор площадки заявки») и только для выдачи в статусе out («книга уже возвращена или списана»). Возврат ставит status=returned, returned_at и флаг damaged; утеря ставит status=lost.
+ 
+-- Реализация: [`services/scheduling/service.py::_loan_for_checker:255-264`](../../services/scheduling/service.py#L255), [`services/scheduling/service.py::return_book:270-276`](../../services/scheduling/service.py#L270), [`services/scheduling/service.py::mark_lost:279-283`](../../services/scheduling/service.py#L279)
++- Реализация: [`services/scheduling/service.py::_loan_for_checker:256-265`](../../services/scheduling/service.py#L256), [`services/scheduling/service.py::return_book:271-277`](../../services/scheduling/service.py#L271), [`services/scheduling/service.py::mark_lost:280-284`](../../services/scheduling/service.py#L280)
+ - БД: [`loans_status_check`](../../migrations/versions/0001_initial.py#L298)
+ - Тесты: `tests/test_paid_flow.py::test_paid_application_full_path`
+ - Роли: Проверяющий оператор
+@@ -307,7 +319,7 @@ issue_books требует действующую запись с purpose=issue
+ 
+ При возврате с damaged=true публикуется loan.damaged, при отметке утери — loan.lost. Подписчики billing создают штраф заявки с видом damaged или lost (create_fine). Эти события в чат не пишутся.
+ 
+-- Реализация: [`services/scheduling/service.py::return_book:274-275`](../../services/scheduling/service.py#L274), [`services/scheduling/service.py::mark_lost:282`](../../services/scheduling/service.py#L282), [`services/billing/consumers.py::on_loan_damaged:48-50`](../../services/billing/consumers.py#L48), [`services/billing/consumers.py::on_loan_lost:43-45`](../../services/billing/consumers.py#L43)
++- Реализация: [`services/scheduling/service.py::return_book:275-276`](../../services/scheduling/service.py#L275), [`services/scheduling/service.py::mark_lost:283`](../../services/scheduling/service.py#L283), [`services/billing/consumers.py::on_loan_damaged:48-50`](../../services/billing/consumers.py#L48), [`services/billing/consumers.py::on_loan_lost:43-45`](../../services/billing/consumers.py#L43)
+ - Роли: Проверяющий оператор
+ - Связанные: R-SCHED-RETURN-01, R-SCHED-OVERDUE-01
+ - ⚠ Расхождение со схемой: Схема (§15): в чат попадают все события заявки. Код: loan.damaged и loan.lost в EVENT_TEXT чата нет, в чат они не попадают.
+@@ -330,7 +342,7 @@ flag_overdue выбирает выдачи со статусом out без фл
+ 
+ На application.archived и application.closed_duplicate вызывается reset_bookings: действующие записи отменяются с причиной archived или duplicate (booking.cancelled, письма об отмене, чат), holds заявки удаляются, все ссылки гаснут.
+ 
+-- Реализация: [`services/scheduling/consumers.py::on_archived:25-26`](../../services/scheduling/consumers.py#L25), [`services/scheduling/consumers.py::on_closed_duplicate:30-31`](../../services/scheduling/consumers.py#L30), [`services/scheduling/service.py::reset_bookings:286-299`](../../services/scheduling/service.py#L286)
++- Реализация: [`services/scheduling/consumers.py::on_archived:24-25`](../../services/scheduling/consumers.py#L24), [`services/scheduling/consumers.py::on_closed_duplicate:29-30`](../../services/scheduling/consumers.py#L29), [`services/scheduling/service.py::reset_bookings:287-300`](../../services/scheduling/service.py#L287)
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-SCHED-LINK-03, R-SCHED-VENUE-CHANGE-01
+ 
+@@ -340,7 +352,7 @@ flag_overdue выбирает выдачи со статусом out без фл
+ 
+ На application.venue_changed модуль сбрасывает записи (reason=venue_changed: письмо об отмене, освобождение книг, гашение ссылок). Если заявка на этапе awaiting_issue, выпускается новая ссылка purpose=issue. Проверяющий оператор новой площадки назначается в applications.change_venue.
+ 
+-- Реализация: [`services/scheduling/consumers.py::on_venue_changed:17-21`](../../services/scheduling/consumers.py#L17), [`services/scheduling/service.py::reset_bookings:286-299`](../../services/scheduling/service.py#L286)
++- Реализация: [`services/scheduling/consumers.py::on_venue_changed:16-20`](../../services/scheduling/consumers.py#L16), [`services/scheduling/service.py::reset_bookings:287-300`](../../services/scheduling/service.py#L287)
+ - Роли: Оператор
+ - Связанные: R-SCHED-RESET-01, R-SCHED-LINK-01
+ - ⚠ Расхождение со схемой: Схема: у социальных заявок и заявок в долг площадку меняют только до формирования ссылки, после выдачи — никогда. Код change_venue блокирует смену только для paid на awaiting_issue и books_out. У debt/social на этапе books_out смена проходит: записи на сдачу отменяются, ссылка на сдачу гаснет, а новая не выпускается (выпуск только при awaiting_issue) — клиент не может записаться на сдачу. Письмо об отмене уходит по шаблону старой площадки (venue_id окна).
+diff --git a/migrations/versions/0002_slot_capacity_reduced.py b/migrations/versions/0002_slot_capacity_reduced.py
+new file mode 100644
+index 0000000..537ecee
+--- /dev/null
++++ b/migrations/versions/0002_slot_capacity_reduced.py
+@@ -0,0 +1,20 @@
++"""scheduling.slots.capacity_reduced: окно, где проверяющий оператор уменьшил число мест
++
++Revision ID: 0002
++Revises: 0001
++"""
++
++from alembic import op
++
++revision = "0002"
++down_revision = "0001"
++branch_labels = None
++depends_on = None
++
++
++def upgrade() -> None:
++    op.execute("ALTER TABLE scheduling.slots ADD COLUMN capacity_reduced boolean NOT NULL DEFAULT false")
++
++
++def downgrade() -> None:
++    op.execute("ALTER TABLE scheduling.slots DROP COLUMN capacity_reduced")
+diff --git a/services/scheduling/consumers.py b/services/scheduling/consumers.py
+index 5341474..38ca665 100644
+--- a/services/scheduling/consumers.py
++++ b/services/scheduling/consumers.py
+@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
+ from libs.events import subscribe
+ from services.applications import public as applications
+ from services.scheduling import service
+-from services.scheduling.models import VenueLimit
+ 
+ 
+ @subscribe("application.ready_for_booking")
+@@ -33,8 +32,4 @@ async def on_closed_duplicate(session: AsyncSession, payload: dict[str, Any]) ->
+ 
+ @subscribe("venue.settings_changed")
+ async def on_venue_settings_changed(session: AsyncSession, payload: dict[str, Any]) -> None:
+-    limit = await session.get(VenueLimit, payload["venue_id"])
+-    if limit is None:
+-        session.add(VenueLimit(venue_id=payload["venue_id"], max_capacity=payload["max_capacity"]))
+-    else:
+-        limit.max_capacity = payload["max_capacity"]
++    await service.apply_venue_max_capacity(session, payload["venue_id"], payload["max_capacity"])
+diff --git a/services/scheduling/models.py b/services/scheduling/models.py
+index b03e634..4184a2e 100644
+--- a/services/scheduling/models.py
++++ b/services/scheduling/models.py
+@@ -27,6 +27,8 @@ class Slot(Base):
+     sphere_id: Mapped[int]
+     starts_at: Mapped[datetime]
+     capacity: Mapped[int]
++    # проверяющий оператор уменьшил число мест: окно не следует за максимумом площадки
++    capacity_reduced: Mapped[bool] = mapped_column(default=False)
+     removed: Mapped[bool] = mapped_column(default=False)
+ 
+ 
+diff --git a/services/scheduling/service.py b/services/scheduling/service.py
+index 7cb7b5e..beee081 100644
+--- a/services/scheduling/service.py
++++ b/services/scheduling/service.py
+@@ -59,6 +59,7 @@ async def reduce_capacity(session: AsyncSession, slot_id: int, site_checker_id:
+     if capacity < await _active_bookings(session, slot_id):
+         raise DomainError("в окне уже записано больше клиентов")
+     slot.capacity = capacity
++    slot.capacity_reduced = True
+     await session.flush()
+     return slot
+ 
+@@ -297,3 +298,31 @@ async def reset_bookings(session: AsyncSession, application_id: int, *, reason:
+     await session.execute(
+         update(BookingLink).where(BookingLink.application_id == application_id).values(active=False)
+     )
++
++
++async def apply_venue_max_capacity(session: AsyncSession, venue_id: int, max_capacity: int) -> None:
++    """Новый максимум площадки: будущие окна со старым максимумом получают новый.
++
++    Окна, где проверяющий оператор уменьшил число мест, прошедшие и удалённые окна не меняются.
++    """
++    limit = await session.get(VenueLimit, venue_id)
++    if limit is None:
++        session.add(VenueLimit(venue_id=venue_id, max_capacity=max_capacity))
++        return
++    old = limit.max_capacity
++    limit.max_capacity = max_capacity
++    if old == max_capacity:
++        return
++    # лимит сохраняется до окон: триггер trg_slot_capacity_limit сверяет capacity с venue_limits
++    await session.flush()
++    await session.execute(
++        update(Slot)
++        .where(
++            Slot.venue_id == venue_id,
++            Slot.capacity == old,
++            Slot.capacity_reduced.is_(False),
++            Slot.removed.is_(False),
++            Slot.starts_at > clock.now(),
++        )
++        .values(capacity=max_capacity)
++    )
+diff --git a/tests/test_scheduling.py b/tests/test_scheduling.py
+index b43958e..bcb2fe6 100644
+--- a/tests/test_scheduling.py
++++ b/tests/test_scheduling.py
+@@ -2,8 +2,11 @@ from datetime import timedelta
+ 
+ import pytest
+ 
++from libs import db
+ from libs.errors import DomainError
++from services.applications import admin
+ from services.scheduling import service as scheduling
++from services.scheduling.models import Slot
+ from tests.factories import (
+     CHECKER,
+     HISTORY,
+@@ -39,6 +42,49 @@ async def test_slot_capacity_cannot_exceed_venue_maximum() -> None:
+         await slot(MSK, HISTORY, T0 + timedelta(days=5), capacity=10)
+ 
+ 
++async def _capacity(slot_id: int) -> int:
++    async with db.sessionmaker()() as s:
++        return (await s.get(Slot, slot_id)).capacity
++
++
++async def test_venue_maximum_change_updates_future_slots_with_old_maximum() -> None:
++    raised = await slot(MSK, HISTORY, T0 + timedelta(days=5))
++    smaller = await slot(MSK, HISTORY, T0 + timedelta(days=5), capacity=2)
++    reduced = await slot(MSK, HISTORY, T0 + timedelta(days=6))
++    await act(scheduling.reduce_capacity, reduced, CHECKER[MSK], 2)
++    other_venue = await slot(KZN, HISTORY, T0 + timedelta(days=5))
++
++    await act(admin.set_venue_max_capacity, MSK, 5)
++
++    assert await _capacity(raised) == 5
++    assert await _capacity(smaller) == 2
++    assert await _capacity(reduced) == 2
++    assert await _capacity(other_venue) == 3
++
++
++async def test_venue_maximum_change_skips_past_slots() -> None:
++    past = await slot(MSK, HISTORY, T0 + timedelta(days=1))
++    future = await slot(MSK, HISTORY, T0 + timedelta(days=5))
++    travel(T0 + timedelta(days=2))
++
++    await act(admin.set_venue_max_capacity, MSK, 2)
++
++    assert await _capacity(past) == 3
++    assert await _capacity(future) == 2
++
++
++async def test_slot_reduced_by_checker_keeps_capacity_even_when_it_matches_old_maximum() -> None:
++    reduced = await slot(MSK, HISTORY, T0 + timedelta(days=5))
++    await act(scheduling.reduce_capacity, reduced, CHECKER[MSK], 2)
++    await act(admin.set_venue_max_capacity, MSK, 2)
++    following = await slot(MSK, HISTORY, T0 + timedelta(days=5))
++
++    await act(admin.set_venue_max_capacity, MSK, 4)
++
++    assert await _capacity(reduced) == 2
++    assert await _capacity(following) == 4
++
++
+ async def test_booking_only_on_own_venue_and_sphere() -> None:
+     app_id = await new_application(rep=2)
+     await pass_review(app_id)

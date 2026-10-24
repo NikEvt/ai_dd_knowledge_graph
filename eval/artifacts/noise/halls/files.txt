@@ -1,0 +1,14 @@
+migrations/noise/halls.sql
+services/halls/__init__.py
+services/halls/api.py
+services/halls/app.py
+services/halls/consumers.py
+services/halls/jobs.py
+services/halls/models.py
+services/halls/service.py
+services/halls/settings.py
+tests/halls_factories.py
+tests/test_halls_api.py
+tests/test_halls_booking.py
+tests/test_halls_cancel.py
+tests/test_halls_payments.py

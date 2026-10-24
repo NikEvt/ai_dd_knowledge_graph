@@ -1,0 +1,62 @@
+id: T05
+prompt_file: T05.prompt.md
+summary: СНИЛС клиента
+expected_nodes:
+- ref: GT-REV-02
+  kind: rule
+  role: change
+- ref: services/applications/review.py::REQUIRED_CLIENT_FIELDS
+  kind: code
+  role: change
+- ref: GT-REV-04
+  kind: rule
+  role: change
+  hidden: H6
+- ref: services/applications/listeners.py::TRACKED_FIELDS
+  kind: code
+  role: change
+  hidden: H6
+- ref: services/applications/listeners.py::_domain_events
+  kind: code
+  role: affected
+  hidden: H6
+- ref: client.updated
+  kind: event
+  role: affected
+  hidden: H2
+- ref: services/applications/consumers.py::on_client_updated
+  kind: code
+  role: affected
+  hidden: H7
+- ref: GT-REV-03
+  kind: rule
+  role: change
+- ref: services/applications/service.py::CLIENT_EDITABLE_FIELDS
+  kind: code
+  role: change
+- ref: services/applications/models.py::Client
+  kind: code
+  role: change
+- ref: applications.clients
+  kind: db
+  role: change
+- ref: tests/factories.py::seed
+  kind: code
+  role: change
+  source: blind_audit
+- ref: services/applications/review.py::missing_client_fields
+  kind: code
+  role: affected
+  source: blind_audit
+- ref: services/applications/service.py::approve
+  kind: code
+  role: affected
+  source: blind_audit
+- ref: services/applications/service.py::update_client
+  kind: code
+  role: affected
+  source: blind_audit
+hidden_tests:
+- hidden_tests/tasks/test_t05.py
+supersedes: []
+reference: reference/T05.patch

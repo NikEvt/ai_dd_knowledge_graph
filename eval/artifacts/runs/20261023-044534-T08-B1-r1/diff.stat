@@ -1,0 +1,4 @@
+ docs/rules/chat.md     |  6 ++++--
+ services/chat/api.py   |  8 ++++----
+ tests/test_chat_api.py | 15 +++++++++++----
+ 3 files changed, 19 insertions(+), 10 deletions(-)

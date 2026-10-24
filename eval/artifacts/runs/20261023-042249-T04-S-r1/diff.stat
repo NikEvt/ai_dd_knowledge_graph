@@ -1,0 +1,22 @@
+ AGENTS.md                                  |   2 +-
+ docs/README.md                             |   6 +-
+ docs/config.md                             |   2 +-
+ docs/coverage.md                           |  13 +-
+ docs/entities/applications.applications.md |   6 +-
+ docs/entities/applications.attempts.md     |   2 +-
+ docs/events.md                             |   8 +-
+ docs/process.md                            |  20 +-
+ docs/reconciliation.md                     |   2 +-
+ docs/roles.md                              |   6 +-
+ docs/rules/README.md                       |   4 +-
+ docs/rules/applications.md                 |  11 +-
+ docs/rules/billing.md                      |   2 +-
+ knowledge/model/bpm.json                   |  26 +--
+ knowledge/model/code.json                  | 287 +++++++++++++++++++++++------
+ knowledge/model/events.json                |   8 +-
+ knowledge/rules/applications.yaml          |  37 ++--
+ knowledge/rules/billing.yaml               |   5 +-
+ services/applications/consumers.py         |   4 +-
+ services/applications/dedup.py             |   8 +-
+ tests/test_dedup.py                        |  68 +++++++
+ 21 files changed, 390 insertions(+), 137 deletions(-)

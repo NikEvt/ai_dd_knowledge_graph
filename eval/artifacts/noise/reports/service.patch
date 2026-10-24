@@ -1,0 +1,1974 @@
+diff --git a/migrations/noise/reports.sql b/migrations/noise/reports.sql
+new file mode 100644
+index 0000000..62c34d1
+--- /dev/null
++++ b/migrations/noise/reports.sql
+@@ -0,0 +1,156 @@
++-- Внутренняя отчётность: снимки метрик, определения отчётов, запуски и расписания выгрузок.
++
++CREATE SCHEMA reports;
++
++CREATE TABLE reports.metric_snapshots (
++    id bigserial PRIMARY KEY,
++    metric text NOT NULL,
++    dimension text NOT NULL DEFAULT '',
++    day date NOT NULL,
++    value numeric(14, 2) NOT NULL,
++    taken_at timestamptz NOT NULL,
++    CONSTRAINT metric_snapshots_metric_format CHECK (metric ~ '^[a-z][a-z0-9_]*(\.[a-z0-9_]+)*$'),
++    CONSTRAINT metric_snapshots_dimension_len CHECK (length(dimension) <= 64),
++    CONSTRAINT metric_snapshots_point UNIQUE (metric, dimension, day)
++);
++
++CREATE INDEX metric_snapshots_metric_day ON reports.metric_snapshots (metric, day);
++
++CREATE TABLE reports.report_definitions (
++    id serial PRIMARY KEY,
++    code text NOT NULL UNIQUE,
++    title text NOT NULL,
++    kind text NOT NULL,
++    params jsonb NOT NULL DEFAULT '{}'::jsonb,
++    owner_id integer NOT NULL,
++    is_active boolean NOT NULL DEFAULT true,
++    created_at timestamptz NOT NULL,
++    updated_at timestamptz NOT NULL,
++    CONSTRAINT report_definitions_kind CHECK (kind IN ('metric_summary', 'metric_trend', 'run_audit')),
++    CONSTRAINT report_definitions_code_format CHECK (code ~ '^[a-z][a-z0-9_-]{2,63}$'),
++    CONSTRAINT report_definitions_title_not_blank CHECK (btrim(title) <> ''),
++    CONSTRAINT report_definitions_params_object CHECK (jsonb_typeof(params) = 'object')
++);
++
++CREATE UNIQUE INDEX report_definitions_owner_title_active
++    ON reports.report_definitions (owner_id, lower(title))
++    WHERE is_active;
++
++CREATE TABLE reports.export_schedules (
++    id serial PRIMARY KEY,
++    definition_id integer NOT NULL REFERENCES reports.report_definitions (id),
++    every_hours integer NOT NULL,
++    next_run_at timestamptz NOT NULL,
++    recipients jsonb NOT NULL DEFAULT '[]'::jsonb,
++    created_by integer NOT NULL,
++    is_active boolean NOT NULL DEFAULT true,
++    last_enqueued_at timestamptz,
++    created_at timestamptz NOT NULL,
++    CONSTRAINT export_schedules_interval CHECK (every_hours BETWEEN 1 AND 744),
++    CONSTRAINT export_schedules_recipients_array CHECK (jsonb_typeof(recipients) = 'array')
++);
++
++CREATE UNIQUE INDEX export_schedules_one_active
++    ON reports.export_schedules (definition_id)
++    WHERE is_active;
++
++CREATE TABLE reports.report_runs (
++    id bigserial PRIMARY KEY,
++    definition_id integer NOT NULL REFERENCES reports.report_definitions (id),
++    schedule_id integer REFERENCES reports.export_schedules (id),
++    scheduled_for timestamptz,
++    status text NOT NULL DEFAULT 'requested',
++    params jsonb NOT NULL DEFAULT '{}'::jsonb,
++    body jsonb,
++    error text,
++    requested_by integer NOT NULL,
++    requested_at timestamptz NOT NULL,
++    started_at timestamptz,
++    finished_at timestamptz,
++    CONSTRAINT report_runs_status CHECK (status IN ('requested', 'running', 'completed', 'failed', 'cancelled')),
++    CONSTRAINT report_runs_body_on_completion CHECK ((status = 'completed') = (body IS NOT NULL)),
++    CONSTRAINT report_runs_error_on_failure CHECK (status <> 'failed' OR error IS NOT NULL),
++    CONSTRAINT report_runs_finished CHECK (
++        (status IN ('completed', 'failed', 'cancelled')) = (finished_at IS NOT NULL)
++    ),
++    CONSTRAINT report_runs_schedule_slot CHECK ((schedule_id IS NULL) = (scheduled_for IS NULL))
++);
++
++CREATE INDEX report_runs_requested_at ON reports.report_runs (requested_at);
++CREATE INDEX report_runs_definition ON reports.report_runs (definition_id, requested_at DESC);
++
++CREATE UNIQUE INDEX report_runs_schedule_once
++    ON reports.report_runs (schedule_id, scheduled_for)
++    WHERE schedule_id IS NOT NULL;
++
++CREATE UNIQUE INDEX report_runs_one_in_flight
++    ON reports.report_runs (definition_id, requested_by)
++    WHERE schedule_id IS NULL AND status IN ('requested', 'running');
++
++CREATE TABLE reports.run_notifications (
++    id bigserial PRIMARY KEY,
++    run_id bigint NOT NULL REFERENCES reports.report_runs (id) ON DELETE CASCADE,
++    recipient_id integer NOT NULL,
++    kind text NOT NULL,
++    body text NOT NULL,
++    created_at timestamptz NOT NULL,
++    read_at timestamptz,
++    CONSTRAINT run_notifications_kind CHECK (kind IN ('completed', 'failed', 'cancelled')),
++    CONSTRAINT run_notifications_once UNIQUE (run_id, recipient_id)
++);
++
++CREATE INDEX run_notifications_unread
++    ON reports.run_notifications (recipient_id)
++    WHERE read_at IS NULL;
++
++-- Завершённый запуск — документ: его нельзя переписать, только удалить по сроку хранения.
++CREATE FUNCTION reports.report_runs_immutable() RETURNS trigger AS $$
++BEGIN
++    IF OLD.status IN ('completed', 'failed', 'cancelled') THEN
++        RAISE EXCEPTION 'запуск % уже завершён (%), изменять его нельзя', OLD.id, OLD.status
++            USING ERRCODE = 'check_violation';
++    END IF;
++    RETURN NEW;
++END;
++$$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_report_runs_immutable
++    BEFORE UPDATE ON reports.report_runs
++    FOR EACH ROW EXECUTE FUNCTION reports.report_runs_immutable();
++
++CREATE FUNCTION reports.report_runs_transition() RETURNS trigger AS $$
++BEGIN
++    IF NEW.status = OLD.status THEN
++        RETURN NEW;
++    END IF;
++    IF NOT (
++        (OLD.status = 'requested' AND NEW.status IN ('running', 'failed', 'cancelled'))
++        OR (OLD.status = 'running' AND NEW.status IN ('completed', 'failed'))
++    ) THEN
++        RAISE EXCEPTION 'недопустимый переход запуска %: % -> %', OLD.id, OLD.status, NEW.status
++            USING ERRCODE = 'check_violation';
++    END IF;
++    RETURN NEW;
++END;
++$$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_report_runs_transition
++    BEFORE UPDATE OF status ON reports.report_runs
++    FOR EACH ROW EXECUTE FUNCTION reports.report_runs_transition();
++
++-- Тип отчёта определяет формат body; после первых запусков менять его нельзя.
++CREATE FUNCTION reports.report_definitions_kind_locked() RETURNS trigger AS $$
++BEGIN
++    IF EXISTS (SELECT 1 FROM reports.report_runs r WHERE r.definition_id = OLD.id) THEN
++        RAISE EXCEPTION 'у отчёта % уже есть запуски, тип менять нельзя', OLD.code
++            USING ERRCODE = 'check_violation';
++    END IF;
++    RETURN NEW;
++END;
++$$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_report_definitions_kind_locked
++    BEFORE UPDATE OF kind ON reports.report_definitions
++    FOR EACH ROW
++    WHEN (OLD.kind IS DISTINCT FROM NEW.kind)
++    EXECUTE FUNCTION reports.report_definitions_kind_locked();
+diff --git a/services/reports/__init__.py b/services/reports/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/services/reports/api.py b/services/reports/api.py
+new file mode 100644
+index 0000000..a2cb1e6
+--- /dev/null
++++ b/services/reports/api.py
+@@ -0,0 +1,177 @@
++from datetime import date, datetime
++from decimal import Decimal
++from typing import Annotated, Any
++
++from fastapi import APIRouter, Depends, Query
++from pydantic import BaseModel, Field
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs.web import session
++from services.reports import service, settings
++from services.reports.models import ReportDefinition, ReportRun, RunNotification
++
++router = APIRouter(prefix="/reports", tags=["reports"])
++Session = Annotated[AsyncSession, Depends(session)]
++
++
++class DefinitionIn(BaseModel):
++    owner_id: int
++    code: str
++    title: str
++    kind: str
++    params: dict[str, Any] = Field(default_factory=dict)
++
++
++class DefinitionOut(BaseModel):
++    id: int
++    code: str
++    title: str
++    kind: str
++    params: dict[str, Any]
++    owner_id: int
++    is_active: bool
++
++    @classmethod
++    def of(cls, d: ReportDefinition) -> DefinitionOut:
++        return cls(
++            id=d.id,
++            code=d.code,
++            title=d.title,
++            kind=d.kind,
++            params=d.params,
++            owner_id=d.owner_id,
++            is_active=d.is_active,
++        )
++
++
++class RunIn(BaseModel):
++    requested_by: int
++    params: dict[str, Any] = Field(default_factory=dict)
++
++
++class RunOut(BaseModel):
++    id: int
++    definition_id: int
++    status: str
++    params: dict[str, Any]
++    body: dict[str, Any] | None
++    error: str | None
++    requested_at: datetime
++    finished_at: datetime | None
++
++    @classmethod
++    def of(cls, r: ReportRun) -> RunOut:
++        return cls(
++            id=r.id,
++            definition_id=r.definition_id,
++            status=r.status,
++            params=r.params,
++            body=r.body,
++            error=r.error,
++            requested_at=r.requested_at,
++            finished_at=r.finished_at,
++        )
++
++
++class SnapshotIn(BaseModel):
++    metric: str
++    value: Decimal
++    dimension: str = ""
++    day: date | None = None
++
++
++class ScheduleIn(BaseModel):
++    created_by: int
++    every_hours: int
++    recipients: list[int]
++    first_run_at: datetime | None = None
++
++
++class NotificationOut(BaseModel):
++    id: int
++    run_id: int
++    kind: str
++    body: str
++    read: bool
++
++    @classmethod
++    def of(cls, n: RunNotification) -> NotificationOut:
++        return cls(id=n.id, run_id=n.run_id, kind=n.kind, body=n.body, read=n.read_at is not None)
++
++
++@router.post("/snapshots", status_code=201)
++async def record_snapshot(body: SnapshotIn, s: Session) -> dict[str, int]:
++    snap = await service.record_snapshot(s, body.metric, body.value, dimension=body.dimension, day=body.day)
++    return {"snapshot_id": snap.id}
++
++
++@router.post("/definitions", status_code=201)
++async def create_definition(body: DefinitionIn, s: Session) -> DefinitionOut:
++    d = await service.create_definition(
++        s, owner_id=body.owner_id, code=body.code, title=body.title, kind=body.kind, params=body.params
++    )
++    return DefinitionOut.of(d)
++
++
++@router.get("/definitions")
++async def definitions(s: Session, owner_id: int | None = None) -> list[DefinitionOut]:
++    return [DefinitionOut.of(d) for d in await service.list_definitions(s, owner_id=owner_id)]
++
++
++@router.delete("/definitions/{definition_id}")
++async def deactivate_definition(definition_id: int, by: int, s: Session) -> DefinitionOut:
++    return DefinitionOut.of(await service.deactivate_definition(s, definition_id, by))
++
++
++@router.post("/definitions/{definition_id}/runs", status_code=202)
++async def request_run(definition_id: int, body: RunIn, s: Session) -> RunOut:
++    run = await service.request_run(s, definition_id, body.requested_by, body.params)
++    return RunOut.of(run)
++
++
++@router.post("/definitions/{definition_id}/schedules", status_code=201)
++async def create_schedule(definition_id: int, body: ScheduleIn, s: Session) -> dict[str, Any]:
++    schedule = await service.create_schedule(
++        s,
++        definition_id,
++        body.created_by,
++        every_hours=body.every_hours,
++        recipients=body.recipients,
++        first_run_at=body.first_run_at,
++    )
++    return {"schedule_id": schedule.id, "next_run_at": schedule.next_run_at}
++
++
++@router.get("/runs")
++async def runs(
++    s: Session,
++    definition_id: int | None = None,
++    requested_by: int | None = None,
++    status: str | None = None,
++    limit: Annotated[int, Query(ge=1, le=settings.RUNS_PAGE_LIMIT)] = settings.RUNS_PAGE_LIMIT,
++) -> list[RunOut]:
++    found = await service.list_runs(
++        s, definition_id=definition_id, requested_by=requested_by, status=status, limit=limit
++    )
++    return [RunOut.of(r) for r in found]
++
++
++@router.get("/runs/{run_id}")
++async def run(run_id: int, s: Session) -> RunOut:
++    return RunOut.of(await service.get_run(s, run_id))
++
++
++@router.post("/runs/{run_id}/cancel")
++async def cancel_run(run_id: int, by: int, s: Session) -> RunOut:
++    return RunOut.of(await service.cancel_run(s, run_id, by))
++
++
++@router.get("/notifications")
++async def notifications(recipient_id: int, s: Session, unread_only: bool = False) -> list[NotificationOut]:
++    found = await service.inbox(s, recipient_id, unread_only=unread_only)
++    return [NotificationOut.of(n) for n in found]
++
++
++@router.post("/notifications/{notification_id}/read")
++async def read_notification(notification_id: int, recipient_id: int, s: Session) -> NotificationOut:
++    return NotificationOut.of(await service.mark_read(s, notification_id, recipient_id))
+diff --git a/services/reports/app.py b/services/reports/app.py
+new file mode 100644
+index 0000000..19a09e9
+--- /dev/null
++++ b/services/reports/app.py
+@@ -0,0 +1,10 @@
++from fastapi import FastAPI
++
++from libs.web import install_error_handlers
++from services import wiring
++from services.reports.api import router
++
++wiring.load()
++app = FastAPI(title="reports")
++app.include_router(router)
++install_error_handlers(app)
+diff --git a/services/reports/builders.py b/services/reports/builders.py
+new file mode 100644
+index 0000000..902c988
+--- /dev/null
++++ b/services/reports/builders.py
+@@ -0,0 +1,188 @@
++"""Параметры и построение body запуска по типу отчёта.
++
++Источники данных — только собственные таблицы сервиса: снимки метрик и журнал запусков.
++"""
++
++import re
++from datetime import date, timedelta
++from decimal import Decimal
++from typing import Any
++
++from sqlalchemy import func, select
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs.errors import DomainError
++from services.reports import settings
++from services.reports.models import MetricSnapshot, ReportDefinition, ReportRun
++
++KINDS = ("metric_summary", "metric_trend", "run_audit")
++METRIC_RE = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z0-9_]+)*$")
++
++# Что можно переопределить при конкретном запуске, не меняя определение отчёта.
++RUN_OVERRIDABLE = frozenset({"days", "as_of", "dimension"})
++_ALLOWED = {
++    "metric_summary": frozenset({"metrics", "days", "dimension", "as_of"}),
++    "metric_trend": frozenset({"metric", "days", "dimension", "as_of"}),
++    "run_audit": frozenset({"days", "as_of"}),
++}
++
++CENT = Decimal("0.01")
++
++
++def _money(value: Decimal) -> str:
++    return str(value.quantize(CENT))
++
++
++def metric_name(value: Any) -> str:
++    if not isinstance(value, str) or not METRIC_RE.match(value):
++        raise DomainError(f"некорректное имя метрики: {value!r}")
++    return value
++
++
++def _days(value: Any) -> int:
++    if not isinstance(value, int) or isinstance(value, bool) or not 1 <= value <= settings.MAX_PERIOD_DAYS:
++        raise DomainError(f"период отчёта — от 1 до {settings.MAX_PERIOD_DAYS} дней")
++    return value
++
++
++def _as_of(value: Any) -> str:
++    try:
++        return date.fromisoformat(value).isoformat()
++    except TypeError, ValueError:
++        raise DomainError(f"дата отчёта должна быть в формате ГГГГ-ММ-ДД: {value!r}") from None
++
++
++def normalize_params(kind: str, params: dict[str, Any]) -> dict[str, Any]:
++    """Проверяет параметры определения или запуска и приводит их к каноническому виду."""
++    if kind not in KINDS:
++        raise DomainError(f"неизвестный тип отчёта: {kind}")
++    unknown = set(params) - _ALLOWED[kind]
++    if unknown:
++        raise DomainError(f"лишние параметры отчёта: {', '.join(sorted(unknown))}")
++    out: dict[str, Any] = {}
++    if "metrics" in params:
++        metrics = params["metrics"]
++        if not isinstance(metrics, list) or not metrics:
++            raise DomainError("в сводном отчёте должна быть хотя бы одна метрика")
++        if len(metrics) > settings.MAX_METRICS_PER_REPORT:
++            raise DomainError(f"в сводном отчёте не больше {settings.MAX_METRICS_PER_REPORT} метрик")
++        out["metrics"] = list(dict.fromkeys(metric_name(m) for m in metrics))
++    if "metric" in params:
++        out["metric"] = metric_name(params["metric"])
++    if "days" in params:
++        out["days"] = _days(params["days"])
++    if "dimension" in params:
++        if not isinstance(params["dimension"], str) or len(params["dimension"]) > 64:
++            raise DomainError("разрез метрики — строка до 64 символов")
++        out["dimension"] = params["dimension"]
++    if "as_of" in params:
++        out["as_of"] = _as_of(params["as_of"])
++    return out
++
++
++def require_complete(kind: str, params: dict[str, Any]) -> None:
++    if kind == "metric_summary" and "metrics" not in params:
++        raise DomainError("для сводного отчёта нужно указать метрики")
++    if kind == "metric_trend" and "metric" not in params:
++        raise DomainError("для отчёта-динамики нужно указать метрику")
++
++
++def _period(params: dict[str, Any], default_day: date) -> tuple[date, date]:
++    end = date.fromisoformat(params["as_of"]) if "as_of" in params else default_day
++    days = params.get("days", settings.DEFAULT_PERIOD_DAYS)
++    return end - timedelta(days=days - 1), end
++
++
++async def _points(
++    session: AsyncSession, metric: str, dimension: str, start: date, end: date
++) -> list[MetricSnapshot]:
++    rows = await session.scalars(
++        select(MetricSnapshot)
++        .where(
++            MetricSnapshot.metric == metric,
++            MetricSnapshot.dimension == dimension,
++            MetricSnapshot.day.between(start, end),
++        )
++        .order_by(MetricSnapshot.day)
++    )
++    return list(rows.all())
++
++
++async def _summary(session: AsyncSession, params: dict[str, Any], start: date, end: date) -> dict[str, Any]:
++    dimension = params.get("dimension", "")
++    metrics: dict[str, Any] = {}
++    for metric in params["metrics"]:
++        values = [p.value for p in await _points(session, metric, dimension, start, end)]
++        if not values:
++            metrics[metric] = {"points": 0}
++            continue
++        total = sum(values, Decimal(0))
++        metrics[metric] = {
++            "points": len(values),
++            "total": _money(total),
++            "avg": _money(total / len(values)),
++            "min": _money(min(values)),
++            "max": _money(max(values)),
++        }
++    if all(m["points"] == 0 for m in metrics.values()):
++        raise DomainError("за период нет снимков ни по одной метрике отчёта")
++    return {"dimension": dimension, "metrics": metrics}
++
++
++async def _trend(session: AsyncSession, params: dict[str, Any], start: date, end: date) -> dict[str, Any]:
++    metric, dimension = params["metric"], params.get("dimension", "")
++    points = await _points(session, metric, dimension, start, end)
++    if not points:
++        raise DomainError(f"за период нет снимков метрики {metric}")
++    return {
++        "metric": metric,
++        "dimension": dimension,
++        "series": [{"day": p.day.isoformat(), "value": _money(p.value)} for p in points],
++        "change": _money(points[-1].value - points[0].value),
++    }
++
++
++async def _audit(session: AsyncSession, run: ReportRun, start: date, end: date) -> dict[str, Any]:
++    day = func.date(func.timezone("UTC", ReportRun.requested_at))
++    in_period = (day.between(start, end), ReportRun.id != run.id)
++    by_status = dict(
++        (
++            await session.execute(
++                select(ReportRun.status, func.count()).where(*in_period).group_by(ReportRun.status)
++            )
++        ).all()
++    )
++    by_report = dict(
++        (
++            await session.execute(
++                select(ReportDefinition.code, func.count())
++                .join(ReportRun, ReportRun.definition_id == ReportDefinition.id)
++                .where(*in_period)
++                .group_by(ReportDefinition.code)
++                .order_by(ReportDefinition.code)
++            )
++        ).all()
++    )
++    return {"total": sum(by_status.values()), "by_status": by_status, "by_report": by_report}
++
++
++async def build(session: AsyncSession, definition: ReportDefinition, run: ReportRun) -> dict[str, Any]:
++    params = {**definition.params, **run.params}
++    anchor = run.scheduled_for or run.requested_at
++    start, end = _period(params, anchor.date())
++    match definition.kind:
++        case "metric_summary":
++            content = await _summary(session, params, start, end)
++        case "metric_trend":
++            content = await _trend(session, params, start, end)
++        case "run_audit":
++            content = await _audit(session, run, start, end)
++        case other:
++            raise DomainError(f"неизвестный тип отчёта: {other}")
++    return {
++        "kind": definition.kind,
++        "code": definition.code,
++        "title": definition.title,
++        "period": {"from": start.isoformat(), "to": end.isoformat()},
++        **content,
++    }
+diff --git a/services/reports/consumers.py b/services/reports/consumers.py
+new file mode 100644
+index 0000000..7d414f8
+--- /dev/null
++++ b/services/reports/consumers.py
+@@ -0,0 +1,45 @@
++from datetime import date
++from typing import Any
++
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs.events import subscribe
++from services.reports import service, settings
++
++
++@subscribe("reports.run_requested")
++async def on_run_requested(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.build_run(session, payload["run_id"])
++
++
++@subscribe("reports.run_completed")
++async def on_run_completed(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.notify_run_finished(session, payload["run_id"], "completed")
++
++
++@subscribe("reports.run_completed")
++async def count_completed_run(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.add_to_snapshot(
++        session,
++        settings.RUNS_COMPLETED_METRIC,
++        1,
++        dimension=payload["code"],
++        day=date.fromisoformat(payload["finished_on"]),
++    )
++
++
++@subscribe("reports.run_failed")
++async def on_run_failed(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.notify_run_finished(session, payload["run_id"], "failed")
++
++
++@subscribe("reports.run_cancelled")
++async def on_run_cancelled(session: AsyncSession, payload: dict[str, Any]) -> None:
++    # Сам отменивший знает об отмене; сообщаем только об отменах по отключению отчёта.
++    if payload["reason"] != "by_user":
++        await service.notify_run_finished(session, payload["run_id"], "cancelled")
++
++
++@subscribe("reports.definition_deactivated")
++async def on_definition_deactivated(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.cancel_pending_for_definition(session, payload["definition_id"])
+diff --git a/services/reports/jobs.py b/services/reports/jobs.py
+new file mode 100644
+index 0000000..a3bd254
+--- /dev/null
++++ b/services/reports/jobs.py
+@@ -0,0 +1,75 @@
++from datetime import datetime, timedelta
++
++from sqlalchemy import delete, select
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs import events
++from libs.errors import DomainError
++from services.reports import service, settings
++from services.reports.models import FINISHED, ExportSchedule, ReportDefinition, ReportRun
++
++
++async def run_scheduled(session: AsyncSession, now: datetime) -> list[int]:
++    """Ставит в очередь выгрузки, у которых подошёл срок."""
++    schedules = (
++        await session.scalars(
++            select(ExportSchedule)
++            .join(ReportDefinition, ReportDefinition.id == ExportSchedule.definition_id)
++            .where(
++                ExportSchedule.is_active.is_(True),
++                ExportSchedule.next_run_at <= now,
++                ReportDefinition.is_active.is_(True),
++            )
++            .order_by(ExportSchedule.next_run_at, ExportSchedule.id)
++            .with_for_update(of=ExportSchedule, skip_locked=True)
++        )
++    ).all()
++    run_ids = []
++    for schedule in schedules:
++        try:
++            run = await service.request_run(
++                session, schedule.definition_id, schedule.created_by, schedule=schedule, now=now
++            )
++        except DomainError:
++            # Определение могли сломать после постановки на расписание — не держим остальные выгрузки.
++            schedule.is_active = False
++            continue
++        run_ids.append(run.id)
++        service.advance(schedule, now)
++    return run_ids
++
++
++async def fail_stuck_runs(session: AsyncSession, now: datetime) -> list[int]:
++    runs = (
++        await session.scalars(
++            select(ReportRun)
++            .where(
++                ReportRun.status == "running",
++                ReportRun.started_at < now - timedelta(minutes=settings.RUN_TIMEOUT_MINUTES),
++            )
++            .with_for_update(skip_locked=True)
++        )
++    ).all()
++    for run in runs:
++        run.status = "failed"
++        run.error = "превышено время построения отчёта"
++        run.finished_at = now
++        events.publish(
++            session,
++            "reports.run_failed",
++            {"run_id": run.id, "definition_id": run.definition_id, "error": run.error},
++        )
++    return [run.id for run in runs]
++
++
++async def purge_old_runs(session: AsyncSession, now: datetime) -> int:
++    """Удаляет завершённые запуски старше срока хранения; уведомления уходят каскадом."""
++    deleted = await session.scalars(
++        delete(ReportRun)
++        .where(
++            ReportRun.status.in_(FINISHED),
++            ReportRun.finished_at < now - timedelta(days=settings.RETENTION_DAYS),
++        )
++        .returning(ReportRun.id)
++    )
++    return len(deleted.all())
+diff --git a/services/reports/models.py b/services/reports/models.py
+new file mode 100644
+index 0000000..fa36b2f
+--- /dev/null
++++ b/services/reports/models.py
+@@ -0,0 +1,88 @@
++from datetime import date, datetime
++from decimal import Decimal
++from typing import Any
++
++from sqlalchemy import BigInteger, ForeignKey, Numeric
++from sqlalchemy.orm import Mapped, mapped_column
++
++from libs.db import Base
++
++SCHEMA = {"schema": "reports"}
++
++FINISHED = ("completed", "failed", "cancelled")
++IN_FLIGHT = ("requested", "running")
++
++
++class MetricSnapshot(Base):
++    """Значение метрики за день в разрезе (dimension пустая строка — без разреза)."""
++
++    __tablename__ = "metric_snapshots"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
++    metric: Mapped[str]
++    dimension: Mapped[str] = mapped_column(default="")
++    day: Mapped[date]
++    value: Mapped[Decimal] = mapped_column(Numeric(14, 2))
++    taken_at: Mapped[datetime]
++
++
++class ReportDefinition(Base):
++    __tablename__ = "report_definitions"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    code: Mapped[str]
++    title: Mapped[str]
++    kind: Mapped[str]
++    params: Mapped[dict[str, Any]] = mapped_column(default=dict)
++    owner_id: Mapped[int]
++    is_active: Mapped[bool] = mapped_column(default=True)
++    created_at: Mapped[datetime]
++    updated_at: Mapped[datetime]
++
++
++class ExportSchedule(Base):
++    __tablename__ = "export_schedules"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    definition_id: Mapped[int] = mapped_column(ForeignKey("reports.report_definitions.id"))
++    every_hours: Mapped[int]
++    next_run_at: Mapped[datetime]
++    recipients: Mapped[list[Any]] = mapped_column(default=list)
++    created_by: Mapped[int]
++    is_active: Mapped[bool] = mapped_column(default=True)
++    last_enqueued_at: Mapped[datetime | None]
++    created_at: Mapped[datetime]
++
++
++class ReportRun(Base):
++    __tablename__ = "report_runs"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
++    definition_id: Mapped[int] = mapped_column(ForeignKey("reports.report_definitions.id"))
++    schedule_id: Mapped[int | None] = mapped_column(ForeignKey("reports.export_schedules.id"))
++    scheduled_for: Mapped[datetime | None]
++    status: Mapped[str] = mapped_column(default="requested")
++    params: Mapped[dict[str, Any]] = mapped_column(default=dict)
++    body: Mapped[dict[str, Any] | None]
++    error: Mapped[str | None]
++    requested_by: Mapped[int]
++    requested_at: Mapped[datetime]
++    started_at: Mapped[datetime | None]
++    finished_at: Mapped[datetime | None]
++
++
++class RunNotification(Base):
++    __tablename__ = "run_notifications"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
++    run_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("reports.report_runs.id", ondelete="CASCADE"))
++    recipient_id: Mapped[int]
++    kind: Mapped[str]
++    body: Mapped[str]
++    created_at: Mapped[datetime]
++    read_at: Mapped[datetime | None]
+diff --git a/services/reports/service.py b/services/reports/service.py
+new file mode 100644
+index 0000000..d78c093
+--- /dev/null
++++ b/services/reports/service.py
+@@ -0,0 +1,498 @@
++"""Внутренняя отчётность: снимки метрик, определения отчётов, запуски, расписания выгрузок."""
++
++from datetime import date, datetime, timedelta
++from decimal import Decimal, InvalidOperation
++from typing import Any
++
++from sqlalchemy import func, select
++from sqlalchemy.dialects.postgresql import insert
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs import clock, events
++from libs.errors import AccessDenied, DomainError, NotFound
++from services.reports import builders, settings
++from services.reports.models import (
++    IN_FLIGHT,
++    ExportSchedule,
++    MetricSnapshot,
++    ReportDefinition,
++    ReportRun,
++    RunNotification,
++)
++
++# Снимки метрик -----------------------------------------------------------------
++
++
++def _decimal(value: Decimal | int | str) -> Decimal:
++    try:
++        result = Decimal(value)
++    except InvalidOperation, TypeError, ValueError:
++        raise DomainError(f"значение метрики должно быть числом: {value!r}") from None
++    if not result.is_finite():
++        raise DomainError("значение метрики должно быть конечным числом")
++    return result
++
++
++async def record_snapshot(
++    session: AsyncSession,
++    metric: str,
++    value: Decimal | int | str,
++    *,
++    dimension: str = "",
++    day: date | None = None,
++) -> MetricSnapshot:
++    """Записывает значение метрики за день; повторная запись за тот же день заменяет значение."""
++    now = clock.now()
++    stmt = insert(MetricSnapshot).values(
++        metric=builders.metric_name(metric),
++        dimension=dimension,
++        day=day or now.date(),
++        value=_decimal(value),
++        taken_at=now,
++    )
++    stmt = stmt.on_conflict_do_update(
++        constraint="metric_snapshots_point",
++        set_={"value": stmt.excluded.value, "taken_at": stmt.excluded.taken_at},
++    )
++    return await session.scalar(stmt.returning(MetricSnapshot).execution_options(populate_existing=True))
++
++
++async def add_to_snapshot(
++    session: AsyncSession, metric: str, delta: Decimal | int, *, dimension: str = "", day: date
++) -> None:
++    stmt = insert(MetricSnapshot).values(
++        metric=metric, dimension=dimension, day=day, value=_decimal(delta), taken_at=clock.now()
++    )
++    await session.execute(
++        stmt.on_conflict_do_update(
++            constraint="metric_snapshots_point",
++            set_={"value": MetricSnapshot.value + stmt.excluded.value, "taken_at": stmt.excluded.taken_at},
++        )
++    )
++
++
++# Определения отчётов -------------------------------------------------------------
++
++
++async def get_definition(session: AsyncSession, definition_id: int) -> ReportDefinition:
++    definition = await session.get(ReportDefinition, definition_id)
++    if definition is None:
++        raise NotFound(f"отчёт {definition_id}")
++    return definition
++
++
++async def _owned_definition(session: AsyncSession, definition_id: int, by: int) -> ReportDefinition:
++    definition = await get_definition(session, definition_id)
++    if definition.owner_id != by:
++        raise AccessDenied("настройки отчёта меняет только его владелец")
++    return definition
++
++
++async def _check_title_free(
++    session: AsyncSession, owner_id: int, title: str, exclude_id: int | None = None
++) -> None:
++    query = select(ReportDefinition.id).where(
++        ReportDefinition.owner_id == owner_id,
++        ReportDefinition.is_active.is_(True),
++        func.lower(ReportDefinition.title) == title.lower(),
++    )
++    if exclude_id is not None:
++        query = query.where(ReportDefinition.id != exclude_id)
++    if await session.scalar(query) is not None:
++        raise DomainError(f"у вас уже есть действующий отчёт «{title}»")
++
++
++async def create_definition(
++    session: AsyncSession,
++    *,
++    owner_id: int,
++    code: str,
++    title: str,
++    kind: str,
++    params: dict[str, Any] | None = None,
++) -> ReportDefinition:
++    title = title.strip()
++    if not title:
++        raise DomainError("у отчёта должно быть название")
++    normalized = builders.normalize_params(kind, params or {})
++    builders.require_complete(kind, normalized)
++    if await session.scalar(select(ReportDefinition.id).where(ReportDefinition.code == code)):
++        raise DomainError(f"код отчёта {code} уже занят")
++    await _check_title_free(session, owner_id, title)
++    now = clock.now()
++    definition = ReportDefinition(
++        code=code,
++        title=title,
++        kind=kind,
++        params=normalized,
++        owner_id=owner_id,
++        created_at=now,
++        updated_at=now,
++    )
++    session.add(definition)
++    await session.flush()
++    return definition
++
++
++async def update_definition(
++    session: AsyncSession,
++    definition_id: int,
++    by: int,
++    *,
++    title: str | None = None,
++    kind: str | None = None,
++    params: dict[str, Any] | None = None,
++) -> ReportDefinition:
++    definition = await _owned_definition(session, definition_id, by)
++    if not definition.is_active:
++        raise DomainError("отчёт отключён, изменить его нельзя")
++    if title is not None:
++        title = title.strip()
++        if not title:
++            raise DomainError("у отчёта должно быть название")
++        await _check_title_free(session, definition.owner_id, title, exclude_id=definition.id)
++        definition.title = title
++    new_kind = kind or definition.kind
++    if kind is not None or params is not None:
++        normalized = builders.normalize_params(new_kind, definition.params if params is None else params)
++        builders.require_complete(new_kind, normalized)
++        definition.kind = new_kind
++        definition.params = normalized
++    definition.updated_at = clock.now()
++    await session.flush()
++    return definition
++
++
++async def deactivate_definition(session: AsyncSession, definition_id: int, by: int) -> ReportDefinition:
++    definition = await _owned_definition(session, definition_id, by)
++    if not definition.is_active:
++        return definition
++    definition.is_active = False
++    definition.updated_at = clock.now()
++    schedules = await session.scalars(
++        select(ExportSchedule).where(
++            ExportSchedule.definition_id == definition_id, ExportSchedule.is_active.is_(True)
++        )
++    )
++    for schedule in schedules:
++        schedule.is_active = False
++    events.publish(
++        session, "reports.definition_deactivated", {"definition_id": definition.id, "code": definition.code}
++    )
++    return definition
++
++
++async def list_definitions(
++    session: AsyncSession, *, owner_id: int | None = None, active_only: bool = True
++) -> list[ReportDefinition]:
++    query = select(ReportDefinition).order_by(ReportDefinition.id)
++    if owner_id is not None:
++        query = query.where(ReportDefinition.owner_id == owner_id)
++    if active_only:
++        query = query.where(ReportDefinition.is_active.is_(True))
++    return list((await session.scalars(query)).all())
++
++
++# Запуски ----------------------------------------------------------------------
++
++
++async def get_run(session: AsyncSession, run_id: int) -> ReportRun:
++    run = await session.get(ReportRun, run_id)
++    if run is None:
++        raise NotFound(f"запуск {run_id}")
++    return run
++
++
++async def _check_run_quota(session: AsyncSession, definition_id: int, requested_by: int) -> None:
++    pending = await session.scalars(
++        select(ReportRun.definition_id).where(
++            ReportRun.requested_by == requested_by,
++            ReportRun.schedule_id.is_(None),
++            ReportRun.status.in_(IN_FLIGHT),
++        )
++    )
++    pending_ids = pending.all()
++    if definition_id in pending_ids:
++        raise DomainError("по этому отчёту у вас уже есть незавершённый запуск")
++    limit = settings.MAX_PENDING_RUNS_PER_USER
++    if len(pending_ids) >= limit:
++        raise DomainError(f"одновременно можно держать не больше {limit} незавершённых запусков")
++
++
++async def request_run(
++    session: AsyncSession,
++    definition_id: int,
++    requested_by: int,
++    params: dict[str, Any] | None = None,
++    *,
++    schedule: ExportSchedule | None = None,
++    now: datetime | None = None,
++) -> ReportRun:
++    definition = await get_definition(session, definition_id)
++    if not definition.is_active:
++        raise DomainError("отчёт отключён, запустить его нельзя")
++    params = params or {}
++    extra = set(params) - builders.RUN_OVERRIDABLE
++    if extra:
++        raise DomainError(f"при запуске нельзя менять параметры: {', '.join(sorted(extra))}")
++    run_params = builders.normalize_params(definition.kind, params)
++    if schedule is None:
++        await _check_run_quota(session, definition_id, requested_by)
++
++    run = ReportRun(
++        definition_id=definition.id,
++        schedule_id=schedule.id if schedule else None,
++        scheduled_for=schedule.next_run_at if schedule else None,
++        status="requested",
++        params=run_params,
++        requested_by=requested_by,
++        requested_at=now or clock.now(),
++    )
++    session.add(run)
++    await session.flush()
++    events.publish(
++        session,
++        "reports.run_requested",
++        {"run_id": run.id, "definition_id": definition.id, "scheduled": schedule is not None},
++    )
++    return run
++
++
++def _finish(
++    run: ReportRun, status: str, *, body: dict[str, Any] | None = None, error: str | None = None
++) -> None:
++    run.status = status
++    run.body = body
++    run.error = error
++    run.finished_at = clock.now()
++
++
++def _publish_cancelled(session: AsyncSession, run: ReportRun, reason: str) -> None:
++    events.publish(
++        session,
++        "reports.run_cancelled",
++        {"run_id": run.id, "definition_id": run.definition_id, "reason": reason},
++    )
++
++
++async def build_run(session: AsyncSession, run_id: int) -> ReportRun:
++    """Строит отчёт по ожидающему запуску. Повторная доставка события ничего не меняет."""
++    run = await session.get(ReportRun, run_id, with_for_update=True)
++    if run is None or run.status != "requested":
++        return run
++    definition = await get_definition(session, run.definition_id)
++    if not definition.is_active:
++        _finish(run, "cancelled")
++        _publish_cancelled(session, run, "definition_deactivated")
++        return run
++
++    run.status = "running"
++    run.started_at = clock.now()
++    await session.flush()
++    try:
++        body = await builders.build(session, definition, run)
++    except DomainError as exc:
++        _finish(run, "failed", error=str(exc))
++        await session.flush()
++        events.publish(
++            session,
++            "reports.run_failed",
++            {"run_id": run.id, "definition_id": definition.id, "error": run.error},
++        )
++        return run
++
++    _finish(run, "completed", body=body)
++    await session.flush()
++    events.publish(
++        session,
++        "reports.run_completed",
++        {
++            "run_id": run.id,
++            "definition_id": definition.id,
++            "code": definition.code,
++            "schedule_id": run.schedule_id,
++            "finished_on": run.finished_at.date().isoformat(),
++        },
++    )
++    return run
++
++
++async def cancel_run(session: AsyncSession, run_id: int, by: int) -> ReportRun:
++    run = await get_run(session, run_id)
++    if run.requested_by != by:
++        raise AccessDenied("отменить запуск может только тот, кто его запросил")
++    if run.status != "requested":
++        raise DomainError("отменить можно только запуск, который ещё не начал строиться")
++    _finish(run, "cancelled")
++    _publish_cancelled(session, run, "by_user")
++    return run
++
++
++async def cancel_pending_for_definition(session: AsyncSession, definition_id: int) -> list[int]:
++    runs = (
++        await session.scalars(
++            select(ReportRun)
++            .where(ReportRun.definition_id == definition_id, ReportRun.status == "requested")
++            .with_for_update(skip_locked=True)
++        )
++    ).all()
++    for run in runs:
++        _finish(run, "cancelled")
++        _publish_cancelled(session, run, "definition_deactivated")
++    return [run.id for run in runs]
++
++
++async def list_runs(
++    session: AsyncSession,
++    *,
++    definition_id: int | None = None,
++    requested_by: int | None = None,
++    status: str | None = None,
++    limit: int = settings.RUNS_PAGE_LIMIT,
++) -> list[ReportRun]:
++    query = select(ReportRun).order_by(ReportRun.requested_at.desc(), ReportRun.id.desc())
++    if definition_id is not None:
++        query = query.where(ReportRun.definition_id == definition_id)
++    if requested_by is not None:
++        query = query.where(ReportRun.requested_by == requested_by)
++    if status is not None:
++        query = query.where(ReportRun.status == status)
++    return list((await session.scalars(query.limit(min(limit, settings.RUNS_PAGE_LIMIT)))).all())
++
++
++# Расписания выгрузок ---------------------------------------------------------------
++
++
++def _recipients(recipients: list[int]) -> list[int]:
++    unique = list(dict.fromkeys(recipients))
++    if not unique:
++        raise DomainError("у выгрузки должен быть хотя бы один получатель")
++    if len(unique) > settings.MAX_RECIPIENTS:
++        raise DomainError(f"у выгрузки не больше {settings.MAX_RECIPIENTS} получателей")
++    return unique
++
++
++async def create_schedule(
++    session: AsyncSession,
++    definition_id: int,
++    by: int,
++    *,
++    every_hours: int,
++    recipients: list[int],
++    first_run_at: datetime | None = None,
++) -> ExportSchedule:
++    definition = await _owned_definition(session, definition_id, by)
++    if not definition.is_active:
++        raise DomainError("отчёт отключён, поставить его на расписание нельзя")
++    if not settings.MIN_SCHEDULE_INTERVAL_HOURS <= every_hours <= settings.MAX_SCHEDULE_INTERVAL_HOURS:
++        raise DomainError(
++            f"интервал выгрузки — от {settings.MIN_SCHEDULE_INTERVAL_HOURS} "
++            f"до {settings.MAX_SCHEDULE_INTERVAL_HOURS} часов"
++        )
++    now = clock.now()
++    if first_run_at is not None and first_run_at < now:
++        raise DomainError("первая выгрузка не может быть в прошлом")
++    existing = await session.scalar(
++        select(ExportSchedule.id).where(
++            ExportSchedule.definition_id == definition_id, ExportSchedule.is_active.is_(True)
++        )
++    )
++    if existing is not None:
++        raise DomainError("у отчёта уже есть действующее расписание выгрузки")
++    schedule = ExportSchedule(
++        definition_id=definition_id,
++        every_hours=every_hours,
++        next_run_at=first_run_at or now,
++        recipients=_recipients(recipients),
++        created_by=by,
++        created_at=now,
++    )
++    session.add(schedule)
++    await session.flush()
++    return schedule
++
++
++async def deactivate_schedule(session: AsyncSession, schedule_id: int, by: int) -> ExportSchedule:
++    schedule = await session.get(ExportSchedule, schedule_id)
++    if schedule is None:
++        raise NotFound(f"расписание {schedule_id}")
++    definition = await get_definition(session, schedule.definition_id)
++    if by not in (schedule.created_by, definition.owner_id):
++        raise AccessDenied("отключить выгрузку может её автор или владелец отчёта")
++    schedule.is_active = False
++    return schedule
++
++
++def advance(schedule: ExportSchedule, now: datetime) -> None:
++    """Сдвигает следующую выгрузку за `now`; пропущенные интервалы не догоняются."""
++    step = timedelta(hours=schedule.every_hours)
++    while schedule.next_run_at <= now:
++        schedule.next_run_at += step
++    schedule.last_enqueued_at = now
++
++
++# Уведомления ------------------------------------------------------------------
++
++
++async def _notification_targets(
++    session: AsyncSession, run: ReportRun, definition: ReportDefinition, kind: str
++) -> list[int]:
++    targets = [run.requested_by]
++    if kind == "completed" and run.schedule_id is not None:
++        schedule = await session.get(ExportSchedule, run.schedule_id)
++        targets += [int(r) for r in schedule.recipients]
++    if kind == "failed":
++        targets.append(definition.owner_id)
++    return list(dict.fromkeys(targets))
++
++
++def _notification_text(run: ReportRun, definition: ReportDefinition, kind: str) -> str:
++    match kind:
++        case "completed":
++            return f"Отчёт «{definition.title}» готов (запуск №{run.id})"
++        case "failed":
++            return f"Отчёт «{definition.title}» не построен (запуск №{run.id}): {run.error}"
++        case _:
++            return f"Запуск №{run.id} отчёта «{definition.title}» отменён: отчёт отключён"
++
++
++async def notify_run_finished(session: AsyncSession, run_id: int, kind: str) -> list[int]:
++    run = await session.get(ReportRun, run_id)
++    if run is None:
++        return []
++    definition = await get_definition(session, run.definition_id)
++    targets = await _notification_targets(session, run, definition, kind)
++    body = _notification_text(run, definition, kind)
++    now = clock.now()
++    stmt = insert(RunNotification).values(
++        [
++            {"run_id": run.id, "recipient_id": r, "kind": kind, "body": body, "created_at": now}
++            for r in targets
++        ]
++    )
++    await session.execute(stmt.on_conflict_do_nothing(constraint="run_notifications_once"))
++    return targets
++
++
++async def inbox(
++    session: AsyncSession, recipient_id: int, *, unread_only: bool = False
++) -> list[RunNotification]:
++    query = (
++        select(RunNotification)
++        .where(RunNotification.recipient_id == recipient_id)
++        .order_by(RunNotification.created_at.desc(), RunNotification.id.desc())
++    )
++    if unread_only:
++        query = query.where(RunNotification.read_at.is_(None))
++    return list((await session.scalars(query)).all())
++
++
++async def mark_read(session: AsyncSession, notification_id: int, recipient_id: int) -> RunNotification:
++    notification = await session.get(RunNotification, notification_id)
++    if notification is None:
++        raise NotFound(f"уведомление {notification_id}")
++    if notification.recipient_id != recipient_id:
++        raise AccessDenied("уведомление адресовано другому сотруднику")
++    if notification.read_at is None:
++        notification.read_at = clock.now()
++    return notification
+diff --git a/services/reports/settings.py b/services/reports/settings.py
+new file mode 100644
+index 0000000..0974175
+--- /dev/null
++++ b/services/reports/settings.py
+@@ -0,0 +1,25 @@
++"""Сроки и лимиты сервиса отчётности."""
++
++# Завершённые запуски хранятся столько дней, затем удаляются вместе с уведомлениями.
++RETENTION_DAYS = 30
++# Запуск, который строится дольше этого, считается зависшим и помечается неуспешным.
++RUN_TIMEOUT_MINUTES = 30
++
++# Незавершённых ручных запусков на одного сотрудника одновременно.
++MAX_PENDING_RUNS_PER_USER = 3
++# Метрик в одном сводном отчёте.
++MAX_METRICS_PER_REPORT = 20
++# Период отчёта по умолчанию и максимальная глубина, дней.
++DEFAULT_PERIOD_DAYS = 7
++MAX_PERIOD_DAYS = 90
++
++# Интервал выгрузок по расписанию, часов.
++MIN_SCHEDULE_INTERVAL_HOURS = 1
++MAX_SCHEDULE_INTERVAL_HOURS = 24 * 31
++MAX_RECIPIENTS = 20
++
++# Сколько запусков отдаёт список за один раз.
++RUNS_PAGE_LIMIT = 100
++
++# Служебная метрика: число построенных отчётов за день в разрезе кода отчёта.
++RUNS_COMPLETED_METRIC = "reports.runs_completed"
+diff --git a/tests/reports_factories.py b/tests/reports_factories.py
+new file mode 100644
+index 0000000..44bbef9
+--- /dev/null
++++ b/tests/reports_factories.py
+@@ -0,0 +1,124 @@
++"""Данные и типовые шаги сервиса отчётности для тестов."""
++
++from datetime import datetime, timedelta
++from decimal import Decimal
++from typing import Any
++
++from sqlalchemy import update
++
++from libs import clock, db
++from libs.events import OutboxEvent
++from services.reports import service
++from services.reports.models import ExportSchedule, ReportRun, RunNotification
++from tests.factories import T0, act, read
++
++ANALYST, ANALYST_2, MANAGER, DIRECTOR = 701, 702, 703, 704
++
++LOANS = "loans.issued"
++FINES = "billing.fines_amount"
++
++
++async def snapshot(metric: str, value: int | str, *, days_ago: int = 0, dimension: str = "") -> None:
++    await act(
++        service.record_snapshot,
++        metric,
++        Decimal(value),
++        dimension=dimension,
++        day=(T0 - timedelta(days=days_ago)).date(),
++    )
++
++
++async def series(metric: str, values: list[int], *, dimension: str = "") -> None:
++    """Снимки за последние len(values) дней, последний — за день T0."""
++    for days_ago, value in zip(range(len(values) - 1, -1, -1), values, strict=True):
++        await snapshot(metric, value, days_ago=days_ago, dimension=dimension)
++
++
++async def definition(
++    code: str = "loans-weekly",
++    *,
++    kind: str = "metric_summary",
++    params: dict[str, Any] | None = None,
++    owner: int = ANALYST,
++    title: str | None = None,
++) -> int:
++    if params is None:
++        params = {"metrics": [LOANS]} if kind == "metric_summary" else {}
++        if kind == "metric_trend":
++            params = {"metric": LOANS}
++    created = await act(
++        service.create_definition,
++        owner_id=owner,
++        code=code,
++        title=title or f"Отчёт {code}",
++        kind=kind,
++        params=params,
++    )
++    return created.id
++
++
++async def run(definition_id: int, *, by: int = ANALYST, params: dict[str, Any] | None = None) -> int:
++    """Запросить запуск и доставить события — отчёт строится подписчиком."""
++    created = await act(service.request_run, definition_id, by, params)
++    return created.id
++
++
++async def run_pending(definition_id: int, *, by: int = ANALYST, params: dict[str, Any] | None = None) -> int:
++    """Запуск, который воркер построения ещё не взял: остаётся в статусе requested.
++
++    Событие reports.run_requested помечаем обработанным, чтобы последующие шаги теста его не доставили.
++    """
++    async with db.sessionmaker().begin() as s:
++        created = await service.request_run(s, definition_id, by, params)
++        await s.flush()
++        await s.execute(
++            update(OutboxEvent)
++            .where(
++                OutboxEvent.topic == "reports.run_requested",
++                OutboxEvent.payload["run_id"].as_integer() == created.id,
++            )
++            .values(processed_at=clock.now())
++        )
++    return created.id
++
++
++async def schedule(
++    definition_id: int,
++    *,
++    by: int = ANALYST,
++    every_hours: int = 24,
++    recipients: tuple[int, ...] = (MANAGER,),
++    first_run_at: datetime | None = None,
++) -> int:
++    created = await act(
++        service.create_schedule,
++        definition_id,
++        by,
++        every_hours=every_hours,
++        recipients=list(recipients),
++        first_run_at=first_run_at,
++    )
++    return created.id
++
++
++async def job(fn, now: datetime):
++    """Выполнить фоновую задачу на момент `now` и доставить события."""
++    return await act(fn, now)
++
++
++async def load_run(run_id: int) -> ReportRun:
++    return await read(service.get_run, run_id)
++
++
++async def load_schedule(schedule_id: int) -> ExportSchedule:
++    async with db.sessionmaker()() as s:
++        return await s.get(ExportSchedule, schedule_id)
++
++
++async def inbox(recipient_id: int) -> list[RunNotification]:
++    return await read(service.inbox, recipient_id)
++
++
++async def sql(statement: str) -> None:
++    async with db.engine().begin() as conn:
++        await conn.exec_driver_sql(statement)
+diff --git a/tests/test_reports_api.py b/tests/test_reports_api.py
+new file mode 100644
+index 0000000..32736f0
+--- /dev/null
++++ b/tests/test_reports_api.py
+@@ -0,0 +1,85 @@
++import httpx
++import pytest
++
++from libs import events
++from services.reports.app import app
++from tests.reports_factories import ANALYST, ANALYST_2, LOANS, MANAGER
++
++
++@pytest.fixture
++async def client():
++    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://reports") as c:
++        yield c
++
++
++async def _definition(client: httpx.AsyncClient, code: str = "loans-weekly") -> int:
++    r = await client.post(
++        "/reports/definitions",
++        json={
++            "owner_id": ANALYST,
++            "code": code,
++            "title": f"Отчёт {code}",
++            "kind": "metric_summary",
++            "params": {"metrics": [LOANS]},
++        },
++    )
++    assert r.status_code == 201, r.text
++    return r.json()["id"]
++
++
++async def test_run_requested_then_built(client: httpx.AsyncClient) -> None:
++    r = await client.post("/reports/snapshots", json={"metric": LOANS, "value": "12.5"})
++    assert r.status_code == 201
++    def_id = await _definition(client)
++
++    r = await client.post(f"/reports/definitions/{def_id}/runs", json={"requested_by": ANALYST})
++    assert r.status_code == 202
++    queued = r.json()
++    assert queued["status"] == "requested" and queued["body"] is None
++
++    await events.dispatch_pending()
++    r = await client.get(f"/reports/runs/{queued['id']}")
++    assert r.status_code == 200
++    done = r.json()
++    assert done["id"] == queued["id"]
++    assert done["status"] == "completed"
++    assert done["body"]["metrics"][LOANS]["total"] == "12.50"
++
++    r = await client.get("/reports/notifications", params={"recipient_id": ANALYST, "unread_only": True})
++    [note] = r.json()
++    r = await client.post(f"/reports/notifications/{note['id']}/read", params={"recipient_id": MANAGER})
++    assert r.status_code == 403
++    r = await client.post(f"/reports/notifications/{note['id']}/read", params={"recipient_id": ANALYST})
++    assert r.json()["read"] is True
++
++
++async def test_list_runs_filters(client: httpx.AsyncClient) -> None:
++    await client.post("/reports/snapshots", json={"metric": LOANS, "value": 1})
++    first, second = await _definition(client, "first"), await _definition(client, "second")
++    for def_id, who in ((first, ANALYST), (second, ANALYST), (first, ANALYST_2)):
++        r = await client.post(f"/reports/definitions/{def_id}/runs", json={"requested_by": who})
++        assert r.status_code == 202
++    await events.dispatch_pending()
++    pending = await client.post(f"/reports/definitions/{second}/runs", json={"requested_by": ANALYST_2})
++
++    r = await client.get("/reports/runs", params={"definition_id": first})
++    assert len(r.json()) == 2
++    r = await client.get("/reports/runs", params={"requested_by": ANALYST_2, "status": "requested"})
++    assert [x["id"] for x in r.json()] == [pending.json()["id"]]
++    r = await client.get("/reports/runs", params={"status": "completed", "limit": 2})
++    assert [set(x) >= {"id", "status", "body"} for x in r.json()] == [True, True]
++
++
++async def test_errors_mapped_to_http(client: httpx.AsyncClient) -> None:
++    def_id = await _definition(client)
++    assert (await client.get("/reports/runs/999")).status_code == 404
++    r = await client.post(f"/reports/definitions/{def_id}/runs", json={"requested_by": ANALYST})
++    run_id = r.json()["id"]
++
++    r = await client.post(f"/reports/runs/{run_id}/cancel", params={"by": ANALYST_2})
++    assert r.status_code == 403
++    r = await client.post(f"/reports/definitions/{def_id}/runs", json={"requested_by": ANALYST})
++    assert r.status_code == 409
++    assert "незавершённый запуск" in r.json()["detail"]
++    r = await client.post(f"/reports/runs/{run_id}/cancel", params={"by": ANALYST})
++    assert r.json()["status"] == "cancelled"
+diff --git a/tests/test_reports_db.py b/tests/test_reports_db.py
+new file mode 100644
+index 0000000..8a73a4a
+--- /dev/null
++++ b/tests/test_reports_db.py
+@@ -0,0 +1,67 @@
++import pytest
++from sqlalchemy.exc import DBAPIError, IntegrityError
++
++from services.reports import service
++from tests.factories import T0, read
++from tests.reports_factories import (
++    LOANS,
++    definition,
++    load_run,
++    run,
++    run_pending,
++    schedule,
++    series,
++    snapshot,
++    sql,
++)
++
++
++async def test_finished_run_cannot_be_rewritten() -> None:
++    await series(LOANS, [2])
++    run_id = await run(await definition())
++
++    with pytest.raises(DBAPIError, match="уже завершён"):
++        await sql(f"UPDATE reports.report_runs SET body = '{{}}'::jsonb WHERE id = {run_id}")
++    assert (await load_run(run_id)).body["metrics"][LOANS]["total"] == "2.00"
++
++
++async def test_run_status_rules_enforced_in_db() -> None:
++    run_id = await run_pending(await definition())
++
++    with pytest.raises(DBAPIError, match="недопустимый переход запуска"):
++        await sql(
++            f"UPDATE reports.report_runs SET status = 'completed', body = '{{}}', finished_at = now() "
++            f"WHERE id = {run_id}"
++        )
++    with pytest.raises(IntegrityError, match="report_runs_status"):
++        await sql(
++            "INSERT INTO reports.report_runs (definition_id, status, requested_by, requested_at) "
++            "SELECT definition_id, 'done', requested_by, requested_at FROM reports.report_runs "
++            f"WHERE id = {run_id}"
++        )
++    with pytest.raises(IntegrityError, match="report_runs_body_on_completion"):
++        await sql(f"UPDATE reports.report_runs SET status = 'running', body = '{{}}' WHERE id = {run_id}")
++
++
++async def test_snapshot_rewrite_and_single_active_schedule() -> None:
++    await snapshot(LOANS, 5)
++    await snapshot(LOANS, 7)
++    def_id = await definition(params={"metrics": [LOANS], "days": 1})
++    body = (await load_run(await run(def_id))).body
++    assert body["metrics"][LOANS] == {
++        "points": 1,
++        "total": "7.00",
++        "avg": "7.00",
++        "min": "7.00",
++        "max": "7.00",
++    }
++    assert body["period"] == {"from": T0.date().isoformat(), "to": T0.date().isoformat()}
++
++    await schedule(def_id)
++    with pytest.raises(IntegrityError, match="export_schedules_one_active"):
++        await sql(
++            "INSERT INTO reports.export_schedules "
++            "(definition_id, every_hours, next_run_at, created_by, created_at) "
++            f"VALUES ({def_id}, 1, now(), 1, now())"
++        )
++    assert (await read(service.get_definition, def_id)).is_active
+diff --git a/tests/test_reports_definitions.py b/tests/test_reports_definitions.py
+new file mode 100644
+index 0000000..37531ec
+--- /dev/null
++++ b/tests/test_reports_definitions.py
+@@ -0,0 +1,74 @@
++import pytest
++from sqlalchemy.exc import DBAPIError
++
++from libs.errors import AccessDenied, DomainError
++from services.reports import service
++from tests.factories import act, read
++from tests.reports_factories import ANALYST, ANALYST_2, FINES, LOANS, definition, run
++
++
++async def test_summary_definition_keeps_metrics_unique_and_ordered() -> None:
++    def_id = await definition(params={"metrics": [LOANS, FINES, LOANS], "days": 14})
++    d = await read(service.get_definition, def_id)
++    assert d.params == {"metrics": [LOANS, FINES], "days": 14}
++    assert d.is_active
++
++
++@pytest.mark.parametrize(
++    ("kind", "params", "message"),
++    [
++        ("pivot", {}, "неизвестный тип"),
++        ("metric_summary", {"metrics": ["Loans Issued"]}, "некорректное имя метрики"),
++        ("metric_trend", {"metric": LOANS, "days": 365}, "от 1 до 90 дней"),
++    ],
++)
++async def test_definition_params_are_validated(kind: str, params: dict, message: str) -> None:
++    with pytest.raises(DomainError, match=message):
++        await definition(kind=kind, params=params)
++
++
++async def test_code_unique_and_title_unique_per_owner() -> None:
++    await definition("loans-weekly", title="Выдачи за неделю")
++    with pytest.raises(DomainError, match="уже занят"):
++        await definition("loans-weekly", title="Другое название")
++    with pytest.raises(DomainError, match="уже есть действующий отчёт"):
++        await definition("loans-weekly-2", title="выдачи за неделю")
++    # У другого сотрудника такое же название допустимо
++    await definition("loans-weekly-3", title="Выдачи за неделю", owner=ANALYST_2)
++
++
++async def test_title_released_after_deactivation() -> None:
++    def_id = await definition("loans-weekly", title="Выдачи")
++    await act(service.deactivate_definition, def_id, ANALYST)
++    await definition("loans-weekly-v2", title="Выдачи")
++
++
++async def test_only_owner_changes_definition() -> None:
++    def_id = await definition()
++    with pytest.raises(AccessDenied, match="владелец"):
++        await act(service.update_definition, def_id, ANALYST_2, title="Чужой")
++    with pytest.raises(AccessDenied):
++        await act(service.deactivate_definition, def_id, ANALYST_2)
++    updated = await act(service.update_definition, def_id, ANALYST, params={"metrics": [FINES]})
++    assert updated.params == {"metrics": [FINES]}
++
++
++async def test_kind_locked_once_report_was_run() -> None:
++    def_id = await definition()
++    changed = await act(
++        service.update_definition, def_id, ANALYST, kind="metric_trend", params={"metric": LOANS}
++    )
++    assert changed.kind == "metric_trend"
++
++    await run(def_id)
++    with pytest.raises(DBAPIError, match="тип менять нельзя"):
++        await act(service.update_definition, def_id, ANALYST, kind="run_audit", params={})
++    assert (await read(service.get_definition, def_id)).kind == "metric_trend"
++
++
++async def test_run_may_override_only_period_and_dimension() -> None:
++    def_id = await definition()
++    with pytest.raises(DomainError, match="нельзя менять параметры: metrics"):
++        await run(def_id, params={"metrics": [FINES]})
++    with pytest.raises(DomainError, match="ГГГГ-ММ-ДД"):
++        await run(def_id, params={"as_of": "02.03.2026"})
+diff --git a/tests/test_reports_jobs.py b/tests/test_reports_jobs.py
+new file mode 100644
+index 0000000..f5dd2d1
+--- /dev/null
++++ b/tests/test_reports_jobs.py
+@@ -0,0 +1,114 @@
++from datetime import timedelta
++
++import pytest
++
++from libs.errors import DomainError
++from services.reports import jobs, settings
++from tests.factories import T0, travel
++from tests.reports_factories import (
++    ANALYST,
++    DIRECTOR,
++    LOANS,
++    MANAGER,
++    definition,
++    inbox,
++    job,
++    load_run,
++    load_schedule,
++    run,
++    run_pending,
++    schedule,
++    series,
++    sql,
++)
++
++
++async def test_due_schedule_runs_and_notifies_recipients() -> None:
++    await series(LOANS, [4, 6])
++    def_id = await definition()
++    schedule_id = await schedule(def_id, recipients=(MANAGER, DIRECTOR, MANAGER))
++
++    [run_id] = await job(jobs.run_scheduled, T0)
++
++    r = await load_run(run_id)
++    assert r.status == "completed"
++    assert r.schedule_id == schedule_id and r.scheduled_for == T0
++    assert r.body["metrics"][LOANS]["total"] == "10.00"
++    for employee in (ANALYST, MANAGER, DIRECTOR):
++        assert [n.run_id for n in await inbox(employee)] == [run_id]
++    s = await load_schedule(schedule_id)
++    assert s.next_run_at == T0 + timedelta(hours=24)
++    assert s.last_enqueued_at == T0
++
++
++async def test_schedule_not_due_and_not_repeated() -> None:
++    await series(LOANS, [1])
++    def_id = await definition()
++    await schedule(def_id, every_hours=6, first_run_at=T0 + timedelta(hours=1))
++
++    assert await job(jobs.run_scheduled, T0) == []
++    assert len(await job(jobs.run_scheduled, T0 + timedelta(hours=1))) == 1
++    assert await job(jobs.run_scheduled, T0 + timedelta(hours=2)) == []
++
++
++async def test_missed_intervals_are_not_caught_up() -> None:
++    await series(LOANS, [1])
++    def_id = await definition()
++    schedule_id = await schedule(def_id, every_hours=24)
++    # Плановый запуск не мешает ручному и не упирается в лимит
++    await run_pending(def_id)
++
++    later = T0 + timedelta(days=3, hours=5)
++    travel(later)
++    run_ids = await job(jobs.run_scheduled, later)
++
++    assert len(run_ids) == 1
++    assert (await load_run(run_ids[0])).scheduled_for == T0
++    assert (await load_schedule(schedule_id)).next_run_at == T0 + timedelta(days=4)
++
++
++async def test_schedule_validation() -> None:
++    def_id = await definition()
++    with pytest.raises(DomainError, match="от 1 до 744 часов"):
++        await schedule(def_id, every_hours=0)
++    with pytest.raises(DomainError, match="хотя бы один получатель"):
++        await schedule(def_id, recipients=())
++    with pytest.raises(DomainError, match="в прошлом"):
++        await schedule(def_id, first_run_at=T0 - timedelta(minutes=1))
++    await schedule(def_id)
++    with pytest.raises(DomainError, match="уже есть действующее расписание"):
++        await schedule(def_id)
++
++
++async def test_purge_removes_only_finished_runs_past_retention() -> None:
++    await series(LOANS, [1])
++    def_id = await definition(params={"metrics": [LOANS], "days": settings.MAX_PERIOD_DAYS})
++    old = await run(def_id)
++    stale_pending = await run_pending(await definition("other"))
++    travel(T0 + timedelta(days=settings.RETENTION_DAYS - 1))
++    fresh = await run(def_id)
++
++    removed = await job(jobs.purge_old_runs, T0 + timedelta(days=settings.RETENTION_DAYS, minutes=1))
++
++    assert removed == 1
++    assert [n.run_id for n in await inbox(ANALYST)] == [fresh]
++    assert (await load_run(stale_pending)).status == "requested"
++    assert (await load_run(fresh)).status == "completed"
++    with pytest.raises(Exception, match=f"запуск {old}"):
++        await load_run(old)
++
++
++async def test_stuck_run_marked_failed_and_owner_told() -> None:
++    def_id = await definition()
++    run_id = await run_pending(def_id)
++    await sql(f"UPDATE reports.report_runs SET status = 'running', started_at = now() WHERE id = {run_id}")
++    started = (await load_run(run_id)).started_at
++
++    timeout = timedelta(minutes=settings.RUN_TIMEOUT_MINUTES)
++    assert await job(jobs.fail_stuck_runs, started + timeout - timedelta(seconds=1)) == []
++    assert await job(jobs.fail_stuck_runs, started + timeout + timedelta(seconds=1)) == [run_id]
++
++    r = await load_run(run_id)
++    assert r.status == "failed" and "время построения" in r.error
++    [note] = await inbox(ANALYST)
++    assert note.kind == "failed"
+diff --git a/tests/test_reports_runs.py b/tests/test_reports_runs.py
+new file mode 100644
+index 0000000..3e8c42c
+--- /dev/null
++++ b/tests/test_reports_runs.py
+@@ -0,0 +1,155 @@
++from datetime import timedelta
++
++import pytest
++
++from libs.errors import AccessDenied, DomainError
++from services.reports import service, settings
++from tests.factories import T0, act, travel
++from tests.reports_factories import (
++    ANALYST,
++    ANALYST_2,
++    DIRECTOR,
++    FINES,
++    LOANS,
++    definition,
++    inbox,
++    load_run,
++    load_schedule,
++    run,
++    run_pending,
++    schedule,
++    series,
++    snapshot,
++)
++
++
++async def test_summary_run_is_built_and_requester_notified() -> None:
++    await series(LOANS, [10, 12, 8, 20])
++    await snapshot(LOANS, 99, days_ago=10)  # за пределами недельного периода
++    def_id = await definition(params={"metrics": [LOANS, FINES]})
++
++    run_id = await run(def_id)
++
++    r = await load_run(run_id)
++    assert r.status == "completed"
++    assert r.started_at == r.finished_at == T0
++    assert r.body["period"] == {"from": "2026-02-24", "to": "2026-03-02"}
++    assert r.body["metrics"][LOANS] == {
++        "points": 4,
++        "total": "50.00",
++        "avg": "12.50",
++        "min": "8.00",
++        "max": "20.00",
++    }
++    assert r.body["metrics"][FINES] == {"points": 0}
++    [note] = await inbox(ANALYST)
++    assert note.kind == "completed"
++    assert note.body == f"Отчёт «Отчёт loans-weekly» готов (запуск №{run_id})"
++
++
++async def test_trend_respects_dimension_and_as_of() -> None:
++    await series(LOANS, [5, 7, 4], dimension="msk")
++    await series(LOANS, [100, 100, 100], dimension="kzn")
++    def_id = await definition("loans-trend", kind="metric_trend", params={"metric": LOANS, "days": 2})
++
++    run_id = await run(def_id, params={"dimension": "msk", "as_of": "2026-03-01"})
++
++    body = (await load_run(run_id)).body
++    assert body["period"] == {"from": "2026-02-28", "to": "2026-03-01"}
++    assert body["series"] == [{"day": "2026-02-28", "value": "5.00"}, {"day": "2026-03-01", "value": "7.00"}]
++    assert body["change"] == "2.00"
++
++
++async def test_run_without_data_fails_and_owner_is_told() -> None:
++    def_id = await definition("loans-trend", kind="metric_trend")
++
++    run_id = await run(def_id, by=ANALYST_2)
++
++    r = await load_run(run_id)
++    assert r.status == "failed"
++    assert r.body is None
++    assert r.error == f"за период нет снимков метрики {LOANS}"
++    for employee in (ANALYST, ANALYST_2):
++        [note] = await inbox(employee)
++        assert note.kind == "failed" and note.run_id == run_id
++
++
++async def test_completed_runs_feed_audit_report() -> None:
++    await series(LOANS, [1])
++    weekly = await definition("loans-weekly")
++    audit = await definition("runs-audit", kind="run_audit", params={"days": 1})
++    trend = await definition("fines-trend", kind="metric_trend", params={"metric": FINES})
++    await run(weekly)
++    await run(trend)  # без данных — неуспешный
++
++    # Служебная метрика копится подписчиком на reports.run_completed
++    counter = await definition(
++        "runs-counter", params={"metrics": [settings.RUNS_COMPLETED_METRIC], "dimension": "loans-weekly"}
++    )
++    travel(T0 + timedelta(hours=1))
++    await run(weekly)
++    counted = (await load_run(await run(counter))).body["metrics"][settings.RUNS_COMPLETED_METRIC]
++    assert counted["total"] == "2.00"
++
++    body = (await load_run(await run(audit))).body
++    assert body["by_status"] == {"completed": 3, "failed": 1}
++    assert body["by_report"] == {"fines-trend": 1, "loans-weekly": 2, "runs-counter": 1}
++    assert body["total"] == 4
++
++
++async def test_pending_run_cancelled_only_by_requester() -> None:
++    def_id = await definition()
++    run_id = await run_pending(def_id)
++
++    with pytest.raises(AccessDenied):
++        await act(service.cancel_run, run_id, ANALYST_2)
++    await act(service.cancel_run, run_id, ANALYST)
++
++    r = await load_run(run_id)
++    assert r.status == "cancelled" and r.finished_at == T0
++    assert await inbox(ANALYST) == []
++    with pytest.raises(DomainError, match="ещё не начал строиться"):
++        await act(service.cancel_run, run_id, ANALYST)
++
++
++async def test_pending_runs_limited_per_employee() -> None:
++    ids = [await definition(f"report-{n}") for n in range(settings.MAX_PENDING_RUNS_PER_USER + 1)]
++    await run_pending(ids[0])
++    with pytest.raises(DomainError, match="уже есть незавершённый запуск"):
++        await run_pending(ids[0])
++    for def_id in ids[1:-1]:
++        await run_pending(def_id)
++    with pytest.raises(DomainError, match="не больше 3 незавершённых"):
++        await run_pending(ids[-1])
++    # Другому сотруднику лимит не мешает
++    await run_pending(ids[-1], by=ANALYST_2)
++
++
++async def test_deactivation_cancels_pending_runs_and_schedules() -> None:
++    await series(LOANS, [3])
++    def_id = await definition()
++    done = await run(def_id)
++    pending = await run_pending(def_id, by=DIRECTOR)
++    schedule_id = await schedule(def_id)
++
++    await act(service.deactivate_definition, def_id, ANALYST)
++
++    assert (await load_run(done)).status == "completed"
++    assert (await load_run(pending)).status == "cancelled"
++    [note] = await inbox(DIRECTOR)
++    assert note.kind == "cancelled" and "отчёт отключён" in note.body
++    assert not (await load_schedule(schedule_id)).is_active
++    with pytest.raises(DomainError, match="отключён"):
++        await run(def_id)
++
++
++async def test_redelivered_request_does_not_rebuild() -> None:
++    await series(LOANS, [3])
++    def_id = await definition()
++    run_id = await run(def_id)
++    travel(T0 + timedelta(hours=2))
++
++    again = await act(service.build_run, run_id)
++
++    assert again.finished_at == T0
++    assert len(await inbox(ANALYST)) == 1

@@ -1,0 +1,4 @@
+success err=false cost=2.6149772000000002 Сервис `services/staff/` готов, все три проверки проходят:
+- `uv run pytest tests/test_staff_*.py -q -p no:cacheprovider` — 29 passed;
+- `uv run ruff check services/staff tests` — чисто;
+- полный `uv 

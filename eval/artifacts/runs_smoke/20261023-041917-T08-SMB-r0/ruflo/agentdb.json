@@ -1,0 +1,19 @@
+{
+  "schema": "ruflo-memory-export/v1.1",
+  "exportedAt": "2026-10-23T01:21:22.680Z",
+  "namespace": null,
+  "count": 1,
+  "entries": [
+    {
+      "key": "chat/api-body-to-text",
+      "namespace": "project",
+      "value": "Chat API field renamed body->text in MessageIn/MessageOut (services/chat/api.py); DB column chat.messages.body unchanged, mapping text=m.body in _out. No other service calls the chat HTTP API (only tests/test_chat_api.py); chat events are written via consumers.py/service.add_event, not the API. drift.py marks R-CHAT-POST-02/R-CHAT-READ-02 (+1) suspect when api.py changes — expected, needs human re-verify.",
+      "tags": [],
+      "createdAt": 1792718457798,
+      "updatedAt": 1792718457798,
+      "accessCount": 0,
+      "hasEmbedding": true,
+      "size": 408
+    }
+  ]
+}

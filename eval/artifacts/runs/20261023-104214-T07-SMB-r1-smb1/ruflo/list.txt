@@ -1,0 +1,16 @@
+Transformers.js loaded: Xenova/all-MiniLM-L6-v2
+
+Memory Entries
+
++---------------------------+-----------+-------+--------+----------+----------+
+| Key                       | Namespace |  Size | Vector | Accessed | Updated  |
++---------------------------+-----------+-------+--------+----------+----------+
+| scheduling/venue-max-p... | project   | 835 B |   ✓    |        0 | just now |
+| notifications/debt-tem... | project   | 572 B |   ✓    |        0 | 6m ago   |
+| clients/snils-required... | project   | 713 B |   ✓    |        0 | 11m ago  |
+| payments/issue-at-half... | project   | 931 B |   ✓    |        0 | 17m ago  |
+| loans/loan-period-21-days | project   | 666 B |   ✓    |        0 | 24m ago  |
++---------------------------+-----------+-------+--------+----------+----------+
+
+[INFO] Showing 5 of 5 entries
+[WARN] 5 more entries are in ~/work/ai-dd/wt/series-smb1/.swarm/agentdb-memory.db and were not read here. That store is written by the MCP/AgentDB path; read it with --path ~/work/ai-dd/wt/series-smb1/.swarm/agentdb-memory.db.

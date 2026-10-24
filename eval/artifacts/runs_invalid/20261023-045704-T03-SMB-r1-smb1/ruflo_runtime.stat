@@ -1,0 +1,3 @@
+ .claude-flow/policy/ledger-anchors.json |   5 ++
+ .claude-flow/policy/state.json          | 129 +++++++++++++++++++++++++++++++-
+ 2 files changed, 131 insertions(+), 3 deletions(-)

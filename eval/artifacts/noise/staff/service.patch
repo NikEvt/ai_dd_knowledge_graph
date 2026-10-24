@@ -1,0 +1,1953 @@
+diff --git a/migrations/noise/staff.sql b/migrations/noise/staff.sql
+new file mode 100644
+index 0000000..92a5ab6
+--- /dev/null
++++ b/migrations/noise/staff.sql
+@@ -0,0 +1,197 @@
++-- Сотрудники площадок, смены, инструктажи и допуски.
++
++CREATE SCHEMA staff;
++
++CREATE TABLE staff.employees (
++    id serial PRIMARY KEY,
++    full_name text,
++    passport text,
++    snils text,
++    birth_date date,
++    role text NOT NULL,
++    hired_at timestamptz NOT NULL,
++    dismissed_at timestamptz,
++    updated_at timestamptz NOT NULL,
++    CONSTRAINT employees_role_check CHECK (role IN ('librarian', 'cashier', 'guard', 'manager', 'hr')),
++    CONSTRAINT employees_snils_format CHECK (snils ~ '^[0-9]{3}-[0-9]{3}-[0-9]{3} [0-9]{2}$'),
++    CONSTRAINT employees_passport_format CHECK (passport ~ '^[0-9]{4} [0-9]{6}$'),
++    CONSTRAINT employees_birth_date_check CHECK (birth_date > DATE '1900-01-01'),
++    CONSTRAINT employees_dismissal_check CHECK (dismissed_at IS NULL OR dismissed_at >= hired_at),
++    CONSTRAINT employees_snils_key UNIQUE (snils)
++);
++
++-- Паспорт может повторно появиться только после увольнения прежней записи.
++CREATE UNIQUE INDEX employees_passport_active_uq ON staff.employees (passport) WHERE dismissed_at IS NULL;
++
++CREATE TABLE staff.sites (
++    id serial PRIMARY KEY,
++    name text NOT NULL,
++    max_shift_staff int NOT NULL,
++    responsible_id int REFERENCES staff.employees (id),
++    CONSTRAINT sites_name_key UNIQUE (name),
++    CONSTRAINT sites_max_shift_staff_check CHECK (max_shift_staff BETWEEN 1 AND 20)
++);
++
++CREATE TABLE staff.assignments (
++    id serial PRIMARY KEY,
++    employee_id int NOT NULL REFERENCES staff.employees (id),
++    site_id int NOT NULL REFERENCES staff.sites (id),
++    started_at timestamptz NOT NULL,
++    ended_at timestamptz,
++    CONSTRAINT assignments_period_check CHECK (ended_at IS NULL OR ended_at >= started_at)
++);
++
++CREATE UNIQUE INDEX assignments_current_uq ON staff.assignments (employee_id) WHERE ended_at IS NULL;
++CREATE INDEX assignments_site_idx ON staff.assignments (site_id) WHERE ended_at IS NULL;
++
++CREATE TABLE staff.clearance_kinds (
++    code text PRIMARY KEY,
++    title text NOT NULL,
++    valid_days int NOT NULL,
++    briefing_topic text,
++    recheck_fields text[] NOT NULL DEFAULT '{}',
++    CONSTRAINT clearance_kinds_valid_days_check CHECK (valid_days BETWEEN 1 AND 1095)
++);
++
++CREATE TABLE staff.shifts (
++    id serial PRIMARY KEY,
++    site_id int NOT NULL REFERENCES staff.sites (id),
++    starts_at timestamptz NOT NULL,
++    ends_at timestamptz NOT NULL,
++    capacity int NOT NULL,
++    min_staff int NOT NULL DEFAULT 1,
++    required_clearance text REFERENCES staff.clearance_kinds (code),
++    status text NOT NULL DEFAULT 'planned',
++    understaffed boolean NOT NULL DEFAULT false,
++    created_by int NOT NULL REFERENCES staff.employees (id),
++    CONSTRAINT shifts_period_check CHECK (ends_at > starts_at),
++    CONSTRAINT shifts_capacity_check CHECK (capacity BETWEEN 1 AND 20),
++    CONSTRAINT shifts_min_staff_check CHECK (min_staff BETWEEN 0 AND capacity),
++    CONSTRAINT shifts_status_check CHECK (status IN ('planned', 'cancelled', 'done'))
++);
++
++CREATE UNIQUE INDEX shifts_planned_uq ON staff.shifts (site_id, starts_at, coalesce(required_clearance, ''))
++    WHERE status = 'planned';
++
++CREATE TABLE staff.shift_members (
++    id serial PRIMARY KEY,
++    shift_id int NOT NULL REFERENCES staff.shifts (id),
++    employee_id int NOT NULL REFERENCES staff.employees (id),
++    status text NOT NULL DEFAULT 'assigned',
++    assigned_at timestamptz NOT NULL,
++    removed_at timestamptz,
++    removed_reason text,
++    CONSTRAINT shift_members_status_check CHECK (status IN ('assigned', 'removed')),
++    CONSTRAINT shift_members_removal_check CHECK ((status = 'removed') = (removed_at IS NOT NULL))
++);
++
++CREATE UNIQUE INDEX shift_members_assigned_uq ON staff.shift_members (shift_id, employee_id)
++    WHERE status = 'assigned';
++CREATE INDEX shift_members_employee_idx ON staff.shift_members (employee_id) WHERE status = 'assigned';
++
++CREATE TABLE staff.briefings (
++    id serial PRIMARY KEY,
++    employee_id int NOT NULL REFERENCES staff.employees (id),
++    site_id int NOT NULL REFERENCES staff.sites (id),
++    topic text NOT NULL,
++    instructor_id int NOT NULL REFERENCES staff.employees (id),
++    held_at timestamptz NOT NULL,
++    CONSTRAINT briefings_instructor_check CHECK (instructor_id <> employee_id),
++    CONSTRAINT briefings_once_key UNIQUE (employee_id, topic, held_at)
++);
++
++CREATE TABLE staff.clearances (
++    id serial PRIMARY KEY,
++    employee_id int NOT NULL REFERENCES staff.employees (id),
++    kind text NOT NULL REFERENCES staff.clearance_kinds (code),
++    briefing_id int REFERENCES staff.briefings (id),
++    granted_by int NOT NULL REFERENCES staff.employees (id),
++    granted_at timestamptz NOT NULL,
++    expires_at timestamptz NOT NULL,
++    status text NOT NULL DEFAULT 'active',
++    revoked_at timestamptz,
++    revoke_reason text,
++    CONSTRAINT clearances_period_check CHECK (expires_at > granted_at),
++    CONSTRAINT clearances_status_check CHECK (status IN ('active', 'revoked', 'expired')),
++    CONSTRAINT clearances_revoked_check CHECK (status <> 'revoked' OR revoked_at IS NOT NULL)
++);
++
++CREATE UNIQUE INDEX clearances_active_uq ON staff.clearances (employee_id, kind) WHERE status = 'active';
++
++CREATE TABLE staff.alerts (
++    id serial PRIMARY KEY,
++    recipient_id int REFERENCES staff.employees (id),
++    site_id int NOT NULL REFERENCES staff.sites (id),
++    shift_id int REFERENCES staff.shifts (id),
++    kind text NOT NULL,
++    body text NOT NULL,
++    created_at timestamptz NOT NULL,
++    read_at timestamptz,
++    CONSTRAINT alerts_kind_check CHECK (kind IN ('understaffed', 'no_responsible'))
++);
++
++CREATE UNIQUE INDEX alerts_unread_uq ON staff.alerts (shift_id, kind) WHERE read_at IS NULL;
++
++-- Вместимость смены ограничена максимумом площадки и не может стать меньше уже назначенных.
++CREATE FUNCTION staff.check_shift_capacity() RETURNS trigger AS $$
++DECLARE
++    site_max int;
++    taken int;
++BEGIN
++    SELECT max_shift_staff INTO site_max FROM staff.sites WHERE id = NEW.site_id;
++    IF NEW.capacity > site_max THEN
++        RAISE EXCEPTION 'shift capacity % exceeds site maximum %', NEW.capacity, site_max
++            USING ERRCODE = 'check_violation';
++    END IF;
++    IF TG_OP = 'UPDATE' THEN
++        SELECT count(*) INTO taken FROM staff.shift_members
++            WHERE shift_id = NEW.id AND status = 'assigned';
++        IF taken > NEW.capacity THEN
++            RAISE EXCEPTION 'shift % already has % staff', NEW.id, taken
++                USING ERRCODE = 'check_violation';
++        END IF;
++    END IF;
++    RETURN NEW;
++END $$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_shift_capacity
++    BEFORE INSERT OR UPDATE OF capacity, site_id ON staff.shifts
++    FOR EACH ROW EXECUTE FUNCTION staff.check_shift_capacity();
++
++CREATE FUNCTION staff.check_shift_members() RETURNS trigger AS $$
++DECLARE
++    cap int;
++    taken int;
++BEGIN
++    IF NEW.status <> 'assigned' THEN
++        RETURN NEW;
++    END IF;
++    SELECT capacity INTO cap FROM staff.shifts WHERE id = NEW.shift_id FOR UPDATE;
++    SELECT count(*) INTO taken FROM staff.shift_members
++        WHERE shift_id = NEW.shift_id AND status = 'assigned' AND id <> NEW.id;
++    IF taken >= cap THEN
++        RAISE EXCEPTION 'shift % is full: % staff', NEW.shift_id, cap
++            USING ERRCODE = 'check_violation';
++    END IF;
++    RETURN NEW;
++END $$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_shift_members_limit
++    BEFORE INSERT OR UPDATE OF status ON staff.shift_members
++    FOR EACH ROW EXECUTE FUNCTION staff.check_shift_members();
++
++CREATE FUNCTION staff.check_site_max_staff() RETURNS trigger AS $$
++BEGIN
++    IF EXISTS (
++        SELECT 1 FROM staff.shifts
++        WHERE site_id = NEW.id AND status = 'planned' AND capacity > NEW.max_shift_staff
++    ) THEN
++        RAISE EXCEPTION 'site % has planned shifts above % staff', NEW.id, NEW.max_shift_staff
++            USING ERRCODE = 'check_violation';
++    END IF;
++    RETURN NEW;
++END $$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_site_max_shift_staff
++    BEFORE UPDATE OF max_shift_staff ON staff.sites
++    FOR EACH ROW EXECUTE FUNCTION staff.check_site_max_staff();
+diff --git a/services/staff/__init__.py b/services/staff/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/services/staff/api.py b/services/staff/api.py
+new file mode 100644
+index 0000000..fbe843e
+--- /dev/null
++++ b/services/staff/api.py
+@@ -0,0 +1,147 @@
++from datetime import date, datetime
++from typing import Annotated
++
++from fastapi import APIRouter, Depends
++from pydantic import BaseModel
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs.web import session
++from services.staff import service
++from services.staff.models import Employee, Shift
++
++router = APIRouter(tags=["staff"])
++Session = Annotated[AsyncSession, Depends(session)]
++
++
++class EmployeeIn(BaseModel):
++    role: str
++    full_name: str | None = None
++    passport: str | None = None
++    snils: str | None = None
++    birth_date: date | None = None
++
++
++class EmployeePatch(BaseModel):
++    role: str | None = None
++    full_name: str | None = None
++    passport: str | None = None
++    snils: str | None = None
++    birth_date: date | None = None
++
++
++class EmployeeOut(BaseModel):
++    id: int
++    full_name: str | None
++    role: str
++    active: bool
++    missing_fields: list[str]
++
++
++class TransferIn(BaseModel):
++    site_id: int
++
++
++class ShiftIn(BaseModel):
++    site_id: int
++    starts_at: datetime
++    ends_at: datetime
++    capacity: int | None = None
++    min_staff: int = 1
++    required_clearance: str | None = None
++
++
++class ShiftOut(BaseModel):
++    id: int
++    site_id: int
++    starts_at: datetime
++    ends_at: datetime
++    capacity: int
++    status: str
++    understaffed: bool
++    staff: list[int]
++
++
++class MemberIn(BaseModel):
++    employee_id: int
++
++
++class ClearanceIn(BaseModel):
++    employee_id: int
++    kind: str
++
++
++def _employee_out(e: Employee) -> EmployeeOut:
++    return EmployeeOut(
++        id=e.id, full_name=e.full_name, role=e.role, active=e.active, missing_fields=service.missing_fields(e)
++    )
++
++
++async def _shift_out(s: AsyncSession, shift: Shift) -> ShiftOut:
++    return ShiftOut(
++        id=shift.id,
++        site_id=shift.site_id,
++        starts_at=shift.starts_at,
++        ends_at=shift.ends_at,
++        capacity=shift.capacity,
++        status=shift.status,
++        understaffed=shift.understaffed,
++        staff=await service.roster(s, shift.id),
++    )
++
++
++@router.post("/employees", status_code=201)
++async def hire(body: EmployeeIn, actor_id: int, s: Session) -> EmployeeOut:
++    return _employee_out(await service.hire_employee(s, actor_id, **body.model_dump()))
++
++
++@router.patch("/employees/{employee_id}")
++async def update(employee_id: int, body: EmployeePatch, actor_id: int, s: Session) -> EmployeeOut:
++    changes = body.model_dump(exclude_unset=True)
++    return _employee_out(await service.update_employee(s, employee_id, actor_id, **changes))
++
++
++@router.post("/employees/{employee_id}/transfer")
++async def transfer(employee_id: int, body: TransferIn, actor_id: int, s: Session) -> dict[str, int]:
++    assignment = await service.transfer_employee(s, employee_id, body.site_id, actor_id)
++    return {"assignment_id": assignment.id, "site_id": assignment.site_id}
++
++
++@router.delete("/employees/{employee_id}")
++async def dismiss(employee_id: int, actor_id: int, s: Session) -> EmployeeOut:
++    return _employee_out(await service.dismiss_employee(s, employee_id, actor_id))
++
++
++@router.post("/shifts", status_code=201)
++async def create_shift(body: ShiftIn, actor_id: int, s: Session) -> ShiftOut:
++    shift = await service.create_shift(s, responsible_id=actor_id, **body.model_dump())
++    return await _shift_out(s, shift)
++
++
++@router.get("/sites/{site_id}/shifts")
++async def shifts(site_id: int, since: datetime, until: datetime, s: Session) -> list[ShiftOut]:
++    return [await _shift_out(s, x) for x in await service.site_shifts(s, site_id, since, until)]
++
++
++@router.post("/shifts/{shift_id}/members", status_code=201)
++async def add_member(shift_id: int, body: MemberIn, actor_id: int, s: Session) -> dict[str, int]:
++    member = await service.assign_to_shift(s, shift_id, body.employee_id, actor_id)
++    return {"member_id": member.id}
++
++
++@router.delete("/shifts/{shift_id}/members/{employee_id}", status_code=204)
++async def remove_member(shift_id: int, employee_id: int, actor_id: int, s: Session) -> None:
++    await service.remove_from_shift(s, shift_id, employee_id, actor_id)
++
++
++@router.post("/clearances", status_code=201)
++async def grant(body: ClearanceIn, actor_id: int, s: Session) -> dict[str, int | str]:
++    clearance = await service.grant_clearance(s, body.employee_id, body.kind, actor_id)
++    return {"clearance_id": clearance.id, "expires_at": clearance.expires_at.isoformat()}
++
++
++@router.get("/sites/{site_id}/alerts")
++async def alerts(site_id: int, s: Session) -> list[dict[str, int | str | None]]:
++    return [
++        {"id": a.id, "kind": a.kind, "shift_id": a.shift_id, "body": a.body}
++        for a in await service.alerts_for_site(s, site_id)
++    ]
+diff --git a/services/staff/app.py b/services/staff/app.py
+new file mode 100644
+index 0000000..1096bee
+--- /dev/null
++++ b/services/staff/app.py
+@@ -0,0 +1,10 @@
++from fastapi import FastAPI
++
++from libs.web import install_error_handlers
++from services import wiring
++from services.staff.api import router
++
++wiring.load()
++app = FastAPI(title="staff")
++app.include_router(router)
++install_error_handlers(app)
+diff --git a/services/staff/consumers.py b/services/staff/consumers.py
+new file mode 100644
+index 0000000..f764793
+--- /dev/null
++++ b/services/staff/consumers.py
+@@ -0,0 +1,56 @@
++from typing import Any
++
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs.events import subscribe
++from services.staff import listeners as _listeners  # noqa: F401 - регистрирует before_flush
++from services.staff import service
++
++
++@subscribe("staff.employee_updated")
++async def on_employee_updated(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.revoke_for_recheck(session, payload["employee_id"], payload["fields"])
++
++
++@subscribe("staff.employee_dismissed")
++async def on_employee_dismissed(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.drop_from_future_shifts(session, payload["employee_id"], reason="dismissed")
++    await service.revoke_all_clearances(session, payload["employee_id"], reason="dismissed")
++
++
++@subscribe("staff.clearance_revoked")
++@subscribe("staff.clearance_expired")
++async def on_clearance_lost(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.drop_from_future_shifts(
++        session, payload["employee_id"], reason="clearance_lost", clearance_kind=payload["kind"]
++    )
++
++
++@subscribe("staff.employee_transferred")
++async def on_employee_transferred(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.drop_from_future_shifts(
++        session, payload["employee_id"], reason="transferred", site_id=payload["from_site_id"]
++    )
++    if payload["was_responsible"]:
++        await service.raise_alert(
++            session,
++            site_id=payload["from_site_id"],
++            kind="no_responsible",
++            body="Ответственный за площадку переведён, назначьте нового",
++        )
++
++
++@subscribe("staff.shift_member_removed")
++async def on_shift_member_removed(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.check_staffing(session, payload["shift_id"])
++
++
++@subscribe("staff.shift_understaffed")
++async def on_shift_understaffed(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.raise_alert(
++        session,
++        site_id=payload["site_id"],
++        shift_id=payload["shift_id"],
++        kind="understaffed",
++        body=f"На смене {payload['staffed']} из минимум {payload['min_staff']} сотрудников",
++    )
+diff --git a/services/staff/jobs.py b/services/staff/jobs.py
+new file mode 100644
+index 0000000..c783725
+--- /dev/null
++++ b/services/staff/jobs.py
+@@ -0,0 +1,32 @@
++from datetime import datetime
++
++from sqlalchemy import select
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs import events
++from services.staff.models import Clearance, Shift
++
++
++async def expire_clearances(session: AsyncSession, now: datetime) -> list[int]:
++    clearances = (
++        await session.scalars(
++            select(Clearance).where(Clearance.status == "active", Clearance.expires_at <= now)
++        )
++    ).all()
++    for clearance in clearances:
++        clearance.status = "expired"
++        events.publish(
++            session,
++            "staff.clearance_expired",
++            {"clearance_id": clearance.id, "employee_id": clearance.employee_id, "kind": clearance.kind},
++        )
++    return [c.id for c in clearances]
++
++
++async def close_finished_shifts(session: AsyncSession, now: datetime) -> list[int]:
++    shifts = (
++        await session.scalars(select(Shift).where(Shift.status == "planned", Shift.ends_at <= now))
++    ).all()
++    for shift in shifts:
++        shift.status = "done"
++    return [s.id for s in shifts]
+diff --git a/services/staff/listeners.py b/services/staff/listeners.py
+new file mode 100644
+index 0000000..8f91151
+--- /dev/null
++++ b/services/staff/listeners.py
+@@ -0,0 +1,22 @@
++from typing import Any
++
++from sqlalchemy import event, inspect
++from sqlalchemy.orm import Session
++
++from libs import clock, events
++from services.staff.models import Employee
++
++TRACKED_FIELDS = ("full_name", "passport", "snils", "birth_date", "role")
++
++
++@event.listens_for(Session, "before_flush")
++def _employee_changes(session: Session, flush_context: Any, instances: Any) -> None:
++    for obj in list(session.dirty):
++        if not isinstance(obj, Employee):
++            continue
++        state = inspect(obj)
++        changed = [f for f in TRACKED_FIELDS if state.attrs[f].history.has_changes()]
++        if not changed:
++            continue
++        obj.updated_at = clock.now()
++        events.publish(session, "staff.employee_updated", {"employee_id": obj.id, "fields": changed})
+diff --git a/services/staff/models.py b/services/staff/models.py
+new file mode 100644
+index 0000000..ae6504e
+--- /dev/null
++++ b/services/staff/models.py
+@@ -0,0 +1,134 @@
++from datetime import date, datetime
++
++from sqlalchemy import ForeignKey, Text
++from sqlalchemy.dialects.postgresql import ARRAY
++from sqlalchemy.orm import Mapped, mapped_column
++
++from libs.db import Base
++
++SCHEMA = {"schema": "staff"}
++
++
++class Employee(Base):
++    __tablename__ = "employees"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    full_name: Mapped[str | None]
++    passport: Mapped[str | None]
++    snils: Mapped[str | None]
++    birth_date: Mapped[date | None]
++    role: Mapped[str]
++    hired_at: Mapped[datetime]
++    dismissed_at: Mapped[datetime | None]
++    updated_at: Mapped[datetime]
++
++    @property
++    def active(self) -> bool:
++        return self.dismissed_at is None
++
++
++class Site(Base):
++    __tablename__ = "sites"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    name: Mapped[str]
++    max_shift_staff: Mapped[int]
++    responsible_id: Mapped[int | None] = mapped_column(ForeignKey("staff.employees.id"))
++
++
++class Assignment(Base):
++    """Закрепление сотрудника за площадкой; текущее — без ended_at."""
++
++    __tablename__ = "assignments"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    employee_id: Mapped[int] = mapped_column(ForeignKey("staff.employees.id"))
++    site_id: Mapped[int] = mapped_column(ForeignKey("staff.sites.id"))
++    started_at: Mapped[datetime]
++    ended_at: Mapped[datetime | None]
++
++
++class ClearanceKind(Base):
++    __tablename__ = "clearance_kinds"
++    __table_args__ = SCHEMA
++
++    code: Mapped[str] = mapped_column(primary_key=True)
++    title: Mapped[str]
++    valid_days: Mapped[int]
++    briefing_topic: Mapped[str | None]
++    # Изменение этих полей карточки требует повторной проверки и отзывает допуск.
++    recheck_fields: Mapped[list[str]] = mapped_column(ARRAY(Text), default=list)
++
++
++class Shift(Base):
++    __tablename__ = "shifts"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    site_id: Mapped[int] = mapped_column(ForeignKey("staff.sites.id"))
++    starts_at: Mapped[datetime]
++    ends_at: Mapped[datetime]
++    capacity: Mapped[int]
++    min_staff: Mapped[int] = mapped_column(default=1)
++    required_clearance: Mapped[str | None] = mapped_column(ForeignKey("staff.clearance_kinds.code"))
++    status: Mapped[str] = mapped_column(default="planned")
++    understaffed: Mapped[bool] = mapped_column(default=False)
++    created_by: Mapped[int] = mapped_column(ForeignKey("staff.employees.id"))
++
++
++class ShiftMember(Base):
++    __tablename__ = "shift_members"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    shift_id: Mapped[int] = mapped_column(ForeignKey("staff.shifts.id"))
++    employee_id: Mapped[int] = mapped_column(ForeignKey("staff.employees.id"))
++    status: Mapped[str] = mapped_column(default="assigned")
++    assigned_at: Mapped[datetime]
++    removed_at: Mapped[datetime | None]
++    removed_reason: Mapped[str | None]
++
++
++class Briefing(Base):
++    __tablename__ = "briefings"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    employee_id: Mapped[int] = mapped_column(ForeignKey("staff.employees.id"))
++    site_id: Mapped[int] = mapped_column(ForeignKey("staff.sites.id"))
++    topic: Mapped[str]
++    instructor_id: Mapped[int] = mapped_column(ForeignKey("staff.employees.id"))
++    held_at: Mapped[datetime]
++
++
++class Clearance(Base):
++    __tablename__ = "clearances"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    employee_id: Mapped[int] = mapped_column(ForeignKey("staff.employees.id"))
++    kind: Mapped[str] = mapped_column(ForeignKey("staff.clearance_kinds.code"))
++    briefing_id: Mapped[int | None] = mapped_column(ForeignKey("staff.briefings.id"))
++    granted_by: Mapped[int] = mapped_column(ForeignKey("staff.employees.id"))
++    granted_at: Mapped[datetime]
++    expires_at: Mapped[datetime]
++    status: Mapped[str] = mapped_column(default="active")
++    revoked_at: Mapped[datetime | None]
++    revoke_reason: Mapped[str | None]
++
++
++class Alert(Base):
++    __tablename__ = "alerts"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    recipient_id: Mapped[int | None] = mapped_column(ForeignKey("staff.employees.id"))
++    site_id: Mapped[int] = mapped_column(ForeignKey("staff.sites.id"))
++    shift_id: Mapped[int | None] = mapped_column(ForeignKey("staff.shifts.id"))
++    kind: Mapped[str]
++    body: Mapped[str]
++    created_at: Mapped[datetime]
++    read_at: Mapped[datetime | None]
+diff --git a/services/staff/service.py b/services/staff/service.py
+new file mode 100644
+index 0000000..a3e9526
+--- /dev/null
++++ b/services/staff/service.py
+@@ -0,0 +1,634 @@
++"""Сотрудники площадок: кадровые операции, смены, инструктажи и допуски."""
++
++from datetime import date, datetime, timedelta
++from typing import Any
++
++from sqlalchemy import func, select
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs import clock, events
++from libs.errors import AccessDenied, DomainError, NotFound
++from services.staff import settings
++from services.staff.models import (
++    Alert,
++    Assignment,
++    Briefing,
++    Clearance,
++    ClearanceKind,
++    Employee,
++    Shift,
++    ShiftMember,
++    Site,
++)
++
++EDITABLE_FIELDS = ("full_name", "passport", "snils", "birth_date", "role")
++
++
++# --- проверки ----------------------------------------------------------------
++
++
++async def _employee(session: AsyncSession, employee_id: int) -> Employee:
++    employee = await session.get(Employee, employee_id)
++    if employee is None:
++        raise NotFound(f"сотрудник {employee_id}")
++    return employee
++
++
++async def _site(session: AsyncSession, site_id: int) -> Site:
++    site = await session.get(Site, site_id)
++    if site is None:
++        raise NotFound(f"площадка {site_id}")
++    return site
++
++
++async def _shift(session: AsyncSession, shift_id: int) -> Shift:
++    shift = await session.get(Shift, shift_id)
++    if shift is None:
++        raise NotFound(f"смена {shift_id}")
++    return shift
++
++
++async def _require_hr(session: AsyncSession, actor_id: int) -> Employee:
++    actor = await session.get(Employee, actor_id)
++    if actor is None or not actor.active or actor.role not in settings.HR_ROLES:
++        raise AccessDenied("кадровые операции выполняет только отдел кадров")
++    return actor
++
++
++async def _require_responsible(session: AsyncSession, site_id: int, actor_id: int) -> Site:
++    site = await _site(session, site_id)
++    if site.responsible_id != actor_id:
++        raise AccessDenied("сменами площадки управляет только ответственный за площадку")
++    return site
++
++
++def missing_fields(employee: Employee) -> list[str]:
++    return [f for f in settings.REQUIRED_EMPLOYEE_FIELDS if not getattr(employee, f)]
++
++
++def snils_valid(snils: str) -> bool:
++    digits = snils.replace("-", "").replace(" ", "")
++    if len(digits) != 11 or not digits.isdigit():
++        return False
++    body, control = digits[:9], int(digits[9:])
++    total = sum(int(d) * (9 - i) for i, d in enumerate(body))
++    if total > 101:
++        total %= 101
++    return (0 if total in (100, 101) else total) == control
++
++
++def _validate_card(fields: dict[str, Any]) -> None:
++    role = fields.get("role")
++    if role is not None and role not in settings.ROLES:
++        raise DomainError(f"неизвестная должность «{role}»")
++    snils = fields.get("snils")
++    if snils and not snils_valid(snils):
++        raise DomainError("СНИЛС не проходит проверку контрольного числа")
++    birth: date | None = fields.get("birth_date")
++    if birth is not None:
++        today = clock.now().date()
++        age = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
++        if age < settings.MIN_EMPLOYEE_AGE:
++            raise DomainError(f"сотрудник должен быть не моложе {settings.MIN_EMPLOYEE_AGE} лет")
++
++
++# --- сотрудники и площадки ---------------------------------------------------
++
++
++async def hire_employee(
++    session: AsyncSession,
++    hr_id: int,
++    *,
++    role: str,
++    full_name: str | None = None,
++    passport: str | None = None,
++    snils: str | None = None,
++    birth_date: date | None = None,
++) -> Employee:
++    await _require_hr(session, hr_id)
++    card = {
++        "role": role,
++        "full_name": full_name,
++        "passport": passport,
++        "snils": snils,
++        "birth_date": birth_date,
++    }
++    _validate_card(card)
++    now = clock.now()
++    employee = Employee(**card, hired_at=now, updated_at=now)
++    session.add(employee)
++    await session.flush()
++    events.publish(session, "staff.employee_hired", {"employee_id": employee.id, "role": role})
++    return employee
++
++
++async def update_employee(session: AsyncSession, employee_id: int, hr_id: int, **changes: Any) -> Employee:
++    await _require_hr(session, hr_id)
++    unknown = set(changes) - set(EDITABLE_FIELDS)
++    if unknown:
++        raise DomainError(f"поля нельзя изменить: {', '.join(sorted(unknown))}")
++    employee = await _employee(session, employee_id)
++    if not employee.active:
++        raise DomainError("карточка уволенного сотрудника закрыта для изменений")
++    _validate_card(changes)
++    for name, value in changes.items():
++        setattr(employee, name, value)
++    await session.flush()
++    return employee
++
++
++async def dismiss_employee(session: AsyncSession, employee_id: int, hr_id: int) -> Employee:
++    await _require_hr(session, hr_id)
++    employee = await _employee(session, employee_id)
++    if not employee.active:
++        raise DomainError("сотрудник уже уволен")
++    now = clock.now()
++    employee.dismissed_at = now
++    site_id = await current_site(session, employee_id)
++    await _close_assignment(session, employee_id, now)
++    events.publish(session, "staff.employee_dismissed", {"employee_id": employee_id, "site_id": site_id})
++    return employee
++
++
++async def create_site(
++    session: AsyncSession, hr_id: int, name: str, max_shift_staff: int | None = None
++) -> Site:
++    await _require_hr(session, hr_id)
++    site = Site(name=name, max_shift_staff=max_shift_staff or settings.MAX_SHIFT_STAFF)
++    session.add(site)
++    await session.flush()
++    return site
++
++
++async def set_site_max_staff(session: AsyncSession, site_id: int, hr_id: int, value: int) -> Site:
++    await _require_hr(session, hr_id)
++    if not 1 <= value <= settings.SHIFT_STAFF_CEILING:
++        raise DomainError(f"на смене может быть от 1 до {settings.SHIFT_STAFF_CEILING} сотрудников")
++    site = await _site(session, site_id)
++    site.max_shift_staff = value
++    await session.flush()
++    return site
++
++
++async def current_site(session: AsyncSession, employee_id: int) -> int | None:
++    return await session.scalar(
++        select(Assignment.site_id).where(Assignment.employee_id == employee_id, Assignment.ended_at.is_(None))
++    )
++
++
++async def _close_assignment(
++    session: AsyncSession, employee_id: int, now: datetime
++) -> tuple[Assignment | None, bool]:
++    """Закрывает текущее закрепление; возвращает его и признак, был ли сотрудник ответственным."""
++    current = await session.scalar(
++        select(Assignment).where(Assignment.employee_id == employee_id, Assignment.ended_at.is_(None))
++    )
++    if current is None:
++        return None, False
++    current.ended_at = now
++    site = await session.get(Site, current.site_id)
++    was_responsible = site.responsible_id == employee_id
++    if was_responsible:
++        site.responsible_id = None
++    await session.flush()
++    return current, was_responsible
++
++
++async def transfer_employee(session: AsyncSession, employee_id: int, site_id: int, hr_id: int) -> Assignment:
++    """Закрепить сотрудника за площадкой; если он работал на другой — перевести."""
++    await _require_hr(session, hr_id)
++    employee = await _employee(session, employee_id)
++    if not employee.active:
++        raise DomainError("уволенного сотрудника нельзя закрепить за площадкой")
++    await _site(session, site_id)
++    if await current_site(session, employee_id) == site_id:
++        raise DomainError("сотрудник уже работает на этой площадке")
++    now = clock.now()
++    old, was_responsible = await _close_assignment(session, employee_id, now)
++    assignment = Assignment(employee_id=employee_id, site_id=site_id, started_at=now)
++    session.add(assignment)
++    await session.flush()
++    if old is not None:
++        events.publish(
++            session,
++            "staff.employee_transferred",
++            {
++                "employee_id": employee_id,
++                "from_site_id": old.site_id,
++                "to_site_id": site_id,
++                "was_responsible": was_responsible,
++            },
++        )
++    return assignment
++
++
++async def appoint_responsible(session: AsyncSession, site_id: int, employee_id: int, hr_id: int) -> Site:
++    await _require_hr(session, hr_id)
++    site = await _site(session, site_id)
++    employee = await _employee(session, employee_id)
++    if employee.role not in settings.RESPONSIBLE_ROLES:
++        raise DomainError("ответственным за площадку может быть только руководитель")
++    if await current_site(session, employee_id) != site_id:
++        raise DomainError("ответственный должен работать на этой площадке")
++    site.responsible_id = employee_id
++    await session.flush()
++    return site
++
++
++# --- смены -------------------------------------------------------------------
++
++
++async def create_shift(
++    session: AsyncSession,
++    *,
++    site_id: int,
++    responsible_id: int,
++    starts_at: datetime,
++    ends_at: datetime,
++    capacity: int | None = None,
++    min_staff: int = 1,
++    required_clearance: str | None = None,
++) -> Shift:
++    site = await _require_responsible(session, site_id, responsible_id)
++    now = clock.now()
++    if starts_at <= now:
++        raise DomainError("нельзя запланировать смену на прошедшее время")
++    if starts_at > now + timedelta(days=settings.PLANNING_HORIZON_DAYS):
++        raise DomainError(f"смены планируются не дальше чем на {settings.PLANNING_HORIZON_DAYS} дней")
++    if ends_at <= starts_at or ends_at - starts_at > timedelta(hours=settings.MAX_SHIFT_HOURS):
++        raise DomainError(f"смена длится от нуля до {settings.MAX_SHIFT_HOURS} часов")
++    if required_clearance is not None and await session.get(ClearanceKind, required_clearance) is None:
++        raise NotFound(f"вид допуска {required_clearance}")
++    capacity = site.max_shift_staff if capacity is None else capacity
++    if min_staff > capacity:
++        raise DomainError("минимальный состав смены больше её вместимости")
++    shift = Shift(
++        site_id=site_id,
++        starts_at=starts_at,
++        ends_at=ends_at,
++        capacity=capacity,
++        min_staff=min_staff,
++        required_clearance=required_clearance,
++        understaffed=min_staff > 0,
++        created_by=responsible_id,
++    )
++    session.add(shift)
++    await session.flush()
++    return shift
++
++
++async def roster(session: AsyncSession, shift_id: int) -> list[int]:
++    rows = await session.scalars(
++        select(ShiftMember.employee_id)
++        .where(ShiftMember.shift_id == shift_id, ShiftMember.status == "assigned")
++        .order_by(ShiftMember.id)
++    )
++    return list(rows.all())
++
++
++async def _staff_count(session: AsyncSession, shift_id: int) -> int:
++    return await session.scalar(
++        select(func.count()).where(ShiftMember.shift_id == shift_id, ShiftMember.status == "assigned")
++    )
++
++
++async def active_clearance(session: AsyncSession, employee_id: int, kind: str) -> Clearance | None:
++    return await session.scalar(
++        select(Clearance).where(
++            Clearance.employee_id == employee_id, Clearance.kind == kind, Clearance.status == "active"
++        )
++    )
++
++
++async def _check_rest(session: AsyncSession, shift: Shift, employee_id: int) -> None:
++    rest = timedelta(hours=settings.MIN_REST_HOURS)
++    clash = await session.scalar(
++        select(Shift.id)
++        .join(ShiftMember, ShiftMember.shift_id == Shift.id)
++        .where(
++            ShiftMember.employee_id == employee_id,
++            ShiftMember.status == "assigned",
++            Shift.status == "planned",
++            Shift.id != shift.id,
++            Shift.starts_at < shift.ends_at + rest,
++            Shift.ends_at + rest > shift.starts_at,
++        )
++        .limit(1)
++    )
++    if clash is not None:
++        raise DomainError(
++            f"между сменами сотрудника должно быть не меньше {settings.MIN_REST_HOURS} часов отдыха"
++        )
++
++
++async def assign_to_shift(
++    session: AsyncSession, shift_id: int, employee_id: int, responsible_id: int
++) -> ShiftMember:
++    shift = await _shift(session, shift_id)
++    await _require_responsible(session, shift.site_id, responsible_id)
++    if shift.status != "planned" or shift.starts_at <= clock.now():
++        raise DomainError("смена уже прошла или отменена")
++    employee = await _employee(session, employee_id)
++    if not employee.active:
++        raise DomainError("сотрудник уволен")
++    missing = missing_fields(employee)
++    if missing:
++        raise DomainError(f"в карточке сотрудника не заполнено: {', '.join(missing)}")
++    if await current_site(session, employee_id) != shift.site_id:
++        raise DomainError("сотрудник не закреплён за площадкой смены")
++    if shift.required_clearance is not None:
++        # истечение допуска до смены отрабатывает jobs.expire_clearances
++        if await active_clearance(session, employee_id, shift.required_clearance) is None:
++            raise DomainError("у сотрудника нет действующего допуска для этой смены")
++    if employee_id in await roster(session, shift_id):
++        raise DomainError("сотрудник уже назначен на смену")
++    if await _staff_count(session, shift_id) >= shift.capacity:
++        raise DomainError("смена полностью укомплектована")
++    await _check_rest(session, shift, employee_id)
++
++    member = ShiftMember(shift_id=shift_id, employee_id=employee_id, assigned_at=clock.now())
++    session.add(member)
++    await session.flush()
++    if shift.understaffed and await _staff_count(session, shift_id) >= shift.min_staff:
++        shift.understaffed = False
++    return member
++
++
++async def _remove_member(session: AsyncSession, member: ShiftMember, shift: Shift, reason: str) -> None:
++    member.status = "removed"
++    member.removed_at = clock.now()
++    member.removed_reason = reason
++    events.publish(
++        session,
++        "staff.shift_member_removed",
++        {
++            "shift_id": shift.id,
++            "site_id": shift.site_id,
++            "employee_id": member.employee_id,
++            "reason": reason,
++        },
++    )
++
++
++async def remove_from_shift(
++    session: AsyncSession, shift_id: int, employee_id: int, responsible_id: int
++) -> None:
++    shift = await _shift(session, shift_id)
++    await _require_responsible(session, shift.site_id, responsible_id)
++    member = await session.scalar(
++        select(ShiftMember).where(
++            ShiftMember.shift_id == shift_id,
++            ShiftMember.employee_id == employee_id,
++            ShiftMember.status == "assigned",
++        )
++    )
++    if member is None:
++        raise NotFound(f"сотрудник {employee_id} на смене {shift_id}")
++    await _remove_member(session, member, shift, reason="manual")
++
++
++async def cancel_shift(session: AsyncSession, shift_id: int, responsible_id: int) -> Shift:
++    shift = await _shift(session, shift_id)
++    await _require_responsible(session, shift.site_id, responsible_id)
++    if shift.status != "planned":
++        raise DomainError("отменить можно только запланированную смену")
++    shift.status = "cancelled"
++    members = (
++        await session.scalars(
++            select(ShiftMember).where(ShiftMember.shift_id == shift_id, ShiftMember.status == "assigned")
++        )
++    ).all()
++    for member in members:
++        await _remove_member(session, member, shift, reason="shift_cancelled")
++    return shift
++
++
++async def drop_from_future_shifts(
++    session: AsyncSession,
++    employee_id: int,
++    *,
++    reason: str,
++    site_id: int | None = None,
++    clearance_kind: str | None = None,
++) -> list[int]:
++    """Снимает сотрудника с ещё не начавшихся смен (всех, площадки или требующих допуска)."""
++    query = (
++        select(ShiftMember, Shift)
++        .join(Shift, Shift.id == ShiftMember.shift_id)
++        .where(
++            ShiftMember.employee_id == employee_id,
++            ShiftMember.status == "assigned",
++            Shift.status == "planned",
++            Shift.starts_at > clock.now(),
++        )
++        .order_by(Shift.starts_at)
++    )
++    if site_id is not None:
++        query = query.where(Shift.site_id == site_id)
++    if clearance_kind is not None:
++        query = query.where(Shift.required_clearance == clearance_kind)
++    dropped = []
++    for member, shift in await session.execute(query):
++        await _remove_member(session, member, shift, reason=reason)
++        dropped.append(shift.id)
++    return dropped
++
++
++async def check_staffing(session: AsyncSession, shift_id: int) -> bool:
++    """Помечает смену недоукомплектованной; True, если пометка появилась только что."""
++    shift = await _shift(session, shift_id)
++    if shift.status != "planned" or shift.starts_at <= clock.now() or shift.understaffed:
++        return False
++    staffed = await _staff_count(session, shift_id)
++    if staffed >= shift.min_staff:
++        return False
++    shift.understaffed = True
++    events.publish(
++        session,
++        "staff.shift_understaffed",
++        {"shift_id": shift.id, "site_id": shift.site_id, "staffed": staffed, "min_staff": shift.min_staff},
++    )
++    return True
++
++
++async def site_shifts(session: AsyncSession, site_id: int, since: datetime, until: datetime) -> list[Shift]:
++    rows = await session.scalars(
++        select(Shift)
++        .where(Shift.site_id == site_id, Shift.starts_at >= since, Shift.starts_at < until)
++        .order_by(Shift.starts_at, Shift.id)
++    )
++    return list(rows.all())
++
++
++# --- инструктажи и допуски ---------------------------------------------------
++
++
++async def hold_briefing(
++    session: AsyncSession, *, site_id: int, employee_id: int, topic: str, instructor_id: int
++) -> Briefing:
++    await _require_responsible(session, site_id, instructor_id)
++    if instructor_id == employee_id:
++        raise DomainError("инструктаж нельзя провести самому себе")
++    if await current_site(session, employee_id) != site_id:
++        raise DomainError("инструктаж проводится на площадке, где работает сотрудник")
++    briefing = Briefing(
++        employee_id=employee_id,
++        site_id=site_id,
++        topic=topic,
++        instructor_id=instructor_id,
++        held_at=clock.now(),
++    )
++    session.add(briefing)
++    await session.flush()
++    return briefing
++
++
++async def _fresh_briefing(session: AsyncSession, employee_id: int, topic: str) -> Briefing | None:
++    since = clock.now() - timedelta(days=settings.BRIEFING_VALID_DAYS)
++    return await session.scalar(
++        select(Briefing)
++        .where(Briefing.employee_id == employee_id, Briefing.topic == topic, Briefing.held_at >= since)
++        .order_by(Briefing.held_at.desc())
++        .limit(1)
++    )
++
++
++async def grant_clearance(session: AsyncSession, employee_id: int, kind: str, hr_id: int) -> Clearance:
++    await _require_hr(session, hr_id)
++    employee = await _employee(session, employee_id)
++    if not employee.active:
++        raise DomainError("сотрудник уволен")
++    missing = missing_fields(employee)
++    if missing:
++        raise DomainError(f"в карточке сотрудника не заполнено: {', '.join(missing)}")
++    clearance_kind = await session.get(ClearanceKind, kind)
++    if clearance_kind is None:
++        raise NotFound(f"вид допуска {kind}")
++    if await active_clearance(session, employee_id, kind) is not None:
++        raise DomainError("у сотрудника уже есть действующий допуск этого вида")
++    briefing = None
++    if clearance_kind.briefing_topic:
++        briefing = await _fresh_briefing(session, employee_id, clearance_kind.briefing_topic)
++        if briefing is None:
++            raise DomainError(
++                f"для допуска нужен инструктаж «{clearance_kind.briefing_topic}» "
++                f"не старше {settings.BRIEFING_VALID_DAYS} дней"
++            )
++    now = clock.now()
++    clearance = Clearance(
++        employee_id=employee_id,
++        kind=kind,
++        briefing_id=briefing.id if briefing else None,
++        granted_by=hr_id,
++        granted_at=now,
++        expires_at=now + timedelta(days=clearance_kind.valid_days),
++    )
++    session.add(clearance)
++    await session.flush()
++    events.publish(
++        session,
++        "staff.clearance_granted",
++        {"clearance_id": clearance.id, "employee_id": employee_id, "kind": kind},
++    )
++    return clearance
++
++
++def _revoke(session: AsyncSession, clearance: Clearance, reason: str) -> None:
++    clearance.status = "revoked"
++    clearance.revoked_at = clock.now()
++    clearance.revoke_reason = reason
++    events.publish(
++        session,
++        "staff.clearance_revoked",
++        {
++            "clearance_id": clearance.id,
++            "employee_id": clearance.employee_id,
++            "kind": clearance.kind,
++            "reason": reason,
++        },
++    )
++
++
++async def revoke_clearance(session: AsyncSession, clearance_id: int, hr_id: int, reason: str) -> Clearance:
++    await _require_hr(session, hr_id)
++    clearance = await session.get(Clearance, clearance_id)
++    if clearance is None:
++        raise NotFound(f"допуск {clearance_id}")
++    if clearance.status != "active":
++        raise DomainError("допуск уже не действует")
++    _revoke(session, clearance, reason)
++    return clearance
++
++
++async def revoke_all_clearances(session: AsyncSession, employee_id: int, reason: str) -> list[Clearance]:
++    clearances = (
++        await session.scalars(
++            select(Clearance).where(Clearance.employee_id == employee_id, Clearance.status == "active")
++        )
++    ).all()
++    for clearance in clearances:
++        _revoke(session, clearance, reason)
++    return list(clearances)
++
++
++async def revoke_for_recheck(session: AsyncSession, employee_id: int, fields: list[str]) -> list[Clearance]:
++    """Отзывает допуски, виды которых требуют перепроверки при изменении этих полей."""
++    clearances = (
++        await session.scalars(
++            select(Clearance)
++            .join(ClearanceKind, ClearanceKind.code == Clearance.kind)
++            .where(
++                Clearance.employee_id == employee_id,
++                Clearance.status == "active",
++                ClearanceKind.recheck_fields.overlap(fields),
++            )
++            .order_by(Clearance.id)
++        )
++    ).all()
++    for clearance in clearances:
++        _revoke(session, clearance, "recheck")
++    return list(clearances)
++
++
++# --- уведомления ответственных ----------------------------------------------
++
++
++async def raise_alert(
++    session: AsyncSession, *, site_id: int, kind: str, body: str, shift_id: int | None = None
++) -> Alert | None:
++    if shift_id is not None:
++        duplicate = await session.scalar(
++            select(Alert.id).where(Alert.shift_id == shift_id, Alert.kind == kind, Alert.read_at.is_(None))
++        )
++        if duplicate is not None:
++            return None
++    site = await _site(session, site_id)
++    alert = Alert(
++        recipient_id=site.responsible_id,
++        site_id=site_id,
++        shift_id=shift_id,
++        kind=kind,
++        body=body,
++        created_at=clock.now(),
++    )
++    session.add(alert)
++    await session.flush()
++    return alert
++
++
++async def alerts_for_site(session: AsyncSession, site_id: int, *, unread_only: bool = True) -> list[Alert]:
++    query = select(Alert).where(Alert.site_id == site_id).order_by(Alert.id)
++    if unread_only:
++        query = query.where(Alert.read_at.is_(None))
++    return list((await session.scalars(query)).all())
++
++
++async def mark_alert_read(session: AsyncSession, alert_id: int, reader_id: int) -> Alert:
++    alert = await session.get(Alert, alert_id)
++    if alert is None:
++        raise NotFound(f"уведомление {alert_id}")
++    site = await _site(session, alert.site_id)
++    if reader_id not in (alert.recipient_id, site.responsible_id):
++        raise AccessDenied("уведомление адресовано другому сотруднику")
++    alert.read_at = alert.read_at or clock.now()
++    return alert
+diff --git a/services/staff/settings.py b/services/staff/settings.py
+new file mode 100644
+index 0000000..1a99a6b
+--- /dev/null
++++ b/services/staff/settings.py
+@@ -0,0 +1,25 @@
++"""Константы сервиса сотрудников."""
++
++# Без этих полей карточки сотрудника нельзя допустить к сменам и оформить допуск.
++REQUIRED_EMPLOYEE_FIELDS = ("full_name", "passport", "snils", "birth_date")
++
++ROLES = ("librarian", "cashier", "guard", "manager", "hr")
++# Кто ведёт кадровые операции: приём, перевод, увольнение, допуски.
++HR_ROLES = ("hr",)
++# Кого можно назначить ответственным за площадку.
++RESPONSIBLE_ROLES = ("manager",)
++
++# Максимум сотрудников на смене для новой площадки.
++MAX_SHIFT_STAFF = 6
++# Жёсткий потолок для любой площадки (совпадает с CHECK в staff.sql).
++SHIFT_STAFF_CEILING = 20
++
++MIN_EMPLOYEE_AGE = 18
++MAX_SHIFT_HOURS = 12
++# Минимальный отдых между сменами одного сотрудника.
++MIN_REST_HOURS = 8
++# Смены планируются не дальше чем на столько дней вперёд.
++PLANNING_HORIZON_DAYS = 60
++
++# Инструктаж годится для оформления допуска, если проведён не раньше чем столько дней назад.
++BRIEFING_VALID_DAYS = 30
+diff --git a/tests/staff_factories.py b/tests/staff_factories.py
+new file mode 100644
+index 0000000..632b6dc
+--- /dev/null
++++ b/tests/staff_factories.py
+@@ -0,0 +1,130 @@
++"""Данные сервиса сотрудников для тестов."""
++
++from dataclasses import dataclass
++from datetime import date, datetime, timedelta
++from itertools import count
++
++from libs import db
++from services.staff import service as staff
++from services.staff.models import ClearanceKind, Employee
++from tests.factories import T0, act, read
++
++CASH, FIRE, RARE = "cash_desk", "fire_safety", "rare_books"
++CASH_TOPIC, FIRE_TOPIC = "Кассовая дисциплина", "Пожарная безопасность"
++
++TOMORROW = T0.replace(hour=0) + timedelta(days=1)
++
++_seq = count(1)
++
++
++@dataclass
++class StaffWorld:
++    hr: int
++    north: int
++    south: int
++    boss_north: int
++    boss_south: int
++
++    def boss(self, site: int) -> int:
++        return {self.north: self.boss_north, self.south: self.boss_south}[site]
++
++
++def snils(n: int) -> str:
++    body = f"{100_000_000 + n:09d}"
++    total = sum(int(d) * (9 - i) for i, d in enumerate(body))
++    if total > 101:
++        total %= 101
++    control = 0 if total in (100, 101) else total
++    return f"{body[:3]}-{body[3:6]}-{body[6:]} {control:02d}"
++
++
++def card(n: int | None = None) -> dict:
++    n = next(_seq) if n is None else n
++    return {
++        "full_name": f"Сотрудник {n}",
++        "passport": f"4500 {n:06d}",
++        "snils": snils(n),
++        "birth_date": date(1990, 1, 1) + timedelta(days=n),
++    }
++
++
++async def staff_world() -> StaffWorld:
++    async with db.sessionmaker().begin() as s:
++        hr = Employee(role="hr", hired_at=T0, updated_at=T0, **card(9000))
++        s.add(hr)
++        s.add_all(
++            [
++                ClearanceKind(
++                    code=CASH,
++                    title="Работа с кассой",
++                    valid_days=180,
++                    briefing_topic=CASH_TOPIC,
++                    recheck_fields=["full_name", "passport", "snils"],
++                ),
++                ClearanceKind(code=FIRE, title="Пожарный пост", valid_days=365, briefing_topic=FIRE_TOPIC),
++                ClearanceKind(
++                    code=RARE, title="Фонд редких книг", valid_days=20, recheck_fields=["passport"]
++                ),
++            ]
++        )
++    north = (await act(staff.create_site, hr.id, "Север")).id
++    south = (await act(staff.create_site, hr.id, "Юг", 3)).id
++    world = StaffWorld(hr=hr.id, north=north, south=south, boss_north=0, boss_south=0)
++    world.boss_north = await hire(world, north, role="manager")
++    world.boss_south = await hire(world, south, role="manager")
++    await act(staff.appoint_responsible, north, world.boss_north, hr.id)
++    await act(staff.appoint_responsible, south, world.boss_south, hr.id)
++    return world
++
++
++async def hire(w: StaffWorld, site: int | None, *, role: str = "librarian", **overrides) -> int:
++    fields = card() | overrides
++    employee = await act(staff.hire_employee, w.hr, role=role, **fields)
++    if site is not None:
++        await act(staff.transfer_employee, employee.id, site, w.hr)
++    return employee.id
++
++
++async def shift(
++    w: StaffWorld,
++    site: int,
++    *,
++    starts_at: datetime = TOMORROW + timedelta(hours=9),
++    hours: int = 8,
++    capacity: int | None = None,
++    min_staff: int = 1,
++    clearance: str | None = None,
++) -> int:
++    created = await act(
++        staff.create_shift,
++        site_id=site,
++        responsible_id=w.boss(site),
++        starts_at=starts_at,
++        ends_at=starts_at + timedelta(hours=hours),
++        capacity=capacity,
++        min_staff=min_staff,
++        required_clearance=clearance,
++    )
++    return created.id
++
++
++async def put_on(w: StaffWorld, shift_id: int, employee_id: int, site: int | None = None) -> None:
++    await act(staff.assign_to_shift, shift_id, employee_id, w.boss(site or w.north))
++
++
++async def cleared(w: StaffWorld, employee_id: int, kind: str, site: int | None = None) -> int:
++    site = site or w.north
++    topic = {CASH: CASH_TOPIC, FIRE: FIRE_TOPIC}.get(kind)
++    if topic:
++        await act(
++            staff.hold_briefing,
++            site_id=site,
++            employee_id=employee_id,
++            topic=topic,
++            instructor_id=w.boss(site),
++        )
++    return (await act(staff.grant_clearance, employee_id, kind, w.hr)).id
++
++
++async def roster(shift_id: int) -> list[int]:
++    return await read(staff.roster, shift_id)
+diff --git a/tests/test_staff_employees.py b/tests/test_staff_employees.py
+new file mode 100644
+index 0000000..c69853b
+--- /dev/null
++++ b/tests/test_staff_employees.py
+@@ -0,0 +1,137 @@
++from datetime import date, timedelta
++
++import pytest
++from sqlalchemy import select
++from sqlalchemy.exc import IntegrityError
++
++from libs import db, events
++from libs.errors import AccessDenied, DomainError
++from services.staff import service as staff
++from services.staff.models import Clearance, Employee
++from tests.factories import T0, act, read, travel
++from tests.staff_factories import CASH, FIRE, RARE, card, cleared, hire, put_on, roster, shift, staff_world
++
++
++async def _clearance(clearance_id: int) -> Clearance:
++    async def get(s, cid):
++        return await s.get(Clearance, cid)
++
++    return await read(get, clearance_id)
++
++
++async def test_only_hr_hires() -> None:
++    w = await staff_world()
++    with pytest.raises(AccessDenied):
++        await act(staff.hire_employee, w.boss_north, role="librarian", **card())
++
++
++async def test_card_is_validated_on_hire() -> None:
++    w = await staff_world()
++    bad_snils = card() | {"snils": "112-233-445 96"}
++    with pytest.raises(DomainError, match="СНИЛС"):
++        await act(staff.hire_employee, w.hr, role="cashier", **bad_snils)
++    minor = card() | {"birth_date": date(2010, 1, 1)}
++    with pytest.raises(DomainError, match="не моложе 18"):
++        await act(staff.hire_employee, w.hr, role="cashier", **minor)
++    with pytest.raises(DomainError, match="должность"):
++        await act(staff.hire_employee, w.hr, role="janitor", **card())
++    assert staff.snils_valid("112-233-445 95")
++    with pytest.raises(IntegrityError, match="employees_passport_format"):
++        await act(staff.hire_employee, w.hr, role="guard", **(card() | {"passport": "45 00 12"}))
++
++
++async def test_incomplete_card_is_saved_but_lists_missing_fields() -> None:
++    w = await staff_world()
++    employee_id = await hire(w, w.north, passport=None, snils=None)
++
++    async def get(s):
++        return await s.get(Employee, employee_id)
++
++    employee = await read(get)
++    assert staff.missing_fields(employee) == ["passport", "snils"]
++    with pytest.raises(DomainError, match="не заполнено: passport, snils"):
++        await act(staff.grant_clearance, employee_id, RARE, w.hr)
++
++
++async def test_passport_reused_only_after_dismissal() -> None:
++    w = await staff_world()
++    first = card()
++    employee_id = await hire(w, w.north, **first)
++    clone = first | {"snils": card()["snils"]}
++    with pytest.raises(IntegrityError, match="employees_passport_active_uq"):
++        await hire(w, None, **clone)
++    await act(staff.dismiss_employee, employee_id, w.hr)
++    assert await hire(w, None, **clone) != employee_id
++
++
++async def test_tracked_change_publishes_employee_updated() -> None:
++    w = await staff_world()
++    employee_id = await hire(w, w.north)
++    travel(T0 + timedelta(hours=2))
++    async with db.sessionmaker().begin() as s:
++        await staff.update_employee(s, employee_id, w.hr, full_name="Новая Фамилия", role="cashier")
++        pending = (
++            await s.scalars(
++                select(events.OutboxEvent).where(events.OutboxEvent.topic == "staff.employee_updated")
++            )
++        ).all()
++        employee = await s.get(Employee, employee_id)
++    assert [e.payload for e in pending] == [{"employee_id": employee_id, "fields": ["full_name", "role"]}]
++    assert employee.updated_at == T0 + timedelta(hours=2)
++    await events.dispatch_pending()
++
++
++async def test_card_change_revokes_clearances_needing_recheck() -> None:
++    w = await staff_world()
++    employee_id = await hire(w, w.north, role="cashier")
++    cash = await cleared(w, employee_id, CASH)
++    fire = await cleared(w, employee_id, FIRE)
++    rare = await cleared(w, employee_id, RARE)
++
++    await act(staff.update_employee, employee_id, w.hr, full_name="Сотрудник Переименованный")
++
++    assert (await _clearance(cash)).status == "revoked"
++    assert (await _clearance(cash)).revoke_reason == "recheck"
++    assert (await _clearance(fire)).status == "active"
++    assert (await _clearance(rare)).status == "active"
++
++
++async def test_same_value_is_not_a_change() -> None:
++    w = await staff_world()
++    fields = card()
++    employee_id = await hire(w, w.north, **fields)
++    cash = await cleared(w, employee_id, CASH)
++    await act(staff.update_employee, employee_id, w.hr, passport=fields["passport"])
++    assert (await _clearance(cash)).status == "active"
++
++
++async def test_regrant_after_recheck_needs_fresh_briefing() -> None:
++    w = await staff_world()
++    employee_id = await hire(w, w.north, role="cashier")
++    await cleared(w, employee_id, CASH)
++    await act(staff.update_employee, employee_id, w.hr, passport="4600 123456")
++    # инструктаж ещё свежий — допуск можно оформить заново
++    await act(staff.grant_clearance, employee_id, CASH, w.hr)
++    with pytest.raises(DomainError, match="уже есть"):
++        await act(staff.grant_clearance, employee_id, CASH, w.hr)
++    travel(T0 + timedelta(days=40))
++    await act(staff.update_employee, employee_id, w.hr, passport="4600 654321")
++    with pytest.raises(DomainError, match="инструктаж «Кассовая дисциплина»"):
++        await act(staff.grant_clearance, employee_id, CASH, w.hr)
++
++
++async def test_dismissal_closes_card_and_releases_everything() -> None:
++    w = await staff_world()
++    employee_id = await hire(w, w.north)
++    rare = await cleared(w, employee_id, RARE)
++    shift_id = await shift(w, w.north, min_staff=0)
++    await put_on(w, shift_id, employee_id)
++    await act(staff.dismiss_employee, employee_id, w.hr)
++
++    assert (await _clearance(rare)).status == "revoked"
++    assert await roster(shift_id) == []
++    assert await read(staff.current_site, employee_id) is None
++    with pytest.raises(DomainError, match="уволенного"):
++        await act(staff.update_employee, employee_id, w.hr, full_name="Кто-то")
++    with pytest.raises(DomainError, match="уже уволен"):
++        await act(staff.dismiss_employee, employee_id, w.hr)
+diff --git a/tests/test_staff_events.py b/tests/test_staff_events.py
+new file mode 100644
+index 0000000..5011fd6
+--- /dev/null
++++ b/tests/test_staff_events.py
+@@ -0,0 +1,214 @@
++from datetime import timedelta
++
++import httpx
++import pytest
++
++from libs.errors import AccessDenied
++from services.staff import jobs
++from services.staff import service as staff
++from services.staff.app import app
++from services.staff.models import Shift
++from tests.factories import T0, act, read, travel
++from tests.staff_factories import (
++    CASH,
++    RARE,
++    TOMORROW,
++    card,
++    cleared,
++    hire,
++    put_on,
++    roster,
++    shift,
++    staff_world,
++)
++
++
++async def _shift(shift_id: int) -> Shift:
++    async def get(s):
++        return await s.get(Shift, shift_id)
++
++    return await read(get)
++
++
++async def test_transfer_drops_future_shifts_at_old_site_only() -> None:
++    w = await staff_world()
++    employee_id = await hire(w, w.north)
++    running = await shift(w, w.north, starts_at=T0 + timedelta(hours=1), hours=4)
++    soon = await shift(w, w.north, min_staff=0)
++    later = await shift(w, w.north, starts_at=TOMORROW + timedelta(days=2, hours=9), min_staff=0)
++    for shift_id in (running, soon, later):
++        await put_on(w, shift_id, employee_id)
++
++    travel(T0 + timedelta(hours=2))
++    await act(staff.transfer_employee, employee_id, w.south, w.hr)
++
++    assert await roster(running) == [employee_id]
++    assert await roster(soon) == []
++    assert await roster(later) == []
++    assert await read(staff.current_site, employee_id) == w.south
++    south_shift = await shift(w, w.south)
++    await put_on(w, south_shift, employee_id, site=w.south)
++    assert await roster(south_shift) == [employee_id]
++
++
++async def test_transfer_leaves_shift_understaffed_and_alerts_responsible() -> None:
++    w = await staff_world()
++    a, b = await hire(w, w.north), await hire(w, w.north)
++    shift_id = await shift(w, w.north, min_staff=2)
++    await put_on(w, shift_id, a)
++    await put_on(w, shift_id, b)
++    assert (await _shift(shift_id)).understaffed is False
++
++    await act(staff.transfer_employee, a, w.south, w.hr)
++
++    assert (await _shift(shift_id)).understaffed is True
++    alerts = await read(staff.alerts_for_site, w.north)
++    assert [(x.kind, x.shift_id, x.recipient_id) for x in alerts] == [
++        ("understaffed", shift_id, w.boss_north)
++    ]
++    assert alerts[0].body == "На смене 1 из минимум 2 сотрудников"
++
++
++async def test_passport_change_chain_reaches_responsible() -> None:
++    """Смена паспорта -> отзыв кассового допуска -> снятие с кассовой смены -> уведомление."""
++    w = await staff_world()
++    cashier = await hire(w, w.north, role="cashier")
++    await cleared(w, cashier, CASH)
++    cash_shift = await shift(w, w.north, clearance=CASH)
++    plain_shift = await shift(w, w.north, starts_at=TOMORROW + timedelta(days=1, hours=9))
++    await put_on(w, cash_shift, cashier)
++    await put_on(w, plain_shift, cashier)
++
++    await act(staff.update_employee, cashier, w.hr, passport="4601 000777")
++
++    assert await read(staff.active_clearance, cashier, CASH) is None
++    assert await roster(cash_shift) == []
++    assert await roster(plain_shift) == [cashier]
++    alerts = await read(staff.alerts_for_site, w.north)
++    assert [(x.kind, x.shift_id) for x in alerts] == [("understaffed", cash_shift)]
++
++
++async def test_understaffed_alert_is_not_duplicated_until_read() -> None:
++    w = await staff_world()
++    a, b = await hire(w, w.north), await hire(w, w.north)
++    shift_id = await shift(w, w.north)
++    await put_on(w, shift_id, a)
++    await act(staff.remove_from_shift, shift_id, a, w.boss_north)
++    await put_on(w, shift_id, b)
++    await act(staff.remove_from_shift, shift_id, b, w.boss_north)
++    alerts = await read(staff.alerts_for_site, w.north)
++    assert len(alerts) == 1
++
++    with pytest.raises(AccessDenied):
++        await act(staff.mark_alert_read, alerts[0].id, w.boss_south)
++    await act(staff.mark_alert_read, alerts[0].id, w.boss_north)
++    await put_on(w, shift_id, a)
++    await act(staff.remove_from_shift, shift_id, a, w.boss_north)
++    assert len(await read(staff.alerts_for_site, w.north)) == 1
++
++
++async def test_transferred_responsible_leaves_site_without_one() -> None:
++    w = await staff_world()
++    await act(staff.transfer_employee, w.boss_north, w.south, w.hr)
++
++    alerts = await read(staff.alerts_for_site, w.north)
++    assert [(x.kind, x.recipient_id) for x in alerts] == [("no_responsible", None)]
++    with pytest.raises(AccessDenied):
++        await shift(w, w.north)
++    new_boss = await hire(w, w.north, role="manager")
++    await act(staff.appoint_responsible, w.north, new_boss, w.hr)
++    w.boss_north = new_boss
++    assert await shift(w, w.north)
++
++
++async def test_expire_job_drops_employee_from_shifts_needing_clearance() -> None:
++    w = await staff_world()
++    keeper = await hire(w, w.north)
++    await cleared(w, keeper, RARE)
++    early = await shift(w, w.north, clearance=RARE, starts_at=T0 + timedelta(days=5))
++    late = await shift(w, w.north, clearance=RARE, starts_at=T0 + timedelta(days=25))
++    await put_on(w, early, keeper)
++    await put_on(w, late, keeper)
++
++    assert await act(jobs.expire_clearances, now=T0 + timedelta(days=19)) == []
++    travel(T0 + timedelta(days=20))
++    assert len(await act(jobs.expire_clearances, now=T0 + timedelta(days=20))) == 1
++
++    assert await roster(early) == [keeper]
++    assert await roster(late) == []
++    assert (await _shift(late)).understaffed is True
++    assert await read(staff.active_clearance, keeper, RARE) is None
++
++
++async def test_close_finished_shifts_job() -> None:
++    w = await staff_world()
++    first = await shift(w, w.north, starts_at=T0 + timedelta(hours=1), hours=4)
++    second = await shift(w, w.north)
++    closed = await act(jobs.close_finished_shifts, now=T0 + timedelta(hours=6))
++    assert closed == [first]
++    assert (await _shift(second)).status == "planned"
++    # закрытые смены больше не мешают уменьшить максимум площадки
++    await act(staff.set_site_max_staff, w.north, w.hr, 6)
++
++
++@pytest.fixture
++async def client():
++    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://staff") as c:
++        yield c
++
++
++async def test_api_hire_and_plan_shift(client: httpx.AsyncClient) -> None:
++    w = await staff_world()
++    fields = card() | {"role": "guard"}
++    fields["birth_date"] = fields["birth_date"].isoformat()
++    r = await client.post("/employees", params={"actor_id": w.hr}, json=fields)
++    assert r.status_code == 201, r.text
++    employee_id = r.json()["id"]
++    assert r.json()["missing_fields"] == []
++    r = await client.post(
++        f"/employees/{employee_id}/transfer", params={"actor_id": w.hr}, json={"site_id": w.north}
++    )
++    assert r.status_code == 200
++
++    starts = TOMORROW + timedelta(hours=9)
++    r = await client.post(
++        "/shifts",
++        params={"actor_id": w.boss_north},
++        json={
++            "site_id": w.north,
++            "starts_at": starts.isoformat(),
++            "ends_at": (starts + timedelta(hours=6)).isoformat(),
++        },
++    )
++    assert r.status_code == 201, r.text
++    shift_id = r.json()["id"]
++    r = await client.post(
++        f"/shifts/{shift_id}/members", params={"actor_id": w.boss_north}, json={"employee_id": employee_id}
++    )
++    assert r.status_code == 201
++    r = await client.get(
++        f"/sites/{w.north}/shifts",
++        params={"since": T0.isoformat(), "until": (T0 + timedelta(days=3)).isoformat()},
++    )
++    assert [(x["id"], x["staff"], x["understaffed"]) for x in r.json()] == [(shift_id, [employee_id], False)]
++
++
++async def test_api_errors_map_to_statuses(client: httpx.AsyncClient) -> None:
++    w = await staff_world()
++    r = await client.post("/employees", params={"actor_id": w.boss_north}, json={"role": "guard"})
++    assert r.status_code == 403
++    r = await client.patch("/employees/999", params={"actor_id": w.hr}, json={"full_name": "Х"})
++    assert r.status_code == 404
++    starts = TOMORROW + timedelta(hours=9)
++    r = await client.post(
++        "/shifts",
++        params={"actor_id": w.boss_south},
++        json={
++            "site_id": w.south,
++            "starts_at": starts.isoformat(),
++            "ends_at": (starts + timedelta(hours=6)).isoformat(),
++            "capacity": 5,
++        },
++    )
++    assert r.status_code == 409
++    assert "exceeds site maximum" in r.json()["detail"]
+diff --git a/tests/test_staff_shifts.py b/tests/test_staff_shifts.py
+new file mode 100644
+index 0000000..03dfdc3
+--- /dev/null
++++ b/tests/test_staff_shifts.py
+@@ -0,0 +1,134 @@
++from datetime import timedelta
++
++import pytest
++from sqlalchemy import update
++from sqlalchemy.exc import IntegrityError
++
++from libs import db
++from libs.errors import AccessDenied, DomainError
++from services.staff import service as staff
++from services.staff.models import Shift, ShiftMember
++from tests.factories import T0, act, read
++from tests.staff_factories import CASH, RARE, TOMORROW, cleared, hire, put_on, roster, shift, staff_world
++
++
++async def test_only_site_responsible_plans_shifts() -> None:
++    w = await staff_world()
++    with pytest.raises(AccessDenied, match="ответственный"):
++        await act(
++            staff.create_shift,
++            site_id=w.north,
++            responsible_id=w.boss_south,
++            starts_at=TOMORROW,
++            ends_at=TOMORROW + timedelta(hours=8),
++        )
++
++
++async def test_shift_time_rules() -> None:
++    w = await staff_world()
++    with pytest.raises(DomainError, match="прошедшее"):
++        await shift(w, w.north, starts_at=T0 - timedelta(hours=1))
++    with pytest.raises(DomainError, match="12 часов"):
++        await shift(w, w.north, hours=13)
++    with pytest.raises(DomainError, match="60 дней"):
++        await shift(w, w.north, starts_at=T0 + timedelta(days=61))
++
++
++async def test_capacity_bounded_by_site_maximum() -> None:
++    w = await staff_world()
++    shift_id = await shift(w, w.south)
++    shifts = await read(staff.site_shifts, w.south, T0, T0 + timedelta(days=7))
++    assert [(s.id, s.capacity) for s in shifts] == [(shift_id, 3)]
++    with pytest.raises(IntegrityError, match="exceeds site maximum 3"):
++        await shift(w, w.south, capacity=4)
++    with pytest.raises(IntegrityError, match="shifts_capacity_check"):
++        await shift(w, w.north, capacity=0, min_staff=0)
++
++
++async def test_site_maximum_cannot_drop_below_planned_shifts() -> None:
++    w = await staff_world()
++    await shift(w, w.north, capacity=5)
++    with pytest.raises(IntegrityError, match="planned shifts above 4"):
++        await act(staff.set_site_max_staff, w.north, w.hr, 4)
++    await act(staff.set_site_max_staff, w.north, w.hr, 5)
++    with pytest.raises(DomainError, match="от 1 до 20"):
++        await act(staff.set_site_max_staff, w.north, w.hr, 21)
++
++
++async def test_full_shift_refuses_more_staff() -> None:
++    w = await staff_world()
++    shift_id = await shift(w, w.north, capacity=2)
++    a, b, c = [await hire(w, w.north) for _ in range(3)]
++    await put_on(w, shift_id, a)
++    await put_on(w, shift_id, b)
++    with pytest.raises(DomainError, match="укомплектована"):
++        await put_on(w, shift_id, c)
++    assert await roster(shift_id) == [a, b]
++
++
++async def test_member_limit_trigger_guards_direct_inserts() -> None:
++    w = await staff_world()
++    shift_id = await shift(w, w.north, capacity=1)
++    a, b = await hire(w, w.north), await hire(w, w.north)
++    await put_on(w, shift_id, a)
++    with pytest.raises(IntegrityError, match=f"shift {shift_id} is full"):
++        async with db.sessionmaker().begin() as s:
++            s.add(ShiftMember(shift_id=shift_id, employee_id=b, assigned_at=T0))
++
++
++async def test_capacity_cannot_shrink_below_roster() -> None:
++    w = await staff_world()
++    shift_id = await shift(w, w.north, capacity=3, min_staff=0)
++    for _ in range(2):
++        await put_on(w, shift_id, await hire(w, w.north))
++    with pytest.raises(IntegrityError, match="already has 2 staff"):
++        async with db.sessionmaker().begin() as s:
++            await s.execute(update(Shift).where(Shift.id == shift_id).values(capacity=1))
++
++
++async def test_shift_admission_needs_full_card_and_own_site() -> None:
++    w = await staff_world()
++    shift_id = await shift(w, w.north)
++    employee_id = await hire(w, w.north, birth_date=None)
++    with pytest.raises(DomainError, match="не заполнено: birth_date"):
++        await put_on(w, shift_id, employee_id)
++    stranger = await hire(w, w.south)
++    with pytest.raises(DomainError, match="не закреплён"):
++        await put_on(w, shift_id, stranger)
++
++
++async def test_rest_between_shifts() -> None:
++    w = await staff_world()
++    day = await shift(w, w.north, starts_at=TOMORROW + timedelta(hours=8), hours=10)
++    night = await shift(w, w.north, starts_at=TOMORROW + timedelta(hours=22), hours=8)
++    next_day = await shift(w, w.north, starts_at=TOMORROW + timedelta(days=1, hours=10), hours=8)
++    employee_id = await hire(w, w.north)
++    await put_on(w, day, employee_id)
++    with pytest.raises(DomainError, match="8 часов отдыха"):
++        await put_on(w, night, employee_id)
++    await put_on(w, next_day, employee_id)
++
++
++async def test_shift_with_clearance_requires_active_one() -> None:
++    w = await staff_world()
++    cash_shift = await shift(w, w.north, clearance=CASH)
++    rare_shift = await shift(w, w.north, clearance=RARE, starts_at=TOMORROW + timedelta(days=2, hours=9))
++    employee_id = await hire(w, w.north, role="cashier")
++    with pytest.raises(DomainError, match="допуска"):
++        await put_on(w, cash_shift, employee_id)
++    await cleared(w, employee_id, CASH)
++    await put_on(w, cash_shift, employee_id)
++    with pytest.raises(DomainError, match="допуска"):
++        await put_on(w, rare_shift, employee_id)
++
++
++async def test_cancel_shift_releases_staff() -> None:
++    w = await staff_world()
++    shift_id = await shift(w, w.north)
++    employee_id = await hire(w, w.north)
++    await put_on(w, shift_id, employee_id)
++    await act(staff.cancel_shift, shift_id, w.boss_north)
++    assert await roster(shift_id) == []
++    assert await read(staff.alerts_for_site, w.north) == []
++    with pytest.raises(DomainError, match="отменена"):
++        await put_on(w, shift_id, employee_id)

@@ -1,0 +1,70 @@
+diff --git a/services/chat/api.py b/services/chat/api.py
+index bba0f26..2f68088 100644
+--- a/services/chat/api.py
++++ b/services/chat/api.py
+@@ -14,20 +14,20 @@ Session = Annotated[AsyncSession, Depends(session)]
+ 
+ class MessageIn(BaseModel):
+     author_id: int
+-    body: str
++    text: str
+ 
+ 
+ class MessageOut(BaseModel):
+     id: int
+     author_id: int | None
+-    body: str
++    text: str
+     is_event: bool
+     created_at: datetime
+ 
+ 
+ def _out(m) -> MessageOut:
+     return MessageOut(
+-        id=m.id, author_id=m.author_id, body=m.body, is_event=m.is_event, created_at=m.created_at
++        id=m.id, author_id=m.author_id, text=m.body, is_event=m.is_event, created_at=m.created_at
+     )
+ 
+ 
+@@ -38,4 +38,4 @@ async def list_(application_id: int, viewer_id: int, role: str, s: Session) -> l
+ 
+ @router.post("", status_code=201)
+ async def post(application_id: int, body: MessageIn, s: Session) -> MessageOut:
+-    return _out(await service.post_message(s, application_id, body.author_id, body.body))
++    return _out(await service.post_message(s, application_id, body.author_id, body.text))
+diff --git a/tests/test_chat_api.py b/tests/test_chat_api.py
+index a74b55e..8882e1d 100644
+--- a/tests/test_chat_api.py
++++ b/tests/test_chat_api.py
+@@ -13,13 +13,13 @@ async def client():
+ 
+ async def test_operator_posts_and_reads(client: httpx.AsyncClient) -> None:
+     app_id = await new_application()
+-    r = await client.post(f"/applications/{app_id}/messages", json={"author_id": OPERATOR, "body": "Привет"})
++    r = await client.post(f"/applications/{app_id}/messages", json={"author_id": OPERATOR, "text": "Привет"})
+     assert r.status_code == 201
+     r = await client.get(
+         f"/applications/{app_id}/messages", params={"viewer_id": OPERATOR, "role": "operator"}
+     )
+     assert r.status_code == 200
+-    assert r.json()[-1]["body"] == "Привет"
++    assert r.json()[-1]["text"] == "Привет"
+     assert r.json()[-1]["is_event"] is False
+ 
+ 
+@@ -29,7 +29,7 @@ async def test_stage_changes_appear_in_chat(client: httpx.AsyncClient) -> None:
+     r = await client.get(
+         f"/applications/{app_id}/messages", params={"viewer_id": REVIEWER, "role": "reviewer"}
+     )
+-    events = [m["body"] for m in r.json() if m["is_event"]]
++    events = [m["text"] for m in r.json() if m["is_event"]]
+     assert "Этап: draft → on_review" in events
+     assert "Этап: on_review → awaiting_invoice" in events
+ 
+@@ -46,5 +46,5 @@ async def test_admin_reads_chief_accountant_does_not(client: httpx.AsyncClient)
+ 
+ async def test_outsider_cannot_post(client: httpx.AsyncClient) -> None:
+     app_id = await new_application()
+-    r = await client.post(f"/applications/{app_id}/messages", json={"author_id": 999, "body": "x"})
++    r = await client.post(f"/applications/{app_id}/messages", json={"author_id": 999, "text": "x"})
+     assert r.status_code == 403

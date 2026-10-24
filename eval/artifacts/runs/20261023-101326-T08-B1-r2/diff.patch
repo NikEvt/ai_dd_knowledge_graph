@@ -1,0 +1,135 @@
+diff --git a/docs/entities/chat.messages.md b/docs/entities/chat.messages.md
+index 504f5e3..0c93418 100644
+--- a/docs/entities/chat.messages.md
++++ b/docs/entities/chat.messages.md
+@@ -7,7 +7,7 @@
+ - id: integer NOT NULL PK
+ - application_id: integer NOT NULL
+ - author_id: integer
+-- body: text NOT NULL
++- body: text NOT NULL (в API чата — поле `text`, см. services/chat/api.py::MessageIn, MessageOut)
+ - is_event: boolean NOT NULL
+ - created_at: timestamp with time zone NOT NULL
+ 
+diff --git a/docs/rules/chat.md b/docs/rules/chat.md
+index 87b77ab..ee960c0 100644
+--- a/docs/rules/chat.md
++++ b/docs/rules/chat.md
+@@ -50,14 +50,14 @@ post_message пропускает сообщение, только если auth
+ 
+ `draft` · effect · §15 Чат заявки
+ 
+-Сообщение сотрудника сохраняется в chat.messages с is_event=false, указанным author_id и created_at=clock.now(). API возвращает 201 и созданное сообщение.
++Сообщение сотрудника сохраняется в chat.messages с is_event=false, указанным author_id и created_at=clock.now(). API принимает текст в поле `text` тела запроса (хранится в колонке body) и возвращает 201 и созданное сообщение. В ответах API (создание и список) текст сообщения тоже отдаётся в поле `text`; старое имя поля `body` в API не поддерживается (запрос с ним отклоняется с 422).
+ 
+-- Реализация: [`services/chat/service.py::post_message:31-36`](../../services/chat/service.py#L31)
++- Реализация: [`services/chat/service.py::post_message:31-36`](../../services/chat/service.py#L31), [`services/chat/api.py::MessageIn:15-17`](../../services/chat/api.py#L15), [`services/chat/api.py::_out:28-31`](../../services/chat/api.py#L28)
+ - БД: [`messages_check`](../../migrations/versions/0001_initial.py#L334)
+-- Тесты: `tests/test_chat_api.py::test_operator_posts_and_reads`
++- Тесты: `tests/test_chat_api.py::test_operator_posts_and_reads`, `tests/test_chat_api.py::test_old_body_field_is_rejected`
+ - Роли: Оператор, Проверяющий оператор, Проверяющий, Бухгалтер
+ - Связанные: R-CHAT-DB-01
+-- ⚠ Расхождение со схемой: Схема: к сообщениям можно прикреплять файлы. Код: у сообщения есть только текст (body), поддержки вложений нет ни в модели, ни в API.
++- ⚠ Расхождение со схемой: Схема: к сообщениям можно прикреплять файлы. Код: у сообщения есть только текст (колонка body, в API — поле text), поддержки вложений нет ни в модели, ни в API.
+ 
+ ## R-CHAT-READ-01 — Главный бухгалтер и руководитель проверяющих не видят чат
+ 
+@@ -86,7 +86,7 @@ list_messages сразу отклоняет роли из NO_CHAT_ROLES (chief_a
+ 
+ `draft` · invariant · §15 Чат заявки
+ 
+-Сообщения привязаны только к application_id, отдельной сущности «чат» и привязки к попытке нет. list_messages возвращает все сообщения заявки, и сотрудников, и событий, в порядке id. История сохраняется при уходе в архив и возврате из него.
++Сообщения привязаны только к application_id, отдельной сущности «чат» и привязки к попытке нет. list_messages возвращает все сообщения заявки, и сотрудников, и событий, в порядке id; в ответе API у каждого сообщения поля id, author_id, text, is_event, created_at. История сохраняется при уходе в архив и возврате из него.
+ 
+ - Реализация: [`services/chat/service.py::list_messages:55-58`](../../services/chat/service.py#L55)
+ - Тесты: `tests/test_chat_api.py::test_operator_posts_and_reads`
+@@ -107,7 +107,7 @@ list_messages сразу отклоняет роли из NO_CHAT_ROLES (chief_a
+ 
+ `draft` · permission
+ 
+-GET принимает viewer_id и role как query-параметры, POST принимает author_id в теле. Сервис чата не сверяет их с аутентифицированным пользователем и с реальной ролью сотрудника: проверки прав в list_messages и post_message доверяют переданным значениям.
++GET принимает viewer_id и role как query-параметры, POST принимает author_id (и text) в теле. Сервис чата не сверяет их с аутентифицированным пользователем и с реальной ролью сотрудника: проверки прав в list_messages и post_message доверяют переданным значениям.
+ 
+ - Реализация: [`services/chat/api.py::list_:35-36`](../../services/chat/api.py#L35), [`services/chat/api.py::post:40-41`](../../services/chat/api.py#L40)
+ - Связанные: R-CHAT-READ-01, R-CHAT-READ-02, R-CHAT-POST-02
+diff --git a/services/chat/api.py b/services/chat/api.py
+index bba0f26..2f68088 100644
+--- a/services/chat/api.py
++++ b/services/chat/api.py
+@@ -14,20 +14,20 @@ Session = Annotated[AsyncSession, Depends(session)]
+ 
+ class MessageIn(BaseModel):
+     author_id: int
+-    body: str
++    text: str
+ 
+ 
+ class MessageOut(BaseModel):
+     id: int
+     author_id: int | None
+-    body: str
++    text: str
+     is_event: bool
+     created_at: datetime
+ 
+ 
+ def _out(m) -> MessageOut:
+     return MessageOut(
+-        id=m.id, author_id=m.author_id, body=m.body, is_event=m.is_event, created_at=m.created_at
++        id=m.id, author_id=m.author_id, text=m.body, is_event=m.is_event, created_at=m.created_at
+     )
+ 
+ 
+@@ -38,4 +38,4 @@ async def list_(application_id: int, viewer_id: int, role: str, s: Session) -> l
+ 
+ @router.post("", status_code=201)
+ async def post(application_id: int, body: MessageIn, s: Session) -> MessageOut:
+-    return _out(await service.post_message(s, application_id, body.author_id, body.body))
++    return _out(await service.post_message(s, application_id, body.author_id, body.text))
+diff --git a/tests/test_chat_api.py b/tests/test_chat_api.py
+index a74b55e..eee3135 100644
+--- a/tests/test_chat_api.py
++++ b/tests/test_chat_api.py
+@@ -13,23 +13,32 @@ async def client():
+ 
+ async def test_operator_posts_and_reads(client: httpx.AsyncClient) -> None:
+     app_id = await new_application()
+-    r = await client.post(f"/applications/{app_id}/messages", json={"author_id": OPERATOR, "body": "Привет"})
++    r = await client.post(f"/applications/{app_id}/messages", json={"author_id": OPERATOR, "text": "Привет"})
+     assert r.status_code == 201
++    assert r.json()["text"] == "Привет"
++    assert "body" not in r.json()
+     r = await client.get(
+         f"/applications/{app_id}/messages", params={"viewer_id": OPERATOR, "role": "operator"}
+     )
+     assert r.status_code == 200
+-    assert r.json()[-1]["body"] == "Привет"
++    assert r.json()[-1]["text"] == "Привет"
++    assert "body" not in r.json()[-1]
+     assert r.json()[-1]["is_event"] is False
+ 
+ 
++async def test_old_body_field_is_rejected(client: httpx.AsyncClient) -> None:
++    app_id = await new_application()
++    r = await client.post(f"/applications/{app_id}/messages", json={"author_id": OPERATOR, "body": "Привет"})
++    assert r.status_code == 422
++
++
+ async def test_stage_changes_appear_in_chat(client: httpx.AsyncClient) -> None:
+     app_id = await new_application()
+     await pass_review(app_id)
+     r = await client.get(
+         f"/applications/{app_id}/messages", params={"viewer_id": REVIEWER, "role": "reviewer"}
+     )
+-    events = [m["body"] for m in r.json() if m["is_event"]]
++    events = [m["text"] for m in r.json() if m["is_event"]]
+     assert "Этап: draft → on_review" in events
+     assert "Этап: on_review → awaiting_invoice" in events
+ 
+@@ -46,5 +55,5 @@ async def test_admin_reads_chief_accountant_does_not(client: httpx.AsyncClient)
+ 
+ async def test_outsider_cannot_post(client: httpx.AsyncClient) -> None:
+     app_id = await new_application()
+-    r = await client.post(f"/applications/{app_id}/messages", json={"author_id": 999, "body": "x"})
++    r = await client.post(f"/applications/{app_id}/messages", json={"author_id": 999, "text": "x"})
+     assert r.status_code == 403

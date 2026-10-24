@@ -1,0 +1,58 @@
+id: T02
+prompt_file: T02.prompt.md
+summary: срок пользования 21 день
+expected_nodes:
+- ref: GT-LOAN-01
+  kind: rule
+  role: change
+  hidden: H4
+- ref: libs/settings.py::LOAN_PERIOD_DAYS
+  kind: config
+  role: change
+  hidden: H4
+- ref: services/scheduling/service.py::issue_books
+  kind: code
+  role: affected
+- ref: GT-LOAN-02
+  kind: rule
+  role: change
+  hidden: H5
+- ref: services/scheduling/jobs.py::flag_overdue
+  kind: code
+  role: change
+  hidden: H5
+- ref: loan.overdue
+  kind: event
+  role: affected
+  hidden: H2
+- ref: GT-FIN-01
+  kind: rule
+  role: affected
+- ref: services/billing/consumers.py::on_loan_overdue
+  kind: code
+  role: affected
+  source: blind_audit
+  hidden: H2
+- ref: services/chat/consumers.py::EVENT_TEXT
+  kind: code
+  role: affected
+  source: blind_audit
+  hidden: H2
+- ref: libs/settings.py::REVIEW_ARCHIVE_DAYS
+  kind: config
+  role: keep
+  source: blind_audit
+- ref: libs/settings.py::PAYMENT_ARCHIVE_DAYS
+  kind: config
+  role: keep
+  source: blind_audit
+- ref: services/applications/guards.py::settled
+  kind: code
+  role: affected
+  source: blind_audit
+hidden_tests:
+- hidden_tests/tasks/test_t02.py
+supersedes:
+- test_gt_billing.py::test_gt_loan_due_30_days
+- test_gt_billing.py::test_gt_overdue_after_30_days
+reference: reference/T02.patch

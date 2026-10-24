@@ -1,0 +1,7 @@
+ .claude-flow/harness-active-policy.json | 14 +++++++++++
+ .claude-flow/policy/state.json          | 11 +++++++++
+ .claude/.proven-config-version          |  1 +
+ .claude/helpers/.helpers-version        |  2 +-
+ .claude/helpers/statusline.cjs          |  4 ++--
+ .claude/proven-config.json              | 42 +++++++++++++++++++++++++++++++++
+ 6 files changed, 71 insertions(+), 3 deletions(-)

@@ -1,0 +1,12 @@
+id: T08
+prompt_file: T08.prompt.md
+summary: контрольная локальная задача — переименование поля API чата
+control: true
+expected_nodes:
+  - {ref: services/chat/api.py::MessageIn, kind: code, role: change}
+  - {ref: services/chat/api.py::MessageOut, kind: code, role: change}
+  - {ref: services/chat/api.py::_out, kind: code, role: change}
+  - {ref: tests/test_chat_api.py, kind: code, role: change}
+hidden_tests: [hidden_tests/tasks/test_t08.py]
+supersedes: []
+reference: reference/T08.patch

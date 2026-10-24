@@ -1,0 +1,33 @@
+{
+  "task": "T06",
+  "recall": 1.0,
+  "hidden_recall": 1.0,
+  "hit": [
+    "notifications.templates",
+    "services/notifications/config.py::TEMPLATE_GROUP",
+    "services/notifications/consumers.py::on_booking_cancelled",
+    "services/notifications/consumers.py::on_booking_created",
+    "services/notifications/service.py::find_template",
+    "services/notifications/service.py::send",
+    "services/notifications/service.py::set_template",
+    "templates_kind_group_check"
+  ],
+  "missed": [],
+  "extra": [
+    "applications.applications",
+    "booking.cancelled",
+    "booking.created",
+    "migrations/versions/0001_initial.py::UPGRADE",
+    "notifications.emails",
+    "services/applications/admin.py::set_representative_terms",
+    "services/applications/public.py::get_brief",
+    "services/applications/service.py::create_application",
+    "services/scheduling/service.py::_cancel",
+    "tests/conftest.py::migrated_db",
+    "tests/factories.py::seed",
+    "tests/test_notifications.py::test_social_uses_social_templates",
+    "tests/test_scheduling.py::test_booking_only_on_own_venue_and_sphere"
+  ],
+  "cost_usd": 0.8633506999999999,
+  "input_tokens": 542255
+}

@@ -1,0 +1,136 @@
+{
+  "drift_recall": 1.0,
+  "drift_fp_rate": 0.33,
+  "rows": [
+    {
+      "mutation": "M1",
+      "significant": true,
+      "expect": "suspect для правил с link_payment (переплата)",
+      "ci_signal": true,
+      "correct": true,
+      "regen_required": true,
+      "exit_codes": {
+        "build_index": 0,
+        "model_fresh": 1,
+        "drift": 0,
+        "check_rules": 0,
+        "docs_fresh": 0
+      },
+      "suspect_rules": [
+        "R-BILL-FINE-PAY-01",
+        "R-BILL-PAYMENT-01",
+        "R-BILL-PAYMENT-03",
+        "R-BILL-PAYMENT-04"
+      ]
+    },
+    {
+      "mutation": "M2",
+      "significant": true,
+      "expect": "suspect для правил с approve / missing_client_fields — транзитивно через вспомогательную функцию",
+      "ci_signal": true,
+      "correct": true,
+      "regen_required": true,
+      "exit_codes": {
+        "build_index": 0,
+        "model_fresh": 1,
+        "drift": 0,
+        "check_rules": 0,
+        "docs_fresh": 1
+      },
+      "suspect_rules": [
+        "R-APP-REVIEW-03",
+        "R-APP-REVIEW-04",
+        "R-APP-REVIEW-05"
+      ]
+    },
+    {
+      "mutation": "M3",
+      "significant": true,
+      "expect": "ошибка: новое ограничение БД без правила",
+      "ci_signal": true,
+      "correct": true,
+      "regen_required": true,
+      "exit_codes": {
+        "build_index": 0,
+        "model_fresh": 1,
+        "drift": 1,
+        "check_rules": 0,
+        "docs_fresh": 1
+      },
+      "suspect_rules": []
+    },
+    {
+      "mutation": "M4",
+      "significant": true,
+      "expect": "сигнал: у события нет подписчиков / модель событий устарела",
+      "ci_signal": true,
+      "correct": true,
+      "regen_required": true,
+      "exit_codes": {
+        "build_index": 0,
+        "model_fresh": 1,
+        "drift": 0,
+        "check_rules": 0,
+        "docs_fresh": 1
+      },
+      "suspect_rules": [
+        "R-APP-DEDUP-01",
+        "R-APP-PAY-03",
+        "R-BILL-PROCESS-01"
+      ]
+    },
+    {
+      "mutation": "M5",
+      "significant": false,
+      "expect": "без suspect: только переименование локальной переменной",
+      "ci_signal": true,
+      "correct": false,
+      "regen_required": true,
+      "exit_codes": {
+        "build_index": 0,
+        "model_fresh": 1,
+        "drift": 0,
+        "check_rules": 0,
+        "docs_fresh": 0
+      },
+      "suspect_rules": [
+        "R-BILL-FINE-PAY-01",
+        "R-BILL-PAYMENT-01",
+        "R-BILL-PAYMENT-03",
+        "R-BILL-PAYMENT-04"
+      ]
+    },
+    {
+      "mutation": "M6",
+      "significant": false,
+      "expect": "без suspect: только комментарии",
+      "ci_signal": false,
+      "correct": true,
+      "regen_required": true,
+      "exit_codes": {
+        "build_index": 0,
+        "model_fresh": 1,
+        "drift": 0,
+        "check_rules": 0,
+        "docs_fresh": 1
+      },
+      "suspect_rules": []
+    },
+    {
+      "mutation": "M0",
+      "significant": false,
+      "expect": "контроль: CI полностью зелёный",
+      "ci_signal": false,
+      "correct": true,
+      "regen_required": false,
+      "exit_codes": {
+        "build_index": 0,
+        "model_fresh": 0,
+        "drift": 0,
+        "check_rules": 0,
+        "docs_fresh": 0
+      },
+      "suspect_rules": []
+    }
+  ]
+}

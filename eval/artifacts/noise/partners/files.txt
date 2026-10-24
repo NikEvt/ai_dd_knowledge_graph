@@ -1,0 +1,15 @@
+migrations/noise/partners.sql
+services/partners/__init__.py
+services/partners/api.py
+services/partners/app.py
+services/partners/consumers.py
+services/partners/jobs.py
+services/partners/models.py
+services/partners/service.py
+services/partners/settings.py
+tests/partners_factories.py
+tests/test_partners_api.py
+tests/test_partners_commissions.py
+tests/test_partners_contracts.py
+tests/test_partners_jobs.py
+tests/test_partners_onboarding.py

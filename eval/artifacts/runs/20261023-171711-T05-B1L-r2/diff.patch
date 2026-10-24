@@ -1,0 +1,312 @@
+diff --git a/docs/config.md b/docs/config.md
+index a583dd7..aadf3ad 100644
+--- a/docs/config.md
++++ b/docs/config.md
+@@ -16,9 +16,9 @@
+ | [`settings.py::REDIS_URL`](../libs/settings.py#L5) | `os.environ.get('REDIS_URL', f"redis://localhost:{os.environ.get('REDIS_PORT', '…` |  | [`relay.py::consume_forever`](../libs/events/relay.py#L39)<br>[`relay.py::relay_forever`](../libs/events/relay.py#L16) |
+ | [`settings.py::REVIEW_ARCHIVE_DAYS`](../libs/settings.py#L10) | `30` | Заявка уходит в архив, если с начала проверки прошло столько дней, а данные не получены. | [`jobs.py::archive_stale`](../services/applications/jobs.py#L14) |
+ | [`dedup.py::OPEN_STAGES`](../services/applications/dedup.py#L10) | `['draft', 'on_review', 'needs_rework', 'awaiting_invoice', 'awaiting_payment', …` |  | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+-| [`listeners.py::TRACKED_FIELDS`](../services/applications/listeners.py#L9) | `['full_name', 'passport', 'birth_date']` |  | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) |
+-| [`review.py::REQUIRED_CLIENT_FIELDS`](../services/applications/review.py#L3) | `['full_name', 'passport', 'birth_date']` |  | [`review.py::missing_client_fields`](../services/applications/review.py#L6) |
+-| [`service.py::CLIENT_EDITABLE_FIELDS`](../services/applications/service.py#L28) | `['full_name', 'passport', 'birth_date', 'email']` |  | [`service.py::update_client`](../services/applications/service.py#L131) |
++| [`listeners.py::TRACKED_FIELDS`](../services/applications/listeners.py#L9) | `['full_name', 'passport', 'snils', 'birth_date']` |  | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) |
++| [`review.py::REQUIRED_CLIENT_FIELDS`](../services/applications/review.py#L3) | `['full_name', 'passport', 'snils', 'birth_date']` |  | [`review.py::missing_client_fields`](../services/applications/review.py#L6) |
++| [`service.py::CLIENT_EDITABLE_FIELDS`](../services/applications/service.py#L28) | `['full_name', 'passport', 'snils', 'birth_date', 'email']` |  | [`service.py::update_client`](../services/applications/service.py#L131) |
+ | [`service.py::PAID_VENUE_LOCKED_STAGES`](../services/applications/service.py#L26) | `['awaiting_issue', 'books_out']` |  | [`service.py::change_venue`](../services/applications/service.py#L199) |
+ | [`service.py::TERMINAL_STAGES`](../services/applications/service.py#L27) | `['closed', 'closed_duplicate']` |  | [`service.py::change_venue`](../services/applications/service.py#L199) |
+ | [`service.py::CENT`](../services/billing/service.py#L14) | `Decimal('0.01')` |  | [`service.py::issue_books_invoice`](../services/billing/service.py#L35) |
+diff --git a/docs/coverage.md b/docs/coverage.md
+index 3732683..356492f 100644
+--- a/docs/coverage.md
++++ b/docs/coverage.md
+@@ -29,7 +29,7 @@
+ - R-APP-CREATE-03 В заявке есть книги, и все они из сферы заявки и прайса площадки
+ - R-APP-CORE-01 Сферу и представителя заявки сменить нельзя
+ - R-APP-BOOKS-01 Книги меняют только в черновике или на доработке
+-- R-APP-CLIENT-02 Изменение ФИО, паспорта или даты рождения клиента публикует client.updated (слушатель ORM)
++- R-APP-CLIENT-02 Изменение ФИО, паспорта, СНИЛС или даты рождения клиента публикует client.updated (слушатель ORM)
+ - R-APP-CLIENT-03 Обновление клиента возвращает его заявки из ожидания счёта или оплаты на проверку
+ - R-APP-PAY-04 Возврат платежа по оплаченной заявке отправляет её в архив с отметкой «возврат»
+ - R-APP-UNARCHIVE-02 При возврате из архива площадку и книги меняют, только если заявка не доходила до записи
+diff --git a/docs/entities/applications.applications.md b/docs/entities/applications.applications.md
+index 72629cd..437da56 100644
+--- a/docs/entities/applications.applications.md
++++ b/docs/entities/applications.applications.md
+@@ -82,7 +82,7 @@
+ - R-APP-REVIEW-01 [draft] Отправка на проверку фиксирует начало проверки один раз
+ - R-APP-REVIEW-02 [draft] Проверяющего назначают только до прохождения проверки
+ - R-APP-REVIEW-03 [draft] Подтверждает или возвращает заявку только назначенный проверяющий
+-- R-APP-REVIEW-04 [draft] Заявку нельзя подтвердить без ФИО, паспорта и даты рождения клиента
++- R-APP-REVIEW-04 [draft] Заявку нельзя подтвердить без ФИО, паспорта, СНИЛС и даты рождения клиента
+ - R-APP-REVIEW-05 [verified] Этап после проверки зависит от вида заявки и наличия действующего счёта
+ - R-APP-UNARCHIVE-01 [draft] Возврат из архива начинает новую попытку и новую проверку
+ - R-APP-UNARCHIVE-02 [draft] При возврате из архива площадку и книги меняют, только если заявка не доходила до записи
+diff --git a/docs/entities/applications.clients.md b/docs/entities/applications.clients.md
+index 096929a..1454bc7 100644
+--- a/docs/entities/applications.clients.md
++++ b/docs/entities/applications.clients.md
+@@ -7,6 +7,7 @@
+ - id: integer NOT NULL PK
+ - full_name: text
+ - passport: text
++- snils: text (миграция [`0002_client_snils.py`](../../migrations/versions/0002_client_snils.py))
+ - birth_date: date
+ - email: text NOT NULL
+ - updated_at: timestamp with time zone
+@@ -23,6 +24,6 @@
+ 
+ ## Правила
+ - R-APP-CHAT-01 [draft] Каждая смена этапа заявки пишется в чат (слушатель ORM)
+-- R-APP-CLIENT-02 [draft] Изменение ФИО, паспорта или даты рождения клиента публикует client.updated (слушатель ORM)
++- R-APP-CLIENT-02 [draft] Изменение ФИО, паспорта, СНИЛС или даты рождения клиента публикует client.updated (слушатель ORM)
+ - R-CHAT-EVENTS-02 [draft] Каждая смена этапа заявки появляется в чате
+ - R-SCHEMA-CLIENT-01 [draft] Клиент заводится один раз оператором, данные общие для всех заявок
+diff --git a/docs/roles.md b/docs/roles.md
+index 0f69d8d..1d892f3 100644
+--- a/docs/roles.md
++++ b/docs/roles.md
+@@ -57,7 +57,7 @@
+ ### Проверяющий (`reviewer`)
+ 
+ - R-APP-REVIEW-03 [draft] Подтверждает или возвращает заявку только назначенный проверяющий
+-- R-APP-REVIEW-04 [draft] Заявку нельзя подтвердить без ФИО, паспорта и даты рождения клиента
++- R-APP-REVIEW-04 [draft] Заявку нельзя подтвердить без ФИО, паспорта, СНИЛС и даты рождения клиента
+ - R-APP-REVIEW-05 [verified] Этап после проверки зависит от вида заявки и наличия действующего счёта
+ - R-APP-CLIENT-01 [draft] Данные клиента обновляет проверяющий заявки-источника
+ - R-BILL-PROCESS-03 [draft] После повторной проверки заявка с действующим счётом идёт сразу в «Ожидает оплаты»
+@@ -215,7 +215,7 @@
+ ### Система (события и фоновые задачи) (`system`)
+ 
+ - R-APP-BOOKING-01 [draft] Готовность к записи фиксируется и запускает выдачу ссылки на запись
+-- R-APP-CLIENT-02 [draft] Изменение ФИО, паспорта или даты рождения клиента публикует client.updated (слушатель ORM)
++- R-APP-CLIENT-02 [draft] Изменение ФИО, паспорта, СНИЛС или даты рождения клиента публикует client.updated (слушатель ORM)
+ - R-APP-CLIENT-03 [draft] Обновление клиента возвращает его заявки из ожидания счёта или оплаты на проверку
+ - R-APP-PAY-02 [draft] Аннулирование счёта за книги возвращает заявку в ожидание счёта
+ - R-APP-PAY-03 [draft] Только полная оплата счёта за книги открывает выдачу
+diff --git a/docs/rules/applications.md b/docs/rules/applications.md
+index 50fc264..f88df3a 100644
+--- a/docs/rules/applications.md
++++ b/docs/rules/applications.md
+@@ -114,15 +114,15 @@
+ - Роли: Проверяющий
+ - Связанные: R-APP-REVIEW-02, R-APP-REVIEW-04
+ 
+-## R-APP-REVIEW-04 — Заявку нельзя подтвердить без ФИО, паспорта и даты рождения клиента
++## R-APP-REVIEW-04 — Заявку нельзя подтвердить без ФИО, паспорта, СНИЛС и даты рождения клиента
+ 
+ `draft` · guard · §6 Клиент и проверка данных
+ 
+-При подтверждении проверяются обязательные поля клиента из REQUIRED_CLIENT_FIELDS (full_name, passport, birth_date); если чего-то нет — DomainError «не хватает данных клиента: …».
++При подтверждении проверяются обязательные поля клиента из REQUIRED_CLIENT_FIELDS (full_name, passport, snils, birth_date); если чего-то нет — DomainError «не хватает данных клиента: …». Формат СНИЛС (applications.clients.snils) не проверяется ни в коде, ни в БД.
+ 
+ - Реализация: [`services/applications/service.py::approve:173-175`](../../services/applications/service.py#L173), [`services/applications/review.py::missing_client_fields:6-7`](../../services/applications/review.py#L6)
+ - Настройки: `services/applications/review.py::REQUIRED_CLIENT_FIELDS`
+-- Тесты: `tests/test_review.py::test_incomplete_client_goes_to_rework`
++- Тесты: `tests/test_review.py::test_incomplete_client_goes_to_rework`, `tests/test_review.py::test_client_without_snils_does_not_pass_review`
+ - Роли: Проверяющий
+ - Связанные: R-APP-REVIEW-03, R-APP-CLIENT-02
+ 
+@@ -152,7 +152,7 @@
+ 
+ `draft` · permission · §6 Клиент и проверка данных
+ 
+-Если указана заявка-источник, обновить клиента может только её проверяющий (AccessDenied иначе). Разрешены только поля CLIENT_EDITABLE_FIELDS (full_name, passport, birth_date, email), прочие — DomainError «неизвестные поля клиента». Без source_application_id проверка прав не выполняется.
++Если указана заявка-источник, обновить клиента может только её проверяющий (AccessDenied иначе). Разрешены только поля CLIENT_EDITABLE_FIELDS (full_name, passport, snils, birth_date, email), прочие — DomainError «неизвестные поля клиента». Без source_application_id проверка прав не выполняется.
+ 
+ - Реализация: [`services/applications/service.py::update_client:140-153`](../../services/applications/service.py#L140)
+ - Настройки: `services/applications/service.py::CLIENT_EDITABLE_FIELDS`
+@@ -161,14 +161,15 @@
+ - Связанные: R-APP-CLIENT-02
+ - ⚠ Расхождение со схемой: Схема: данные клиента обновляет только проверяющий. Код: при вызове без source_application_id роль и закрепление не проверяются — обновить данные может кто угодно.
+ 
+-## R-APP-CLIENT-02 — Изменение ФИО, паспорта или даты рождения клиента публикует client.updated (слушатель ORM)
++## R-APP-CLIENT-02 — Изменение ФИО, паспорта, СНИЛС или даты рождения клиента публикует client.updated (слушатель ORM)
+ 
+ `draft` · effect · §6 Клиент и проверка данных
+ 
+-Слушатель before_flush при изменении полей TRACKED_FIELDS (full_name, passport, birth_date) неявно ставит clients.updated_at и публикует client.updated с полями и source_application_id (из session.info). Изменение email событие не порождает.
++Слушатель before_flush при изменении полей TRACKED_FIELDS (full_name, passport, snils, birth_date) неявно ставит clients.updated_at и публикует client.updated с полями и source_application_id (из session.info). Изменение email событие не порождает; запись того же значения изменением не считается.
+ 
+ - Реализация: [`services/applications/listeners.py::_domain_events:23-36`](../../services/applications/listeners.py#L23)
+ - Настройки: `services/applications/listeners.py::TRACKED_FIELDS`
++- Тесты: `tests/test_review.py::test_snils_change_sends_other_applications_back_to_review`, `tests/test_review.py::test_same_snils_is_not_a_change`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-APP-CLIENT-01, R-APP-CLIENT-03
+ 
+diff --git a/migrations/versions/0002_client_snils.py b/migrations/versions/0002_client_snils.py
+new file mode 100644
+index 0000000..5d3f11c
+--- /dev/null
++++ b/migrations/versions/0002_client_snils.py
+@@ -0,0 +1,20 @@
++"""client snils
++
++Revision ID: 0002
++Revises: 0001
++"""
++
++from alembic import op
++
++revision = "0002"
++down_revision = "0001"
++branch_labels = None
++depends_on = None
++
++
++def upgrade() -> None:
++    op.execute("ALTER TABLE applications.clients ADD COLUMN snils text")
++
++
++def downgrade() -> None:
++    op.execute("ALTER TABLE applications.clients DROP COLUMN snils")
+diff --git a/services/applications/listeners.py b/services/applications/listeners.py
+index e5ce2e1..d3f84d4 100644
+--- a/services/applications/listeners.py
++++ b/services/applications/listeners.py
+@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
+ from libs import clock, events
+ from services.applications.models import Application, Client
+ 
+-TRACKED_FIELDS = ("full_name", "passport", "birth_date")
++TRACKED_FIELDS = ("full_name", "passport", "snils", "birth_date")
+ 
+ 
+ @event.listens_for(Session, "before_flush")
+diff --git a/services/applications/models.py b/services/applications/models.py
+index f2adf37..7a12dd3 100644
+--- a/services/applications/models.py
++++ b/services/applications/models.py
+@@ -74,6 +74,7 @@ class Client(Base):
+     id: Mapped[int] = mapped_column(primary_key=True)
+     full_name: Mapped[str | None]
+     passport: Mapped[str | None]
++    snils: Mapped[str | None]
+     birth_date: Mapped[date | None]
+     email: Mapped[str]
+     updated_at: Mapped[datetime | None]
+diff --git a/services/applications/review.py b/services/applications/review.py
+index 7088892..d0c239c 100644
+--- a/services/applications/review.py
++++ b/services/applications/review.py
+@@ -1,6 +1,6 @@
+ from services.applications.models import Client
+ 
+-REQUIRED_CLIENT_FIELDS = ("full_name", "passport", "birth_date")
++REQUIRED_CLIENT_FIELDS = ("full_name", "passport", "snils", "birth_date")
+ 
+ 
+ def missing_client_fields(client: Client) -> list[str]:
+diff --git a/services/applications/service.py b/services/applications/service.py
+index fb24228..00f83bc 100644
+--- a/services/applications/service.py
++++ b/services/applications/service.py
+@@ -25,7 +25,7 @@ from services.billing import public as billing
+ 
+ PAID_VENUE_LOCKED_STAGES = ("awaiting_issue", "books_out")
+ TERMINAL_STAGES = ("closed", "closed_duplicate")
+-CLIENT_EDITABLE_FIELDS = ("full_name", "passport", "birth_date", "email")
++CLIENT_EDITABLE_FIELDS = ("full_name", "passport", "snils", "birth_date", "email")
+ 
+ 
+ async def load(session: AsyncSession, application_id: int) -> Application:
+diff --git a/tests/factories.py b/tests/factories.py
+index e30f1f1..e16c841 100644
+--- a/tests/factories.py
++++ b/tests/factories.py
+@@ -83,6 +83,7 @@ async def seed() -> None:
+                     id=CLIENT_A,
+                     full_name="Анна Петрова",
+                     passport="4510 000001",
++                    snils="112-233-445 95",
+                     birth_date=date(1990, 5, 1),
+                     email="anna@example.org",
+                 ),
+@@ -90,6 +91,7 @@ async def seed() -> None:
+                     id=CLIENT_B,
+                     full_name="Борис Сидоров",
+                     passport="4510 000002",
++                    snils="112-233-446 96",
+                     birth_date=date(1985, 2, 3),
+                     email="boris@example.org",
+                 ),
+@@ -97,6 +99,7 @@ async def seed() -> None:
+                     id=CLIENT_INCOMPLETE,
+                     full_name="Вера Ким",
+                     passport=None,
++                    snils=None,
+                     birth_date=None,
+                     email="vera@example.org",
+                 ),
+diff --git a/tests/test_review.py b/tests/test_review.py
+index 0eae4a7..8b6bea4 100644
+--- a/tests/test_review.py
++++ b/tests/test_review.py
+@@ -5,13 +5,17 @@ import pytest
+ from libs.errors import AccessDenied, DomainError
+ from services.applications import service as apps
+ from tests.factories import (
++    BOOK_L1,
++    CLIENT_A,
+     CLIENT_INCOMPLETE,
++    LAW,
+     OPERATOR,
+     OPERATOR_2,
+     REVIEWER,
+     REVIEWER_2,
+     act,
+     new_application,
++    pass_review,
+     stage,
+     submit,
+ )
+@@ -46,12 +50,50 @@ async def test_incomplete_client_goes_to_rework() -> None:
+         REVIEWER,
+         source_application_id=app_id,
+         passport="4510 000003",
++        snils="112-233-447 97",
+         birth_date=date(2000, 1, 1),
+     )
+     await act(apps.approve, app_id, REVIEWER)
+     assert await stage(app_id) == "awaiting_invoice"
+ 
+ 
++async def test_client_without_snils_does_not_pass_review() -> None:
++    client = await act(
++        apps.create_client,
++        email="gleb@example.org",
++        full_name="Глеб Орлов",
++        passport="4510 000004",
++        birth_date=date(1995, 7, 7),
++    )
++    app_id = await new_application(client=client.id)
++    await submit(app_id)
++    with pytest.raises(DomainError, match="не хватает данных клиента: snils"):
++        await act(apps.approve, app_id, REVIEWER)
++
++    await act(apps.update_client, client.id, REVIEWER, source_application_id=app_id, snils="112-233-448 98")
++    await act(apps.approve, app_id, REVIEWER)
++    assert await stage(app_id) == "awaiting_invoice"
++
++
++async def test_snils_change_sends_other_applications_back_to_review() -> None:
++    first = await new_application()
++    await pass_review(first)
++    second = await new_application(sphere=LAW, books=(BOOK_L1,))
++    await submit(second)
++
++    await act(apps.update_client, CLIENT_A, REVIEWER, source_application_id=second, snils="112-233-449 99")
++    assert await stage(first) == "on_review"
++    assert await stage(second) == "on_review"
++
++
++async def test_same_snils_is_not_a_change() -> None:
++    app_id = await new_application()
++    await pass_review(app_id)
++
++    await act(apps.update_client, CLIENT_A, REVIEWER, snils="112-233-445 95")
++    assert await stage(app_id) == "awaiting_invoice"
++
++
+ async def test_operator_works_only_with_own_applications() -> None:
+     app_id = await new_application(operator=OPERATOR)
+     with pytest.raises(AccessDenied):

@@ -1,0 +1,108 @@
+diff --git a/migrations/versions/0002_client_snils.py b/migrations/versions/0002_client_snils.py
+new file mode 100644
+index 0000000..5d3f11c
+--- /dev/null
++++ b/migrations/versions/0002_client_snils.py
+@@ -0,0 +1,20 @@
++"""client snils
++
++Revision ID: 0002
++Revises: 0001
++"""
++
++from alembic import op
++
++revision = "0002"
++down_revision = "0001"
++branch_labels = None
++depends_on = None
++
++
++def upgrade() -> None:
++    op.execute("ALTER TABLE applications.clients ADD COLUMN snils text")
++
++
++def downgrade() -> None:
++    op.execute("ALTER TABLE applications.clients DROP COLUMN snils")
+diff --git a/services/applications/listeners.py b/services/applications/listeners.py
+index e5ce2e1..9b0135a 100644
+--- a/services/applications/listeners.py
++++ b/services/applications/listeners.py
+@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
+ from libs import clock, events
+ from services.applications.models import Application, Client
+ 
+-TRACKED_FIELDS = ("full_name", "passport", "birth_date")
++TRACKED_FIELDS = ("full_name", "passport", "birth_date", "snils")
+ 
+ 
+ @event.listens_for(Session, "before_flush")
+diff --git a/services/applications/models.py b/services/applications/models.py
+index f2adf37..a23f3e3 100644
+--- a/services/applications/models.py
++++ b/services/applications/models.py
+@@ -75,6 +75,7 @@ class Client(Base):
+     full_name: Mapped[str | None]
+     passport: Mapped[str | None]
+     birth_date: Mapped[date | None]
++    snils: Mapped[str | None]
+     email: Mapped[str]
+     updated_at: Mapped[datetime | None]
+ 
+diff --git a/services/applications/review.py b/services/applications/review.py
+index 7088892..501ec6f 100644
+--- a/services/applications/review.py
++++ b/services/applications/review.py
+@@ -1,6 +1,6 @@
+ from services.applications.models import Client
+ 
+-REQUIRED_CLIENT_FIELDS = ("full_name", "passport", "birth_date")
++REQUIRED_CLIENT_FIELDS = ("full_name", "passport", "birth_date", "snils")
+ 
+ 
+ def missing_client_fields(client: Client) -> list[str]:
+diff --git a/services/applications/service.py b/services/applications/service.py
+index fb24228..ee77411 100644
+--- a/services/applications/service.py
++++ b/services/applications/service.py
+@@ -25,7 +25,7 @@ from services.billing import public as billing
+ 
+ PAID_VENUE_LOCKED_STAGES = ("awaiting_issue", "books_out")
+ TERMINAL_STAGES = ("closed", "closed_duplicate")
+-CLIENT_EDITABLE_FIELDS = ("full_name", "passport", "birth_date", "email")
++CLIENT_EDITABLE_FIELDS = ("full_name", "passport", "birth_date", "snils", "email")
+ 
+ 
+ async def load(session: AsyncSession, application_id: int) -> Application:
+diff --git a/tests/factories.py b/tests/factories.py
+index e30f1f1..fe61ee0 100644
+--- a/tests/factories.py
++++ b/tests/factories.py
+@@ -84,6 +84,7 @@ async def seed() -> None:
+                     full_name="Анна Петрова",
+                     passport="4510 000001",
+                     birth_date=date(1990, 5, 1),
++                    snils="000-000-000 01",
+                     email="anna@example.org",
+                 ),
+                 Client(
+@@ -91,6 +92,7 @@ async def seed() -> None:
+                     full_name="Борис Сидоров",
+                     passport="4510 000002",
+                     birth_date=date(1985, 2, 3),
++                    snils="000-000-000 02",
+                     email="boris@example.org",
+                 ),
+                 Client(
+diff --git a/tests/test_review.py b/tests/test_review.py
+index 0eae4a7..7730071 100644
+--- a/tests/test_review.py
++++ b/tests/test_review.py
+@@ -47,6 +47,7 @@ async def test_incomplete_client_goes_to_rework() -> None:
+         source_application_id=app_id,
+         passport="4510 000003",
+         birth_date=date(2000, 1, 1),
++        snils="000-000-000 03",
+     )
+     await act(apps.approve, app_id, REVIEWER)
+     assert await stage(app_id) == "awaiting_invoice"

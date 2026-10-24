@@ -1,0 +1,2237 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 8cffa20..eae6da8 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -101,5 +101,5 @@ args = ["run", "--quiet", "python", "mcp/knowledge_server.py"]
+ 
+ События: `application.archived`, `application.closed_duplicate`, `application.ready_for_booking`, `application.review_passed`, `application.stage_changed`, `application.unarchived`, `application.venue_changed`, `booking.cancelled`, `booking.created`, `books.issued`, `client.updated`, `halls.booking_cancelled`, `halls.booking_confirmed`, `halls.booking_created`, `halls.booking_held`, `halls.booking_prepaid`, `halls.invoice_issued`, `halls.payment_received`, `halls.venue_changed`, `inventory.copy_damaged`, `inventory.copy_lost`, `inventory.copy_registered`, `inventory.copy_relocated`, `inventory.copy_written_off`, `inventory.ill_issued`, `inventory.ill_overdue`, `inventory.ill_penalty_accrued`, `inventory.ill_returned`, `inventory.partner_resumed`, `inventory.partner_suspended`, `inventory.transfer_cancelled`, `inventory.transfer_received`, `inventory.transfer_shipped`, `invoice.cancelled`, `invoice.issued`, `lectures.capacity_increased`, `lectures.event_cancelled`, `lectures.event_moved`, `lectures.registration_cancelled`, `lectures.registration_created`, `lectures.seat_released`, `lectures.venue_limit_changed`, `lectures.waitlist_expired`, `lectures.waitlist_promoted`, `loan.damaged`, `loan.lost`, `loan.overdue`, `marketing.campaign_finished`, `marketing.campaign_launched`, `marketing.campaign_prepared`, `marketing.message_bounced`, `marketing.unsubscribed`, `partners.commission_accrued`, `partners.contract_activated`, `partners.contract_expired`, `partners.contract_rate_changed`, `partners.contract_resumed`, `partners.contract_suspended`, `partners.contract_terminated`, `partners.credit_overdue`, `partners.deal_cancelled`, `partners.deal_closed`, `partners.deal_created`, `partners.deal_paid`, `partners.partner_onboarded`, `partners.payout_closed`, `partners.request_approved`, `partners.request_closed_duplicate`, `partners.request_rejected`, `partners.request_submitted`, `payment.fully_paid`, `payment.linked`, `payment.refunded`, `reports.definition_deactivated`, `reports.run_cancelled`, `reports.run_completed`, `reports.run_failed`, `reports.run_requested`, `staff.clearance_expired`, `staff.clearance_granted`, `staff.clearance_revoked`, `staff.employee_dismissed`, `staff.employee_hired`, `staff.employee_transferred`, `staff.employee_updated`, `staff.shift_member_removed`, `staff.shift_understaffed`, `subscriptions.activated`, `subscriptions.closed_duplicate`, `subscriptions.created`, `subscriptions.expired`, `subscriptions.grace_started`, `subscriptions.holder_rejected`, `subscriptions.holder_updated`, `subscriptions.invoice_issued`, `subscriptions.payment_completed`, `subscriptions.refund_required`, `subscriptions.renewed`, `venue.settings_changed`.
+ 
+-Правил в модели: 478 (draft: 456, verified: 22).
++Правил в модели: 478 (draft: 450, suspect: 7, verified: 21).
+ <!-- END L0 -->
+diff --git a/docs/README.md b/docs/README.md
+index dc1a666..cd448f9 100644
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -34,6 +34,6 @@
+ | status | 10 |
+ | symbol | 732 |
+ | table | 81 |
+-| test | 284 |
++| test | 286 |
+ 
+-Правила по статусу: draft — 456, verified — 22
++Правила по статусу: draft — 450, suspect — 7, verified — 21
+diff --git a/docs/config.md b/docs/config.md
+index a583dd7..35926dc 100644
+--- a/docs/config.md
++++ b/docs/config.md
+@@ -16,11 +16,11 @@
+ | [`settings.py::REDIS_URL`](../libs/settings.py#L5) | `os.environ.get('REDIS_URL', f"redis://localhost:{os.environ.get('REDIS_PORT', '…` |  | [`relay.py::consume_forever`](../libs/events/relay.py#L39)<br>[`relay.py::relay_forever`](../libs/events/relay.py#L16) |
+ | [`settings.py::REVIEW_ARCHIVE_DAYS`](../libs/settings.py#L10) | `30` | Заявка уходит в архив, если с начала проверки прошло столько дней, а данные не получены. | [`jobs.py::archive_stale`](../services/applications/jobs.py#L14) |
+ | [`dedup.py::OPEN_STAGES`](../services/applications/dedup.py#L10) | `['draft', 'on_review', 'needs_rework', 'awaiting_invoice', 'awaiting_payment', …` |  | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+-| [`listeners.py::TRACKED_FIELDS`](../services/applications/listeners.py#L9) | `['full_name', 'passport', 'birth_date']` |  | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) |
+-| [`review.py::REQUIRED_CLIENT_FIELDS`](../services/applications/review.py#L3) | `['full_name', 'passport', 'birth_date']` |  | [`review.py::missing_client_fields`](../services/applications/review.py#L6) |
+-| [`service.py::CLIENT_EDITABLE_FIELDS`](../services/applications/service.py#L28) | `['full_name', 'passport', 'birth_date', 'email']` |  | [`service.py::update_client`](../services/applications/service.py#L131) |
+-| [`service.py::PAID_VENUE_LOCKED_STAGES`](../services/applications/service.py#L26) | `['awaiting_issue', 'books_out']` |  | [`service.py::change_venue`](../services/applications/service.py#L199) |
+-| [`service.py::TERMINAL_STAGES`](../services/applications/service.py#L27) | `['closed', 'closed_duplicate']` |  | [`service.py::change_venue`](../services/applications/service.py#L199) |
++| [`listeners.py::TRACKED_FIELDS`](../services/applications/listeners.py#L9) | `['full_name', 'passport', 'snils', 'birth_date']` |  | [`listeners.py::_domain_events`](../services/applications/listeners.py#L14) |
++| [`review.py::REQUIRED_CLIENT_FIELDS`](../services/applications/review.py#L3) | `['full_name', 'passport', 'snils', 'birth_date']` |  | [`review.py::missing_client_fields`](../services/applications/review.py#L7) |
++| [`service.py::CLIENT_EDITABLE_FIELDS`](../services/applications/service.py#L28) | `['full_name', 'passport', 'snils', 'birth_date', 'email']` |  | [`service.py::update_client`](../services/applications/service.py#L132) |
++| [`service.py::PAID_VENUE_LOCKED_STAGES`](../services/applications/service.py#L26) | `['awaiting_issue', 'books_out']` |  | [`service.py::change_venue`](../services/applications/service.py#L200) |
++| [`service.py::TERMINAL_STAGES`](../services/applications/service.py#L27) | `['closed', 'closed_duplicate']` |  | [`service.py::change_venue`](../services/applications/service.py#L200) |
+ | [`service.py::CENT`](../services/billing/service.py#L14) | `Decimal('0.01')` |  | [`service.py::issue_books_invoice`](../services/billing/service.py#L35) |
+ | [`consumers.py::EVENT_TEXT`](../services/chat/consumers.py#L8) | `{'application.archived': 'Заявка ушла в архив ({outcome})', 'application.closed…` |  | [`consumers.py::<module>`](../services/chat/consumers.py#L1) |
+ | [`service.py::NO_CHAT_ROLES`](../services/chat/service.py#L12) | `['chief_accountant', 'reviewer_lead']` |  | [`service.py::list_messages`](../services/chat/service.py#L48) |
+diff --git a/docs/coverage.md b/docs/coverage.md
+index 3732683..7d425ba 100644
+--- a/docs/coverage.md
++++ b/docs/coverage.md
+@@ -2,16 +2,22 @@
+ 
+ # Покрытие модели
+ 
+-- Правил: 478; verified: 22
++- Правил: 478; verified: 21
+ - Без реализации (implemented_by / enforced_by_db): 8
+-- Без тестов (tested_by): 129
+-- suspect: 0
++- Без тестов (tested_by): 127
++- suspect: 7
+ - Ограничения БД без правил: 9
+-- Проверки в коде без правил: 1
++- Проверки в коде без правил: 2
+ 
+-## suspect (0)
++## suspect (7)
+ 
+-- нет
++- R-APP-REVIEW-03 (с 2026-10-23) Подтверждает или возвращает заявку только назначенный проверяющий
++- R-APP-REVIEW-04 (с 2026-10-23) Заявку нельзя подтвердить без ФИО, паспорта, СНИЛС и даты рождения клиента
++- R-APP-REVIEW-05 (с 2026-10-23) Этап после проверки зависит от вида заявки и наличия действующего счёта
++- R-APP-CLIENT-01 (с 2026-10-23) Данные клиента обновляет проверяющий заявки-источника
++- R-APP-CLIENT-02 (с 2026-10-23) Изменение ФИО, паспорта, СНИЛС или даты рождения клиента публикует client.updated (слушатель ORM)
++- R-APP-CHAT-01 (с 2026-10-23) Каждая смена этапа заявки пишется в чат (слушатель ORM)
++- R-CHAT-EVENTS-02 (с 2026-10-23) Каждая смена этапа заявки появляется в чате
+ 
+ ## Правила без реализации (8)
+ 
+@@ -24,13 +30,11 @@
+ - R-SCHEMA-ROLE-01 Один сотрудник — одна роль
+ - R-SUBSCRIPTIONS-REMIND-01 Напоминание перед концом льготного периода не реализовано
+ 
+-## Правила без тестов (129)
++## Правила без тестов (127)
+ 
+ - R-APP-CREATE-03 В заявке есть книги, и все они из сферы заявки и прайса площадки
+ - R-APP-CORE-01 Сферу и представителя заявки сменить нельзя
+ - R-APP-BOOKS-01 Книги меняют только в черновике или на доработке
+-- R-APP-CLIENT-02 Изменение ФИО, паспорта или даты рождения клиента публикует client.updated (слушатель ORM)
+-- R-APP-CLIENT-03 Обновление клиента возвращает его заявки из ожидания счёта или оплаты на проверку
+ - R-APP-PAY-04 Возврат платежа по оплаченной заявке отправляет её в архив с отметкой «возврат»
+ - R-APP-UNARCHIVE-02 При возврате из архива площадку и книги меняют, только если заявка не доходила до записи
+ - R-APP-UNARCHIVE-03 После возврата из архива счёт аннулируется при изменении суммы, иначе срок оплаты отсчитывается заново
+@@ -168,6 +172,7 @@
+ - sites_name_key
+ - uq_refunds_invoice
+ 
+-## Проверки в коде без правил (1)
++## Проверки в коде без правил (2)
+ 
++- services/applications/service.py::approve:176 DomainError: f"не хватает данных клиента: {', '.join(missing)}"
+ - services/reports/builders.py::build:181 DomainError: f'неизвестный тип отчёта: {other}'
+diff --git a/docs/entities/README.md b/docs/entities/README.md
+index d775404..c501ff3 100644
+--- a/docs/entities/README.md
++++ b/docs/entities/README.md
+@@ -8,7 +8,7 @@
+ | [applications.applications](applications.applications.md) | 13 | 5 | models.py::Application |
+ | [applications.attempts](applications.attempts.md) | 6 | 2 | models.py::Attempt |
+ | [applications.books](applications.books.md) | 3 | 0 | models.py::Book |
+-| [applications.clients](applications.clients.md) | 6 | 0 | models.py::Client |
++| [applications.clients](applications.clients.md) | 7 | 0 | models.py::Client |
+ | [applications.prices](applications.prices.md) | 3 | 1 | models.py::Price |
+ | [applications.representatives](applications.representatives.md) | 5 | 1 | models.py::Representative |
+ | [applications.spheres](applications.spheres.md) | 2 | 1 | models.py::Sphere |
+diff --git a/docs/entities/applications.application_books.md b/docs/entities/applications.application_books.md
+index 0a942e7..e81f7f1 100644
+--- a/docs/entities/applications.application_books.md
++++ b/docs/entities/applications.application_books.md
+@@ -12,7 +12,7 @@
+ - book_id → applications.books
+ 
+ ## ORM
+-- services/applications/models.py::ApplicationBook:110 (orm_model)
++- services/applications/models.py::ApplicationBook:111 (orm_model)
+ 
+ ## Пишут (код)
+ - services/applications/service.py::change_books
+diff --git a/docs/entities/applications.applications.md b/docs/entities/applications.applications.md
+index 72629cd..4b60a66 100644
+--- a/docs/entities/applications.applications.md
++++ b/docs/entities/applications.applications.md
+@@ -36,7 +36,7 @@
+   - applications.forbid_venue_change(): 'venue change forbidden after books were issued'; 'venue change forbidden after booking link for % application'
+ 
+ ## ORM
+-- services/applications/models.py::Application:82 (orm_model)
++- services/applications/models.py::Application:83 (orm_model)
+ 
+ ## Этапы (процесс application, bpm/application_process.yaml)
+ - debt: draft → on_review → awaiting_issue → books_out → closed
+@@ -67,7 +67,7 @@
+ - R-APP-ARCHIVE-03 [draft] Ручной архив и его последствия — закрытие попытки, сброс записей, сообщение в чат
+ - R-APP-BOOKING-01 [draft] Готовность к записи фиксируется и запускает выдачу ссылки на запись
+ - R-APP-BOOKS-01 [draft] Книги меняют только в черновике или на доработке
+-- R-APP-CHAT-01 [draft] Каждая смена этапа заявки пишется в чат (слушатель ORM)
++- R-APP-CHAT-01 [suspect] Каждая смена этапа заявки пишется в чат (слушатель ORM)
+ - R-APP-CLIENT-03 [draft] Обновление клиента возвращает его заявки из ожидания счёта или оплаты на проверку
+ - R-APP-CLOSE-01 [draft] Закрывает заявку проверяющий оператор её площадки после возврата книг и погашения штрафов
+ - R-APP-CORE-01 [verified] Сферу и представителя заявки сменить нельзя
+@@ -81,9 +81,9 @@
+ - R-APP-PAY-03 [draft] Только полная оплата счёта за книги открывает выдачу
+ - R-APP-REVIEW-01 [draft] Отправка на проверку фиксирует начало проверки один раз
+ - R-APP-REVIEW-02 [draft] Проверяющего назначают только до прохождения проверки
+-- R-APP-REVIEW-03 [draft] Подтверждает или возвращает заявку только назначенный проверяющий
+-- R-APP-REVIEW-04 [draft] Заявку нельзя подтвердить без ФИО, паспорта и даты рождения клиента
+-- R-APP-REVIEW-05 [verified] Этап после проверки зависит от вида заявки и наличия действующего счёта
++- R-APP-REVIEW-03 [suspect] Подтверждает или возвращает заявку только назначенный проверяющий
++- R-APP-REVIEW-04 [suspect] Заявку нельзя подтвердить без ФИО, паспорта, СНИЛС и даты рождения клиента
++- R-APP-REVIEW-05 [suspect] Этап после проверки зависит от вида заявки и наличия действующего счёта
+ - R-APP-UNARCHIVE-01 [draft] Возврат из архива начинает новую попытку и новую проверку
+ - R-APP-UNARCHIVE-02 [draft] При возврате из архива площадку и книги меняют, только если заявка не доходила до записи
+ - R-APP-UNARCHIVE-03 [draft] После возврата из архива счёт аннулируется при изменении суммы, иначе срок оплаты отсчитывается заново
+diff --git a/docs/entities/applications.attempts.md b/docs/entities/applications.attempts.md
+index b77801d..b7fbd6d 100644
+--- a/docs/entities/applications.attempts.md
++++ b/docs/entities/applications.attempts.md
+@@ -19,7 +19,7 @@
+ - attempts_application_id_no_key (unique на applications.attempts): UNIQUE (application_id, no) (migrations/versions/0001_initial.py:109)
+ 
+ ## ORM
+-- services/applications/models.py::Attempt:118 (orm_model)
++- services/applications/models.py::Attempt:119 (orm_model)
+ 
+ ## Пишут (код)
+ - services/applications/dedup.py::close_duplicates [ended_at, outcome]
+diff --git a/docs/entities/applications.clients.md b/docs/entities/applications.clients.md
+index 096929a..bd1b4e1 100644
+--- a/docs/entities/applications.clients.md
++++ b/docs/entities/applications.clients.md
+@@ -10,6 +10,7 @@
+ - birth_date: date
+ - email: text NOT NULL
+ - updated_at: timestamp with time zone
++- snils: text
+ 
+ ## Связи (FK)
+ - applications.applications.client_id → сюда
+@@ -22,7 +23,7 @@
+ - services/applications/service.py::create_client
+ 
+ ## Правила
+-- R-APP-CHAT-01 [draft] Каждая смена этапа заявки пишется в чат (слушатель ORM)
+-- R-APP-CLIENT-02 [draft] Изменение ФИО, паспорта или даты рождения клиента публикует client.updated (слушатель ORM)
+-- R-CHAT-EVENTS-02 [draft] Каждая смена этапа заявки появляется в чате
++- R-APP-CHAT-01 [suspect] Каждая смена этапа заявки пишется в чат (слушатель ORM)
++- R-APP-CLIENT-02 [suspect] Изменение ФИО, паспорта, СНИЛС или даты рождения клиента публикует client.updated (слушатель ORM)
++- R-CHAT-EVENTS-02 [suspect] Каждая смена этапа заявки появляется в чате
+ - R-SCHEMA-CLIENT-01 [draft] Клиент заводится один раз оператором, данные общие для всех заявок
+diff --git a/docs/events.md b/docs/events.md
+index c9993e8..37e0696 100644
+--- a/docs/events.md
++++ b/docs/events.md
+@@ -165,17 +165,17 @@ flowchart LR
+ 
+ | Событие | Публикует | Обрабатывает | Данные | Эффекты |
+ |---|---|---|---|---|
+-| `application.archived` | [`service.py::archive`](../services/applications/service.py#L246) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_archived`](../services/scheduling/consumers.py#L25) | application_id, outcome | effect:chat.event_log |
++| `application.archived` | [`service.py::archive`](../services/applications/service.py#L247) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_archived`](../services/scheduling/consumers.py#L25) | application_id, outcome | effect:chat.event_log |
+ | `application.closed_duplicate` | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) | [`consumers.py::on_closed_duplicate`](../services/billing/consumers.py#L20)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_closed_duplicate`](../services/scheduling/consumers.py#L30) | application_id, winner_id | effect:chat.event_log |
+-| `application.ready_for_booking` | [`service.py::mark_ready_for_booking`](../services/applications/service.py#L157) | [`consumers.py::on_ready_for_booking`](../services/scheduling/consumers.py#L12) | application_id, sphere_id, venue_id | — |
+-| `application.review_passed` | [`service.py::approve`](../services/applications/service.py#L167) | [`consumers.py::on_review_passed`](../services/applications/consumers.py#L43) | application_id, kind | — |
+-| `application.stage_changed` | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) | [`consumers.py::_handler`](../services/chat/consumers.py#L23) | application_id, from, to | effect:chat.event_log |
+-| `application.unarchived` | [`service.py::unarchive`](../services/applications/service.py#L265) | [`consumers.py::on_unarchived`](../services/billing/consumers.py#L27)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23) | amount_changed, application_id | effect:chat.event_log |
+-| `application.venue_changed` | [`service.py::change_venue`](../services/applications/service.py#L199) | [`consumers.py::on_venue_changed`](../services/billing/consumers.py#L13)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_venue_changed`](../services/scheduling/consumers.py#L17) | application_id, kind, new_venue_id, old_venue_id, stage | effect:chat.event_log |
++| `application.ready_for_booking` | [`service.py::mark_ready_for_booking`](../services/applications/service.py#L158) | [`consumers.py::on_ready_for_booking`](../services/scheduling/consumers.py#L12) | application_id, sphere_id, venue_id | — |
++| `application.review_passed` | [`service.py::approve`](../services/applications/service.py#L168) | [`consumers.py::on_review_passed`](../services/applications/consumers.py#L43) | application_id, kind | — |
++| `application.stage_changed` | [`listeners.py::_domain_events`](../services/applications/listeners.py#L14) | [`consumers.py::_handler`](../services/chat/consumers.py#L23) | application_id, from, to | effect:chat.event_log |
++| `application.unarchived` | [`service.py::unarchive`](../services/applications/service.py#L266) | [`consumers.py::on_unarchived`](../services/billing/consumers.py#L27)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23) | amount_changed, application_id | effect:chat.event_log |
++| `application.venue_changed` | [`service.py::change_venue`](../services/applications/service.py#L200) | [`consumers.py::on_venue_changed`](../services/billing/consumers.py#L13)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_venue_changed`](../services/scheduling/consumers.py#L17) | application_id, kind, new_venue_id, old_venue_id, stage | effect:chat.event_log |
+ | `booking.cancelled` | [`service.py::_cancel`](../services/scheduling/service.py#L178) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_booking_cancelled`](../services/notifications/consumers.py#L21) | application_id, booking_id, reason, starts_at, venue_id | effect:chat.event_log, effect:email.cancel |
+ | `booking.created` | [`service.py::book`](../services/scheduling/service.py#L126) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_booking_created`](../services/notifications/consumers.py#L10) | application_id, booking_id, purpose, starts_at, venue_id | effect:chat.event_log, effect:email.booking |
+ | `books.issued` | [`service.py::issue_books`](../services/scheduling/service.py#L223) | [`consumers.py::on_books_issued`](../services/applications/consumers.py#L67) | application_id | — |
+-| `client.updated` | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L51) | client_id, fields, source_application_id | — |
++| `client.updated` | [`listeners.py::_domain_events`](../services/applications/listeners.py#L14) | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L51) | client_id, fields, source_application_id | — |
+ | `halls.booking_cancelled` | [`service.py::_cancel`](../services/halls/service.py#L217) | [`consumers.py::on_booking_cancelled`](../services/halls/consumers.py#L35) | booking_id, reason, starts_at, venue_id | — |
+ | `halls.booking_confirmed` | [`service.py::apply_payments`](../services/halls/service.py#L372) | [`consumers.py::on_booking_confirmed`](../services/halls/consumers.py#L25) |  | — |
+ | `halls.booking_created` | [`service.py::create_booking`](../services/halls/service.py#L142) | — | booking_id, hall_id, starts_at, venue_id | — |
+diff --git a/docs/process.md b/docs/process.md
+index 78ab9c1..8ca805d 100644
+--- a/docs/process.md
++++ b/docs/process.md
+@@ -63,32 +63,32 @@ stateDiagram-v2
+ | Переход | Исполнитель (виды, условие) | Код |
+ |---|---|---|
+ | [`archived->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+-| [`archived->on_review`](../bpm/application_process.yaml#L41) | operator | [`service.py::submit_for_review`](../services/applications/service.py#L113), [`service.py::unarchive`](../services/applications/service.py#L265) |
+-| [`awaiting_invoice->archived`](../bpm/application_process.yaml#L39) | operator | [`service.py::archive`](../services/applications/service.py#L246) |
++| [`archived->on_review`](../bpm/application_process.yaml#L41) | operator | [`service.py::submit_for_review`](../services/applications/service.py#L113), [`service.py::unarchive`](../services/applications/service.py#L266) |
++| [`awaiting_invoice->archived`](../bpm/application_process.yaml#L39) | operator | [`service.py::archive`](../services/applications/service.py#L247) |
+ | [`awaiting_invoice->awaiting_payment`](../bpm/application_process.yaml#L27) | accountant [paid] | [`consumers.py::on_invoice_issued`](../services/applications/consumers.py#L13) |
+ | [`awaiting_invoice->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+ | [`awaiting_invoice->on_review`](../bpm/application_process.yaml#L32) | system | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L51) |
+-| [`awaiting_issue->archived`](../bpm/application_process.yaml#L40) | chief_accountant [paid] | [`service.py::archive`](../services/applications/service.py#L246) |
++| [`awaiting_issue->archived`](../bpm/application_process.yaml#L40) | chief_accountant [paid] | [`service.py::archive`](../services/applications/service.py#L247) |
+ | [`awaiting_issue->books_out`](../bpm/application_process.yaml#L34) | site_checker | [`consumers.py::on_books_issued`](../services/applications/consumers.py#L67) |
+ | [`awaiting_issue->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+-| [`awaiting_payment->archived`](../bpm/application_process.yaml#L38) | system [paid]; operator | [`service.py::archive`](../services/applications/service.py#L246) |
++| [`awaiting_payment->archived`](../bpm/application_process.yaml#L38) | system [paid]; operator | [`service.py::archive`](../services/applications/service.py#L247) |
+ | [`awaiting_payment->awaiting_invoice`](../bpm/application_process.yaml#L28) | system [paid] | [`consumers.py::on_invoice_cancelled`](../services/applications/consumers.py#L22) |
+ | [`awaiting_payment->awaiting_issue`](../bpm/application_process.yaml#L29) | system [paid] guard fully_paid | [`consumers.py::on_fully_paid`](../services/applications/consumers.py#L31) |
+ | [`awaiting_payment->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+ | [`awaiting_payment->on_review`](../bpm/application_process.yaml#L32) | system | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L51) |
+-| [`books_out->closed`](../bpm/application_process.yaml#L35) | site_checker guard settled | [`service.py::close`](../services/applications/service.py#L307) |
+-| [`draft->archived`](../bpm/application_process.yaml#L39) | operator | [`service.py::archive`](../services/applications/service.py#L246) |
++| [`books_out->closed`](../bpm/application_process.yaml#L35) | site_checker guard settled | [`service.py::close`](../services/applications/service.py#L308) |
++| [`draft->archived`](../bpm/application_process.yaml#L39) | operator | [`service.py::archive`](../services/applications/service.py#L247) |
+ | [`draft->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+-| [`draft->on_review`](../bpm/application_process.yaml#L20) | operator | [`service.py::submit_for_review`](../services/applications/service.py#L113), [`service.py::unarchive`](../services/applications/service.py#L265) |
+-| [`needs_rework->archived`](../bpm/application_process.yaml#L37) | system; operator | [`service.py::archive`](../services/applications/service.py#L246) |
++| [`draft->on_review`](../bpm/application_process.yaml#L20) | operator | [`service.py::submit_for_review`](../services/applications/service.py#L113), [`service.py::unarchive`](../services/applications/service.py#L266) |
++| [`needs_rework->archived`](../bpm/application_process.yaml#L37) | system; operator | [`service.py::archive`](../services/applications/service.py#L247) |
+ | [`needs_rework->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+-| [`needs_rework->on_review`](../bpm/application_process.yaml#L20) | operator | [`service.py::submit_for_review`](../services/applications/service.py#L113), [`service.py::unarchive`](../services/applications/service.py#L265) |
+-| [`on_review->archived`](../bpm/application_process.yaml#L37) | system; operator | [`service.py::archive`](../services/applications/service.py#L246) |
+-| [`on_review->awaiting_invoice`](../bpm/application_process.yaml#L23) | reviewer [paid] | [`service.py::approve`](../services/applications/service.py#L167) |
+-| [`on_review->awaiting_issue`](../bpm/application_process.yaml#L25) | reviewer [debt,social] | [`service.py::approve`](../services/applications/service.py#L167) |
+-| [`on_review->awaiting_payment`](../bpm/application_process.yaml#L24) | reviewer [paid] guard has_active_invoice | [`service.py::approve`](../services/applications/service.py#L167) |
++| [`needs_rework->on_review`](../bpm/application_process.yaml#L20) | operator | [`service.py::submit_for_review`](../services/applications/service.py#L113), [`service.py::unarchive`](../services/applications/service.py#L266) |
++| [`on_review->archived`](../bpm/application_process.yaml#L37) | system; operator | [`service.py::archive`](../services/applications/service.py#L247) |
++| [`on_review->awaiting_invoice`](../bpm/application_process.yaml#L23) | reviewer [paid] | [`service.py::approve`](../services/applications/service.py#L168) |
++| [`on_review->awaiting_issue`](../bpm/application_process.yaml#L25) | reviewer [debt,social] | [`service.py::approve`](../services/applications/service.py#L168) |
++| [`on_review->awaiting_payment`](../bpm/application_process.yaml#L24) | reviewer [paid] guard has_active_invoice | [`service.py::approve`](../services/applications/service.py#L168) |
+ | [`on_review->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+-| [`on_review->needs_rework`](../bpm/application_process.yaml#L21) | reviewer | [`service.py::return_for_rework`](../services/applications/service.py#L189) |
++| [`on_review->needs_rework`](../bpm/application_process.yaml#L21) | reviewer | [`service.py::return_for_rework`](../services/applications/service.py#L190) |
+ 
+ ## Условия переходов (guard)
+ 
+diff --git a/docs/reconciliation.md b/docs/reconciliation.md
+index 2cd6fe9..fbcd6d4 100644
+--- a/docs/reconciliation.md
++++ b/docs/reconciliation.md
+@@ -57,8 +57,9 @@
+ 
+ - нет
+ 
+-### Проверки в коде, не покрытые правилами (1)
++### Проверки в коде, не покрытые правилами (2)
+ 
++- services/applications/service.py::approve:176 DomainError: f"не хватает данных клиента: {', '.join(missing)}"
+ - services/reports/builders.py::build:181 DomainError: f'неизвестный тип отчёта: {other}'
+ 
+ ### Литералы вместо настроек (5)
+diff --git a/docs/roles.md b/docs/roles.md
+index 0f69d8d..f351984 100644
+--- a/docs/roles.md
++++ b/docs/roles.md
+@@ -56,10 +56,10 @@
+ 
+ ### Проверяющий (`reviewer`)
+ 
+-- R-APP-REVIEW-03 [draft] Подтверждает или возвращает заявку только назначенный проверяющий
+-- R-APP-REVIEW-04 [draft] Заявку нельзя подтвердить без ФИО, паспорта и даты рождения клиента
+-- R-APP-REVIEW-05 [verified] Этап после проверки зависит от вида заявки и наличия действующего счёта
+-- R-APP-CLIENT-01 [draft] Данные клиента обновляет проверяющий заявки-источника
++- R-APP-REVIEW-03 [suspect] Подтверждает или возвращает заявку только назначенный проверяющий
++- R-APP-REVIEW-04 [suspect] Заявку нельзя подтвердить без ФИО, паспорта, СНИЛС и даты рождения клиента
++- R-APP-REVIEW-05 [suspect] Этап после проверки зависит от вида заявки и наличия действующего счёта
++- R-APP-CLIENT-01 [suspect] Данные клиента обновляет проверяющий заявки-источника
+ - R-BILL-PROCESS-03 [draft] После повторной проверки заявка с действующим счётом идёт сразу в «Ожидает оплаты»
+ - R-CHAT-PARTICIPANTS-01 [draft] Участники чата — оператор, проверяющий оператор, проверяющий и бухгалтер заявки
+ - R-CHAT-PARTICIPANTS-02 [draft] Доступ к чату следует за текущим закреплением сотрудника
+@@ -215,7 +215,7 @@
+ ### Система (события и фоновые задачи) (`system`)
+ 
+ - R-APP-BOOKING-01 [draft] Готовность к записи фиксируется и запускает выдачу ссылки на запись
+-- R-APP-CLIENT-02 [draft] Изменение ФИО, паспорта или даты рождения клиента публикует client.updated (слушатель ORM)
++- R-APP-CLIENT-02 [suspect] Изменение ФИО, паспорта, СНИЛС или даты рождения клиента публикует client.updated (слушатель ORM)
+ - R-APP-CLIENT-03 [draft] Обновление клиента возвращает его заявки из ожидания счёта или оплаты на проверку
+ - R-APP-PAY-02 [draft] Аннулирование счёта за книги возвращает заявку в ожидание счёта
+ - R-APP-PAY-03 [draft] Только полная оплата счёта за книги открывает выдачу
+@@ -224,7 +224,7 @@
+ - R-APP-ARCHIVE-03 [draft] Ручной архив и его последствия — закрытие попытки, сброс записей, сообщение в чат
+ - R-APP-DEDUP-01 [draft] Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
+ - R-APP-DEDUP-02 [draft] Закрытие дубля аннулирует его неоплаченные счета и сбрасывает записи
+-- R-APP-CHAT-01 [draft] Каждая смена этапа заявки пишется в чат (слушатель ORM)
++- R-APP-CHAT-01 [suspect] Каждая смена этапа заявки пишется в чат (слушатель ORM)
+ - R-BILL-INVOICE-06 [draft] У заявки не больше одного действующего счёта за книги
+ - R-BILL-INVOICE-07 [draft] Вид счёта — books или fine; счёт на штраф ссылается на штраф
+ - R-BILL-CANCEL-01 [verified] Счёт с привязанным платежом аннулировать нельзя
+@@ -239,7 +239,7 @@
+ - R-BILL-FINE-03 [draft] Штраф бывает только «открыт» или «оплачен»
+ - R-CHAT-EVENTS-01 [verified] 11 топиков из EVENT_TEXT автоматически пишутся в чат системными сообщениями
+ - R-CHAT-CONFIG-02 [draft] Набор событий для чата и их тексты заданы словарём EVENT_TEXT
+-- R-CHAT-EVENTS-02 [draft] Каждая смена этапа заявки появляется в чате
++- R-CHAT-EVENTS-02 [suspect] Каждая смена этапа заявки появляется в чате
+ - R-CHAT-EVENTS-03 [verified] Смена площадки, архив, возврат из архива и закрытие как дубль пишутся в чат
+ - R-CHAT-EVENTS-04 [draft] Выставление и аннулирование счёта и привязка платежа пишутся в чат
+ - R-CHAT-EVENTS-05 [draft] События пишутся в чат и после закрытия заявки
+@@ -391,17 +391,17 @@
+ | Функция | Роль | Проверки доступа |
+ |---|---|---|
+ | [`service.py::_require_operator`](../services/applications/service.py#L38) | Оператор | заявка закреплена за другим оператором |
+-| [`service.py::approve`](../services/applications/service.py#L167) | Проверяющий | заявку проверяет другой проверяющий |
+-| [`service.py::archive`](../services/applications/service.py#L246) | Оператор | — |
++| [`service.py::approve`](../services/applications/service.py#L168) | Проверяющий | заявку проверяет другой проверяющий |
++| [`service.py::archive`](../services/applications/service.py#L247) | Оператор | — |
+ | [`service.py::assign_reviewer`](../services/applications/service.py#L122) | Проверяющий | — |
+-| [`service.py::change_books`](../services/applications/service.py#L234) | Оператор | — |
+-| [`service.py::change_venue`](../services/applications/service.py#L199) | Оператор | — |
+-| [`service.py::close`](../services/applications/service.py#L307) | Проверяющий оператор | заявку закрывает проверяющий оператор её площадки |
++| [`service.py::change_books`](../services/applications/service.py#L235) | Оператор | — |
++| [`service.py::change_venue`](../services/applications/service.py#L200) | Оператор | — |
++| [`service.py::close`](../services/applications/service.py#L308) | Проверяющий оператор | заявку закрывает проверяющий оператор её площадки |
+ | [`service.py::create_application`](../services/applications/service.py#L70) | Оператор | — |
+-| [`service.py::return_for_rework`](../services/applications/service.py#L189) | Проверяющий | заявку проверяет другой проверяющий |
++| [`service.py::return_for_rework`](../services/applications/service.py#L190) | Проверяющий | заявку проверяет другой проверяющий |
+ | [`service.py::submit_for_review`](../services/applications/service.py#L113) | Оператор | — |
+-| [`service.py::unarchive`](../services/applications/service.py#L265) | Оператор | — |
+-| [`service.py::update_client`](../services/applications/service.py#L131) | Проверяющий | обновляет данные клиента только проверяющий заявки |
++| [`service.py::unarchive`](../services/applications/service.py#L266) | Оператор | — |
++| [`service.py::update_client`](../services/applications/service.py#L132) | Проверяющий | обновляет данные клиента только проверяющий заявки |
+ | [`service.py::_require_accountant`](../services/billing/service.py#L29) | Бухгалтер | заявка закреплена за другим бухгалтером |
+ | [`service.py::issue_books_invoice`](../services/billing/service.py#L35) | Бухгалтер | — |
+ | [`service.py::issue_fine_invoice`](../services/billing/service.py#L177) | Бухгалтер | — |
+diff --git a/docs/rules/README.md b/docs/rules/README.md
+index 2073b20..31c9f23 100644
+--- a/docs/rules/README.md
++++ b/docs/rules/README.md
+@@ -4,9 +4,9 @@
+ 
+ | Модуль | Правил | verified | draft | suspect |
+ |---|---|---|---|---|
+-| [applications](applications.md) | 40 | 5 | 35 | 0 |
++| [applications](applications.md) | 40 | 4 | 30 | 6 |
+ | [billing](billing.md) | 36 | 6 | 30 | 0 |
+-| [chat](chat.md) | 22 | 5 | 17 | 0 |
++| [chat](chat.md) | 22 | 5 | 16 | 1 |
+ | [halls](halls.md) | 35 | 0 | 35 | 0 |
+ | [inventory](inventory.md) | 39 | 0 | 39 | 0 |
+ | [lectures](lectures.md) | 44 | 0 | 44 | 0 |
+diff --git a/docs/rules/applications.md b/docs/rules/applications.md
+index 50fc264..4174ada 100644
+--- a/docs/rules/applications.md
++++ b/docs/rules/applications.md
+@@ -105,7 +105,7 @@
+ 
+ ## R-APP-REVIEW-03 — Подтверждает или возвращает заявку только назначенный проверяющий
+ 
+-`draft` · permission · §2 Проверяющий
++`suspect` · permission · §2 Проверяющий
+ 
+ Без назначенного проверяющего заявку подтвердить нельзя (DomainError «на заявку не назначен проверяющий»); подтверждение и возврат на доработку выполняет только reviewer_id заявки, иначе AccessDenied «заявку проверяет другой проверяющий». Возврат переводит on_review -> needs_rework.
+ 
+@@ -114,21 +114,21 @@
+ - Роли: Проверяющий
+ - Связанные: R-APP-REVIEW-02, R-APP-REVIEW-04
+ 
+-## R-APP-REVIEW-04 — Заявку нельзя подтвердить без ФИО, паспорта и даты рождения клиента
++## R-APP-REVIEW-04 — Заявку нельзя подтвердить без ФИО, паспорта, СНИЛС и даты рождения клиента
+ 
+-`draft` · guard · §6 Клиент и проверка данных
++`suspect` · guard · §6 Клиент и проверка данных
+ 
+-При подтверждении проверяются обязательные поля клиента из REQUIRED_CLIENT_FIELDS (full_name, passport, birth_date); если чего-то нет — DomainError «не хватает данных клиента: …».
++При подтверждении проверяются обязательные поля клиента из REQUIRED_CLIENT_FIELDS (full_name, passport, snils, birth_date); если чего-то нет — DomainError «не хватает данных клиента: …».
+ 
+ - Реализация: [`services/applications/service.py::approve:173-175`](../../services/applications/service.py#L173), [`services/applications/review.py::missing_client_fields:6-7`](../../services/applications/review.py#L6)
+ - Настройки: `services/applications/review.py::REQUIRED_CLIENT_FIELDS`
+-- Тесты: `tests/test_review.py::test_incomplete_client_goes_to_rework`
++- Тесты: `tests/test_review.py::test_incomplete_client_goes_to_rework`, `tests/test_review.py::test_client_without_snils_is_not_approved`
+ - Роли: Проверяющий
+ - Связанные: R-APP-REVIEW-03, R-APP-CLIENT-02
+ 
+ ## R-APP-REVIEW-05 — Этап после проверки зависит от вида заявки и наличия действующего счёта
+ 
+-`verified` · effect · §4 Порядок прохождения заявки
++`suspect` · effect · §4 Порядок прохождения заявки
+ 
+ После подтверждения платная заявка уходит в awaiting_payment, если по ней есть действующий счёт за книги (после возврата из архива или повторной проверки), иначе в awaiting_invoice; заявки в долг и социальные сразу уходят в awaiting_issue и становятся готовыми к записи. Публикуется application.review_passed.
+ 
+@@ -150,25 +150,26 @@
+ 
+ ## R-APP-CLIENT-01 — Данные клиента обновляет проверяющий заявки-источника
+ 
+-`draft` · permission · §6 Клиент и проверка данных
++`suspect` · permission · §6 Клиент и проверка данных
+ 
+-Если указана заявка-источник, обновить клиента может только её проверяющий (AccessDenied иначе). Разрешены только поля CLIENT_EDITABLE_FIELDS (full_name, passport, birth_date, email), прочие — DomainError «неизвестные поля клиента». Без source_application_id проверка прав не выполняется.
++Если указана заявка-источник, обновить клиента может только её проверяющий (AccessDenied иначе). Разрешены только поля CLIENT_EDITABLE_FIELDS (full_name, passport, snils, birth_date, email), прочие — DomainError «неизвестные поля клиента». Без source_application_id проверка прав не выполняется.
+ 
+ - Реализация: [`services/applications/service.py::update_client:140-153`](../../services/applications/service.py#L140)
+ - Настройки: `services/applications/service.py::CLIENT_EDITABLE_FIELDS`
+-- Тесты: `tests/test_review.py::test_incomplete_client_goes_to_rework`
++- Тесты: `tests/test_review.py::test_incomplete_client_goes_to_rework`, `tests/test_review.py::test_client_without_snils_is_not_approved`
+ - Роли: Проверяющий
+ - Связанные: R-APP-CLIENT-02
+ - ⚠ Расхождение со схемой: Схема: данные клиента обновляет только проверяющий. Код: при вызове без source_application_id роль и закрепление не проверяются — обновить данные может кто угодно.
+ 
+-## R-APP-CLIENT-02 — Изменение ФИО, паспорта или даты рождения клиента публикует client.updated (слушатель ORM)
++## R-APP-CLIENT-02 — Изменение ФИО, паспорта, СНИЛС или даты рождения клиента публикует client.updated (слушатель ORM)
+ 
+-`draft` · effect · §6 Клиент и проверка данных
++`suspect` · effect · §6 Клиент и проверка данных
+ 
+-Слушатель before_flush при изменении полей TRACKED_FIELDS (full_name, passport, birth_date) неявно ставит clients.updated_at и публикует client.updated с полями и source_application_id (из session.info). Изменение email событие не порождает.
++Слушатель before_flush при изменении полей TRACKED_FIELDS (full_name, passport, snils, birth_date) неявно ставит clients.updated_at и публикует client.updated с полями и source_application_id (из session.info). Изменение email событие не порождает.
+ 
+ - Реализация: [`services/applications/listeners.py::_domain_events:23-36`](../../services/applications/listeners.py#L23)
+ - Настройки: `services/applications/listeners.py::TRACKED_FIELDS`
++- Тесты: `tests/test_review.py::test_snils_change_returns_other_applications_to_review`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-APP-CLIENT-01, R-APP-CLIENT-03
+ 
+@@ -179,6 +180,7 @@
+ По client.updated все заявки клиента на этапах awaiting_invoice и awaiting_payment, кроме заявки-источника, переводятся системой в on_review. Заявки на awaiting_issue и дальше не перепроверяются; review_started_at при этом не сбрасывается.
+ 
+ - Реализация: [`services/applications/consumers.py::on_client_updated:52-63`](../../services/applications/consumers.py#L52), [`awaiting_invoice->on_review`](../../bpm/application_process.yaml#L32), [`awaiting_payment->on_review`](../../bpm/application_process.yaml#L32)
++- Тесты: `tests/test_review.py::test_snils_change_returns_other_applications_to_review`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-APP-CLIENT-02, R-APP-ARCHIVE-01
+ - ⚠ Расхождение со схемой: Схема: перепроверка не должна приводить к потере заявки. Код: review_started_at остаётся от первой проверки, поэтому возвращённая на проверку заявка, у которой проверка началась больше REVIEW_ARCHIVE_DAYS назад, при ближайшем запуске archive_stale уходит в архив с outcome=no_data.
+@@ -387,7 +389,7 @@ close_duplicates вызывается при полной оплате плат
+ 
+ ## R-APP-CHAT-01 — Каждая смена этапа заявки пишется в чат (слушатель ORM)
+ 
+-`draft` · effect · §15 Чат заявки
++`suspect` · effect · §15 Чат заявки
+ 
+ Слушатель before_flush публикует application.stage_changed (from, to) при любом изменении поля stage заявки; чат-сервис записывает событие в ленту заявки. Тот же обработчик чата пишет venue_changed, archived, unarchived, closed_duplicate, invoice.issued и invoice.cancelled.
+ 
+diff --git a/docs/rules/chat.md b/docs/rules/chat.md
+index 87b77ab..dd9afde 100644
+--- a/docs/rules/chat.md
++++ b/docs/rules/chat.md
+@@ -169,7 +169,7 @@ CHECK messages_check на chat.messages требует is_event OR author_id IS
+ 
+ ## R-CHAT-EVENTS-02 — Каждая смена этапа заявки появляется в чате
+ 
+-`draft` · effect · §15 Чат заявки
++`suspect` · effect · §15 Чат заявки
+ 
+ Слушатель ORM before_flush в applications (_domain_events) публикует application.stage_changed при любом изменении поля stage, в payload передаются from и to. Чат записывает «Этап: {from} → {to}» с кодами этапов, например «Этап: draft → on_review».
+ 
+diff --git a/knowledge/glossary.yaml b/knowledge/glossary.yaml
+index ef90ec1..371e771 100644
+--- a/knowledge/glossary.yaml
++++ b/knowledge/glossary.yaml
+@@ -54,7 +54,7 @@ terms:
+   - {ru: [чат, сообщение, лента], en: [chat, message, messages, log_event]}
+   - {ru: [событие, события], en: [event, events, publish, subscribe, outbox]}
+   - {ru: [смена, сменить, изменить, изменение], en: [change, changed, update, updated]}
+-  - {ru: [данные клиента, паспорт], en: [client_updated, update_client, passport, full_name, birth_date]}
++  - {ru: [данные клиента, паспорт, СНИЛС], en: [client_updated, update_client, passport, snils, full_name, birth_date]}
+   - {ru: [назначить, назначение, переназначить], en: [assign, assignment, take_application]}
+   - {ru: [фоновая задача, таймер, планировщик], en: [job, jobs]}
+   - {ru: [настройка, настройки], en: [settings, config]}
+diff --git a/knowledge/model/bpm.json b/knowledge/model/bpm.json
+index a7b3be4..aab56f6 100644
+--- a/knowledge/model/bpm.json
++++ b/knowledge/model/bpm.json
+@@ -590,7 +590,7 @@
+    "actor": "reviewer",
+    "dst": "on_review->awaiting_invoice",
+    "lines": [
+-    182
++    183
+    ],
+    "src": "services/applications/service.py::approve",
+    "type": "transitions_to"
+@@ -599,7 +599,7 @@
+    "actor": "reviewer",
+    "dst": "on_review->awaiting_issue",
+    "lines": [
+-    182
++    183
+    ],
+    "src": "services/applications/service.py::approve",
+    "type": "transitions_to"
+@@ -608,7 +608,7 @@
+    "actor": "reviewer",
+    "dst": "on_review->awaiting_payment",
+    "lines": [
+-    182
++    183
+    ],
+    "src": "services/applications/service.py::approve",
+    "type": "transitions_to"
+@@ -617,7 +617,7 @@
+    "actor": "(параметр)",
+    "dst": "awaiting_invoice->archived",
+    "lines": [
+-    257
++    258
+    ],
+    "src": "services/applications/service.py::archive",
+    "type": "transitions_to"
+@@ -626,7 +626,7 @@
+    "actor": "(параметр)",
+    "dst": "awaiting_issue->archived",
+    "lines": [
+-    257
++    258
+    ],
+    "src": "services/applications/service.py::archive",
+    "type": "transitions_to"
+@@ -635,7 +635,7 @@
+    "actor": "(параметр)",
+    "dst": "awaiting_payment->archived",
+    "lines": [
+-    257
++    258
+    ],
+    "src": "services/applications/service.py::archive",
+    "type": "transitions_to"
+@@ -644,7 +644,7 @@
+    "actor": "(параметр)",
+    "dst": "draft->archived",
+    "lines": [
+-    257
++    258
+    ],
+    "src": "services/applications/service.py::archive",
+    "type": "transitions_to"
+@@ -653,7 +653,7 @@
+    "actor": "(параметр)",
+    "dst": "needs_rework->archived",
+    "lines": [
+-    257
++    258
+    ],
+    "src": "services/applications/service.py::archive",
+    "type": "transitions_to"
+@@ -662,7 +662,7 @@
+    "actor": "(параметр)",
+    "dst": "on_review->archived",
+    "lines": [
+-    257
++    258
+    ],
+    "src": "services/applications/service.py::archive",
+    "type": "transitions_to"
+@@ -671,7 +671,7 @@
+    "actor": "site_checker",
+    "dst": "books_out->closed",
+    "lines": [
+-    311
++    312
+    ],
+    "src": "services/applications/service.py::close",
+    "type": "transitions_to"
+@@ -680,7 +680,7 @@
+    "actor": "reviewer",
+    "dst": "on_review->needs_rework",
+    "lines": [
+-    195
++    196
+    ],
+    "src": "services/applications/service.py::return_for_rework",
+    "type": "transitions_to"
+@@ -716,7 +716,7 @@
+    "actor": "operator",
+    "dst": "archived->on_review",
+    "lines": [
+-    298
++    299
+    ],
+    "src": "services/applications/service.py::unarchive",
+    "type": "transitions_to"
+@@ -725,7 +725,7 @@
+    "actor": "operator",
+    "dst": "draft->on_review",
+    "lines": [
+-    298
++    299
+    ],
+    "src": "services/applications/service.py::unarchive",
+    "type": "transitions_to"
+@@ -734,7 +734,7 @@
+    "actor": "operator",
+    "dst": "needs_rework->on_review",
+    "lines": [
+-    298
++    299
+    ],
+    "src": "services/applications/service.py::unarchive",
+    "type": "transitions_to"
+@@ -817,7 +817,7 @@
+    ],
+    "dst": "applications.applications",
+    "lines": [
+-    182
++    183
+    ],
+    "src": "services/applications/service.py::approve",
+    "type": "writes",
+@@ -829,7 +829,7 @@
+    ],
+    "dst": "applications.applications",
+    "lines": [
+-    257
++    258
+    ],
+    "src": "services/applications/service.py::archive",
+    "type": "writes",
+@@ -841,7 +841,7 @@
+    ],
+    "dst": "applications.applications",
+    "lines": [
+-    311
++    312
+    ],
+    "src": "services/applications/service.py::close",
+    "type": "writes",
+@@ -853,7 +853,7 @@
+    ],
+    "dst": "applications.applications",
+    "lines": [
+-    195
++    196
+    ],
+    "src": "services/applications/service.py::return_for_rework",
+    "type": "writes",
+@@ -877,7 +877,7 @@
+    ],
+    "dst": "applications.applications",
+    "lines": [
+-    298
++    299
+    ],
+    "src": "services/applications/service.py::unarchive",
+    "type": "writes",
+diff --git a/knowledge/model/code.json b/knowledge/model/code.json
+index f46dac8..8d99a0b 100644
+--- a/knowledge/model/code.json
++++ b/knowledge/model/code.json
+@@ -351,7 +351,7 @@
+   {
+    "dst": "services/applications/review.py::missing_client_fields",
+    "lines": [
+-    174
++    175
+    ],
+    "src": "services/applications/service.py::approve",
+    "type": "calls"
+@@ -359,7 +359,7 @@
+   {
+    "dst": "services/applications/service.py::load",
+    "lines": [
+-    168
++    169
+    ],
+    "src": "services/applications/service.py::approve",
+    "type": "calls"
+@@ -367,7 +367,7 @@
+   {
+    "dst": "services/applications/service.py::mark_ready_for_booking",
+    "lines": [
+-    185
++    186
+    ],
+    "src": "services/applications/service.py::approve",
+    "type": "calls"
+@@ -375,7 +375,7 @@
+   {
+    "dst": "services/billing/public.py::active_books_invoice",
+    "lines": [
+-    178
++    179
+    ],
+    "src": "services/applications/service.py::approve",
+    "type": "calls"
+@@ -383,7 +383,7 @@
+   {
+    "dst": "services/applications/service.py::_require_operator",
+    "lines": [
+-    256
++    257
+    ],
+    "src": "services/applications/service.py::archive",
+    "type": "calls"
+@@ -391,7 +391,7 @@
+   {
+    "dst": "services/applications/service.py::load",
+    "lines": [
+-    254
++    255
+    ],
+    "src": "services/applications/service.py::archive",
+    "type": "calls"
+@@ -407,7 +407,7 @@
+   {
+    "dst": "services/applications/service.py::_check_books",
+    "lines": [
+-    241
++    242
+    ],
+    "src": "services/applications/service.py::change_books",
+    "type": "calls"
+@@ -415,7 +415,7 @@
+   {
+    "dst": "services/applications/service.py::_require_operator",
+    "lines": [
+-    238
++    239
+    ],
+    "src": "services/applications/service.py::change_books",
+    "type": "calls"
+@@ -423,7 +423,7 @@
+   {
+    "dst": "services/applications/service.py::load",
+    "lines": [
+-    237
++    238
+    ],
+    "src": "services/applications/service.py::change_books",
+    "type": "calls"
+@@ -431,7 +431,7 @@
+   {
+    "dst": "services/applications/service.py::_check_books",
+    "lines": [
+-    214
++    215
+    ],
+    "src": "services/applications/service.py::change_venue",
+    "type": "calls"
+@@ -439,7 +439,7 @@
+   {
+    "dst": "services/applications/service.py::_check_sphere_at_venue",
+    "lines": [
+-    213
++    214
+    ],
+    "src": "services/applications/service.py::change_venue",
+    "type": "calls"
+@@ -447,7 +447,7 @@
+   {
+    "dst": "services/applications/service.py::_require_operator",
+    "lines": [
+-    203
++    204
+    ],
+    "src": "services/applications/service.py::change_venue",
+    "type": "calls"
+@@ -455,7 +455,7 @@
+   {
+    "dst": "services/applications/service.py::load",
+    "lines": [
+-    202
++    203
+    ],
+    "src": "services/applications/service.py::change_venue",
+    "type": "calls"
+@@ -463,7 +463,7 @@
+   {
+    "dst": "services/applications/service.py::load",
+    "lines": [
+-    308
++    309
+    ],
+    "src": "services/applications/service.py::close",
+    "type": "calls"
+@@ -487,7 +487,7 @@
+   {
+    "dst": "services/applications/service.py::load",
+    "lines": [
+-    192
++    193
+    ],
+    "src": "services/applications/service.py::return_for_rework",
+    "type": "calls"
+@@ -511,8 +511,8 @@
+   {
+    "dst": "services/applications/public.py::books_price",
+    "lines": [
+-    277,
+-    294
++    278,
++    295
+    ],
+    "src": "services/applications/service.py::unarchive",
+    "type": "calls"
+@@ -520,7 +520,7 @@
+   {
+    "dst": "services/applications/service.py::_check_books",
+    "lines": [
+-    285
++    286
+    ],
+    "src": "services/applications/service.py::unarchive",
+    "type": "calls"
+@@ -528,7 +528,7 @@
+   {
+    "dst": "services/applications/service.py::_check_sphere_at_venue",
+    "lines": [
+-    284
++    285
+    ],
+    "src": "services/applications/service.py::unarchive",
+    "type": "calls"
+@@ -536,7 +536,7 @@
+   {
+    "dst": "services/applications/service.py::_require_operator",
+    "lines": [
+-    274
++    275
+    ],
+    "src": "services/applications/service.py::unarchive",
+    "type": "calls"
+@@ -544,7 +544,7 @@
+   {
+    "dst": "services/applications/service.py::load",
+    "lines": [
+-    273
++    274
+    ],
+    "src": "services/applications/service.py::unarchive",
+    "type": "calls"
+@@ -552,7 +552,7 @@
+   {
+    "dst": "services/applications/service.py::load",
+    "lines": [
+-    141
++    142
+    ],
+    "src": "services/applications/service.py::update_client",
+    "type": "calls"
+@@ -6394,7 +6394,7 @@
+    "dst": "applications.applications",
+    "event": "before_flush",
+    "lines": [
+-    15
++    16
+    ],
+    "src": "services/applications/listeners.py::_domain_events",
+    "type": "listens"
+@@ -6403,7 +6403,7 @@
+    "dst": "applications.clients",
+    "event": "before_flush",
+    "lines": [
+-    23
++    24
+    ],
+    "src": "services/applications/listeners.py::_domain_events",
+    "type": "listens"
+@@ -7693,7 +7693,7 @@
+   {
+    "dst": "applications.applications",
+    "lines": [
+-    15
++    16
+    ],
+    "src": "services/applications/listeners.py::_domain_events",
+    "type": "reads"
+@@ -7701,7 +7701,7 @@
+   {
+    "dst": "applications.clients",
+    "lines": [
+-    23
++    24
+    ],
+    "src": "services/applications/listeners.py::_domain_events",
+    "type": "reads"
+@@ -7811,7 +7811,7 @@
+   {
+    "dst": "applications.clients",
+    "lines": [
+-    173
++    174
+    ],
+    "src": "services/applications/service.py::approve",
+    "type": "reads"
+@@ -7819,7 +7819,7 @@
+   {
+    "dst": "applications.venues",
+    "lines": [
+-    210
++    211
+    ],
+    "src": "services/applications/service.py::change_venue",
+    "type": "reads"
+@@ -7851,7 +7851,7 @@
+   {
+    "dst": "applications.venues",
+    "lines": [
+-    287
++    288
+    ],
+    "src": "services/applications/service.py::unarchive",
+    "type": "reads"
+@@ -7859,7 +7859,7 @@
+   {
+    "dst": "applications.clients",
+    "lines": [
+-    144
++    145
+    ],
+    "src": "services/applications/service.py::update_client",
+    "type": "reads"
+@@ -10316,7 +10316,7 @@
+   {
+    "dst": "services/applications/listeners.py::TRACKED_FIELDS",
+    "lines": [
+-    25
++    26
+    ],
+    "src": "services/applications/listeners.py::_domain_events",
+    "type": "reads_config"
+@@ -10324,7 +10324,7 @@
+   {
+    "dst": "services/applications/review.py::REQUIRED_CLIENT_FIELDS",
+    "lines": [
+-    7
++    8
+    ],
+    "src": "services/applications/review.py::missing_client_fields",
+    "type": "reads_config"
+@@ -10332,7 +10332,7 @@
+   {
+    "dst": "services/applications/service.py::PAID_VENUE_LOCKED_STAGES",
+    "lines": [
+-    206
++    207
+    ],
+    "src": "services/applications/service.py::change_venue",
+    "type": "reads_config"
+@@ -10340,7 +10340,7 @@
+   {
+    "dst": "services/applications/service.py::TERMINAL_STAGES",
+    "lines": [
+-    204
++    205
+    ],
+    "src": "services/applications/service.py::change_venue",
+    "type": "reads_config"
+@@ -10348,7 +10348,7 @@
+   {
+    "dst": "services/applications/service.py::CLIENT_EDITABLE_FIELDS",
+    "lines": [
+-    147
++    148
+    ],
+    "src": "services/applications/service.py::update_client",
+    "type": "reads_config"
+@@ -11619,6 +11619,11 @@
+    "src": "services/applications/service.py::approve",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_review.py::test_client_without_snils_is_not_approved",
++   "src": "services/applications/service.py::approve",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_review.py::test_incomplete_client_goes_to_rework",
+    "src": "services/applications/service.py::approve",
+@@ -11629,6 +11634,11 @@
+    "src": "services/applications/service.py::approve",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_review.py::test_snils_change_returns_other_applications_to_review",
++   "src": "services/applications/service.py::approve",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_scheduling.py::test_booking_only_on_own_venue_and_sphere",
+    "src": "services/applications/service.py::approve",
+@@ -11744,6 +11754,11 @@
+    "src": "services/applications/service.py::assign_reviewer",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_review.py::test_client_without_snils_is_not_approved",
++   "src": "services/applications/service.py::assign_reviewer",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_review.py::test_incomplete_client_goes_to_rework",
+    "src": "services/applications/service.py::assign_reviewer",
+@@ -11754,6 +11769,11 @@
+    "src": "services/applications/service.py::assign_reviewer",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_review.py::test_snils_change_returns_other_applications_to_review",
++   "src": "services/applications/service.py::assign_reviewer",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_scheduling.py::test_booking_only_on_own_venue_and_sphere",
+    "src": "services/applications/service.py::assign_reviewer",
+@@ -11919,6 +11939,11 @@
+    "src": "services/applications/service.py::create_application",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_review.py::test_client_without_snils_is_not_approved",
++   "src": "services/applications/service.py::create_application",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_review.py::test_incomplete_client_goes_to_rework",
+    "src": "services/applications/service.py::create_application",
+@@ -11934,6 +11959,11 @@
+    "src": "services/applications/service.py::create_application",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_review.py::test_snils_change_returns_other_applications_to_review",
++   "src": "services/applications/service.py::create_application",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_scheduling.py::test_booking_only_on_own_venue_and_sphere",
+    "src": "services/applications/service.py::create_application",
+@@ -12024,11 +12054,21 @@
+    "src": "services/applications/service.py::load",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_review.py::test_client_without_snils_is_not_approved",
++   "src": "services/applications/service.py::load",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_review.py::test_incomplete_client_goes_to_rework",
+    "src": "services/applications/service.py::load",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_review.py::test_snils_change_returns_other_applications_to_review",
++   "src": "services/applications/service.py::load",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_venue_change.py::test_venue_change_before_payment_reissues_invoice",
+    "src": "services/applications/service.py::load",
+@@ -12124,6 +12164,11 @@
+    "src": "services/applications/service.py::submit_for_review",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_review.py::test_client_without_snils_is_not_approved",
++   "src": "services/applications/service.py::submit_for_review",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_review.py::test_incomplete_client_goes_to_rework",
+    "src": "services/applications/service.py::submit_for_review",
+@@ -12139,6 +12184,11 @@
+    "src": "services/applications/service.py::submit_for_review",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_review.py::test_snils_change_returns_other_applications_to_review",
++   "src": "services/applications/service.py::submit_for_review",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_scheduling.py::test_booking_only_on_own_venue_and_sphere",
+    "src": "services/applications/service.py::submit_for_review",
+@@ -12174,11 +12224,21 @@
+    "src": "services/applications/service.py::unarchive",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_review.py::test_client_without_snils_is_not_approved",
++   "src": "services/applications/service.py::update_client",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_review.py::test_incomplete_client_goes_to_rework",
+    "src": "services/applications/service.py::update_client",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_review.py::test_snils_change_returns_other_applications_to_review",
++   "src": "services/applications/service.py::update_client",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_venue_change.py::test_venue_change_before_payment_reissues_invoice",
+    "src": "services/billing/public.py::active_books_invoice",
+@@ -17854,7 +17914,7 @@
+    ],
+    "dst": "applications.clients",
+    "lines": [
+-    27
++    28
+    ],
+    "src": "services/applications/listeners.py::_domain_events",
+    "type": "writes"
+@@ -17866,8 +17926,8 @@
+    ],
+    "dst": "applications.attempts",
+    "lines": [
+-    259,
+-    260
++    260,
++    261
+    ],
+    "src": "services/applications/service.py::archive",
+    "type": "writes"
+@@ -17886,7 +17946,7 @@
+   {
+    "dst": "applications.application_books",
+    "lines": [
+-    242
++    243
+    ],
+    "src": "services/applications/service.py::change_books",
+    "type": "writes"
+@@ -17897,7 +17957,7 @@
+    ],
+    "dst": "applications.applications",
+    "lines": [
+-    242
++    243
+    ],
+    "src": "services/applications/service.py::change_books",
+    "type": "writes"
+@@ -17909,8 +17969,8 @@
+    ],
+    "dst": "applications.applications",
+    "lines": [
+-    217,
+-    218
++    218,
++    219
+    ],
+    "src": "services/applications/service.py::change_venue",
+    "type": "writes"
+@@ -17953,7 +18013,7 @@
+    ],
+    "dst": "applications.applications",
+    "lines": [
+-    159
++    160
+    ],
+    "src": "services/applications/service.py::mark_ready_for_booking",
+    "type": "writes"
+@@ -17972,7 +18032,7 @@
+   {
+    "dst": "applications.application_books",
+    "lines": [
+-    291
++    292
+    ],
+    "src": "services/applications/service.py::unarchive",
+    "type": "writes"
+@@ -17986,10 +18046,10 @@
+    ],
+    "dst": "applications.applications",
+    "lines": [
+-    288,
+     289,
+-    291,
+-    297
++    290,
++    292,
++    298
+    ],
+    "src": "services/applications/service.py::unarchive",
+    "type": "writes"
+@@ -17997,7 +18057,7 @@
+   {
+    "dst": "applications.attempts",
+    "lines": [
+-    296
++    297
+    ],
+    "src": "services/applications/service.py::unarchive",
+    "type": "writes"
+@@ -20095,7 +20155,7 @@
+   },
+   {
+    "end_line": 9,
+-   "hash": "5c8101c96afc",
++   "hash": "b6448d1da071",
+    "id": "services/applications/listeners.py::TRACKED_FIELDS",
+    "line": 9,
+    "name": "TRACKED_FIELDS",
+@@ -20105,12 +20165,13 @@
+    "value": [
+     "full_name",
+     "passport",
++    "snils",
+     "birth_date"
+    ]
+   },
+   {
+    "end_line": 3,
+-   "hash": "48cb9edbcf9e",
++   "hash": "e6920c52bd41",
+    "id": "services/applications/review.py::REQUIRED_CLIENT_FIELDS",
+    "line": 3,
+    "name": "REQUIRED_CLIENT_FIELDS",
+@@ -20120,12 +20181,13 @@
+    "value": [
+     "full_name",
+     "passport",
++    "snils",
+     "birth_date"
+    ]
+   },
+   {
+    "end_line": 28,
+-   "hash": "0185a9b36dab",
++   "hash": "0e63be2b847b",
+    "id": "services/applications/service.py::CLIENT_EDITABLE_FIELDS",
+    "line": 28,
+    "name": "CLIENT_EDITABLE_FIELDS",
+@@ -20135,6 +20197,7 @@
+    "value": [
+     "full_name",
+     "passport",
++    "snils",
+     "birth_date",
+     "email"
+    ]
+@@ -22250,7 +22313,7 @@
+   },
+   {
+    "end_line": 66,
+-   "hash": "b505010c8e88",
++   "hash": "efcfe81e640a",
+    "hash_own": "227c4dcbecaa",
+    "id": "services/applications/api.py::approve",
+    "kind": "route",
+@@ -22462,12 +22525,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 36,
+-   "hash": "ae1acbff72cf",
++   "end_line": 37,
++   "hash": "879f4849561e",
+    "hash_own": "5e685f41ad2e",
+    "id": "services/applications/listeners.py::_domain_events",
+    "kind": "orm_listener",
+-   "line": 13,
++   "line": 14,
+    "listens_for": "Session.before_flush",
+    "name": "_domain_events",
+    "path": "services/applications/listeners.py",
+@@ -22476,12 +22539,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 107,
++   "end_line": 108,
+    "hash": "941441973b9a",
+    "hash_own": "941441973b9a",
+    "id": "services/applications/models.py::Application",
+    "kind": "orm_model",
+-   "line": 82,
++   "line": 83,
+    "name": "Application",
+    "path": "services/applications/models.py",
+    "service": "applications",
+@@ -22489,12 +22552,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 107,
++   "end_line": 108,
+    "hash": "03560daaa51c",
+    "hash_own": "1d4027edd2ea",
+    "id": "services/applications/models.py::Application.book_ids",
+    "kind": "method",
+-   "line": 106,
++   "line": 107,
+    "name": "Application.book_ids",
+    "path": "services/applications/models.py",
+    "service": "applications",
+@@ -22502,12 +22565,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 115,
++   "end_line": 116,
+    "hash": "507fadd57628",
+    "hash_own": "507fadd57628",
+    "id": "services/applications/models.py::ApplicationBook",
+    "kind": "orm_model",
+-   "line": 110,
++   "line": 111,
+    "name": "ApplicationBook",
+    "path": "services/applications/models.py",
+    "service": "applications",
+@@ -22515,12 +22578,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 127,
++   "end_line": 128,
+    "hash": "7dc65cf3a1fb",
+    "hash_own": "7dc65cf3a1fb",
+    "id": "services/applications/models.py::Attempt",
+    "kind": "orm_model",
+-   "line": 118,
++   "line": 119,
+    "name": "Attempt",
+    "path": "services/applications/models.py",
+    "service": "applications",
+@@ -22541,9 +22604,9 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 79,
+-   "hash": "dca69be43621",
+-   "hash_own": "dca69be43621",
++   "end_line": 80,
++   "hash": "593c0c14695b",
++   "hash_own": "593c0c14695b",
+    "id": "services/applications/models.py::Client",
+    "kind": "orm_model",
+    "line": 70,
+@@ -22749,12 +22812,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 7,
+-   "hash": "0eebe786926a",
++   "end_line": 8,
++   "hash": "5f4d077d1118",
+    "hash_own": "37dcecc66bd0",
+    "id": "services/applications/review.py::missing_client_fields",
+    "kind": "function",
+-   "line": 6,
++   "line": 7,
+    "name": "missing_client_fields",
+    "path": "services/applications/review.py",
+    "service": "applications",
+@@ -22835,28 +22898,28 @@
+     {
+      "condition": "app.reviewer_id is None",
+      "error": "DomainError",
+-     "line": 170,
++     "line": 171,
+      "message": "на заявку не назначен проверяющий"
+     },
+     {
+      "condition": "app.reviewer_id != reviewer_id",
+      "error": "AccessDenied",
+-     "line": 172,
++     "line": 173,
+      "message": "заявку проверяет другой проверяющий"
+     },
+     {
+      "condition": "(missing := missing_client_fields(client))",
+      "error": "DomainError",
+-     "line": 175,
++     "line": 176,
+      "message": "f\"не хватает данных клиента: {', '.join(missing)}\""
+     }
+    ],
+-   "end_line": 186,
+-   "hash": "263c830daa5d",
++   "end_line": 187,
++   "hash": "9c0488acaab9",
+    "hash_own": "a93fd5f64c68",
+    "id": "services/applications/service.py::approve",
+    "kind": "function",
+-   "line": 167,
++   "line": 168,
+    "name": "approve",
+    "path": "services/applications/service.py",
+    "service": "applications",
+@@ -22864,12 +22927,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 262,
++   "end_line": 263,
+    "hash": "0615233675ae",
+    "hash_own": "0e175aa13906",
+    "id": "services/applications/service.py::archive",
+    "kind": "function",
+-   "line": 246,
++   "line": 247,
+    "name": "archive",
+    "path": "services/applications/service.py",
+    "service": "applications",
+@@ -22903,16 +22966,16 @@
+     {
+      "condition": "app.stage not in ('draft', 'needs_rework')",
+      "error": "DomainError",
+-     "line": 240,
++     "line": 241,
+      "message": "книги меняют в черновике или на доработке"
+     }
+    ],
+-   "end_line": 243,
++   "end_line": 244,
+    "hash": "cc5f2da3f7bc",
+    "hash_own": "c75b9ccfafbb",
+    "id": "services/applications/service.py::change_books",
+    "kind": "function",
+-   "line": 234,
++   "line": 235,
+    "name": "change_books",
+    "path": "services/applications/service.py",
+    "service": "applications",
+@@ -22924,28 +22987,28 @@
+     {
+      "condition": "app.stage in TERMINAL_STAGES",
+      "error": "DomainError",
+-     "line": 205,
++     "line": 206,
+      "message": "заявка закрыта"
+     },
+     {
+      "condition": "app.kind == 'paid' and app.stage in PAID_VENUE_LOCKED_STAGES",
+      "error": "DomainError",
+-     "line": 207,
++     "line": 208,
+      "message": "после оплаты площадку меняют только через возврат платежа"
+     },
+     {
+      "condition": "venue is None",
+      "error": "NotFound",
+-     "line": 212,
++     "line": 213,
+      "message": "f'площадка {new_venue_id}'"
+     }
+    ],
+-   "end_line": 231,
++   "end_line": 232,
+    "hash": "7b7cfa004862",
+    "hash_own": "4912ee8b1b65",
+    "id": "services/applications/service.py::change_venue",
+    "kind": "function",
+-   "line": 199,
++   "line": 200,
+    "name": "change_venue",
+    "path": "services/applications/service.py",
+    "service": "applications",
+@@ -22957,16 +23020,16 @@
+     {
+      "condition": "app.site_checker_id != site_checker_id",
+      "error": "AccessDenied",
+-     "line": 310,
++     "line": 311,
+      "message": "заявку закрывает проверяющий оператор её площадки"
+     }
+    ],
+-   "end_line": 312,
++   "end_line": 313,
+    "hash": "af8994d08be4",
+    "hash_own": "e0f2cb07a7ab",
+    "id": "services/applications/service.py::close",
+    "kind": "function",
+-   "line": 307,
++   "line": 308,
+    "name": "close",
+    "path": "services/applications/service.py",
+    "service": "applications",
+@@ -23035,12 +23098,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 164,
++   "end_line": 165,
+    "hash": "325452f7ecb6",
+    "hash_own": "c47620491bcf",
+    "id": "services/applications/service.py::mark_ready_for_booking",
+    "kind": "function",
+-   "line": 157,
++   "line": 158,
+    "name": "mark_ready_for_booking",
+    "path": "services/applications/service.py",
+    "service": "applications",
+@@ -23052,16 +23115,16 @@
+     {
+      "condition": "app.reviewer_id != reviewer_id",
+      "error": "AccessDenied",
+-     "line": 194,
++     "line": 195,
+      "message": "заявку проверяет другой проверяющий"
+     }
+    ],
+-   "end_line": 196,
++   "end_line": 197,
+    "hash": "746748d2d78d",
+    "hash_own": "bbd75b18ea97",
+    "id": "services/applications/service.py::return_for_rework",
+    "kind": "function",
+-   "line": 189,
++   "line": 190,
+    "name": "return_for_rework",
+    "path": "services/applications/service.py",
+    "service": "applications",
+@@ -23086,22 +23149,22 @@
+     {
+      "condition": "app.stage != 'archived'",
+      "error": "DomainError",
+-     "line": 276,
++     "line": 277,
+      "message": "заявка не в архиве"
+     },
+     {
+      "condition": "venue_id is not None or book_ids is not None and app.booking_reached_at is not None",
+      "error": "DomainError",
+-     "line": 281,
++     "line": 282,
+      "message": "заявка уже доходила до записи: площадку и книги не меняют"
+     }
+    ],
+-   "end_line": 304,
++   "end_line": 305,
+    "hash": "976b593881f0",
+    "hash_own": "ca94bdb529c7",
+    "id": "services/applications/service.py::unarchive",
+    "kind": "function",
+-   "line": 265,
++   "line": 266,
+    "name": "unarchive",
+    "path": "services/applications/service.py",
+    "service": "applications",
+@@ -23113,29 +23176,29 @@
+     {
+      "condition": "source_application_id is not None and app.reviewer_id != reviewer_id",
+      "error": "AccessDenied",
+-     "line": 143,
++     "line": 144,
+      "message": "обновляет данные клиента только проверяющий заявки"
+     },
+     {
+      "condition": "client is None",
+      "error": "NotFound",
+-     "line": 146,
++     "line": 147,
+      "message": "f'клиент {client_id}'"
+     },
+     {
+      "condition": "unknown",
+      "error": "DomainError",
+-     "line": 149,
++     "line": 150,
+      "message": "f'неизвестные поля клиента: {sorted(unknown)}'"
+     }
+    ],
+    "doc": "Данные клиента обновляет проверяющий заявки, на проверке которой выяснилось изменение.",
+-   "end_line": 154,
+-   "hash": "e66be2942058",
++   "end_line": 155,
++   "hash": "cc42604d951c",
+    "hash_own": "3e44daf68de9",
+    "id": "services/applications/service.py::update_client",
+    "kind": "function",
+-   "line": 131,
++   "line": 132,
+    "name": "update_client",
+    "path": "services/applications/service.py",
+    "service": "applications",
+@@ -33313,50 +33376,50 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 103,
++   "end_line": 108,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_bpm_layer_links_guards_and_code",
+    "kind": "test",
+-   "line": 94,
++   "line": 99,
+    "name": "test_bpm_layer_links_guards_and_code",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 80,
++   "end_line": 85,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_code_layer_finds_links_invisible_to_imports",
+    "kind": "test",
+-   "line": 59,
++   "line": 64,
+    "name": "test_code_layer_finds_links_invisible_to_imports",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(code_model)",
+    "type": "test"
+   },
+   {
+-   "end_line": 132,
++   "end_line": 137,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_entity_resolves_russian_term",
+    "kind": "test",
+-   "line": 129,
++   "line": 134,
+    "name": "test_entity_resolves_russian_term",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(g)",
+    "type": "test"
+   },
+   {
+-   "end_line": 91,
++   "end_line": 96,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_event_layer_resolves_dynamic_subscribers",
+    "kind": "test",
+-   "line": 83,
++   "line": 88,
+    "name": "test_event_layer_resolves_dynamic_subscribers",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 115,
++   "end_line": 120,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_find_entry_maps_russian_task_to_setting",
+    "kind": "test",
+-   "line": 113,
++   "line": 118,
+    "name": "test_find_entry_maps_russian_task_to_setting",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(g)",
+@@ -33373,30 +33436,30 @@
+    "type": "test"
+   },
+   {
+-   "end_line": 126,
++   "end_line": 131,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_impact_respects_budget_and_crosses_services",
+    "kind": "test",
+-   "line": 119,
++   "line": 124,
+    "name": "test_impact_respects_budget_and_crosses_services",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(g, budget)",
+    "type": "test"
+   },
+   {
+-   "end_line": 153,
++   "end_line": 158,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_mcp_log_line",
+    "kind": "test",
+-   "line": 135,
++   "line": 140,
+    "name": "test_mcp_log_line",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(monkeypatch, tmp_path, g)",
+    "type": "test"
+   },
+   {
+-   "end_line": 160,
++   "end_line": 165,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_rule_annotation_binds_to_function",
+    "kind": "test",
+-   "line": 156,
++   "line": 161,
+    "name": "test_rule_annotation_binds_to_function",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "()",
+@@ -35353,45 +35416,65 @@
+    "type": "test"
+   },
+   {
+-   "end_line": 24,
++   "end_line": 28,
+    "id": "tests/test_review.py::test_approve_requires_assigned_reviewer",
+    "kind": "test",
+-   "line": 20,
++   "line": 24,
+    "name": "test_approve_requires_assigned_reviewer",
+    "path": "tests/test_review.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 52,
++   "end_line": 78,
++   "id": "tests/test_review.py::test_client_without_snils_is_not_approved",
++   "kind": "test",
++   "line": 60,
++   "name": "test_client_without_snils_is_not_approved",
++   "path": "tests/test_review.py",
++   "signature": "()",
++   "type": "test"
++  },
++  {
++   "end_line": 57,
+    "id": "tests/test_review.py::test_incomplete_client_goes_to_rework",
+    "kind": "test",
+-   "line": 34,
++   "line": 38,
+    "name": "test_incomplete_client_goes_to_rework",
+    "path": "tests/test_review.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 31,
++   "end_line": 35,
+    "id": "tests/test_review.py::test_only_assigned_reviewer_approves",
+    "kind": "test",
+-   "line": 27,
++   "line": 31,
+    "name": "test_only_assigned_reviewer_approves",
+    "path": "tests/test_review.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 58,
++   "end_line": 99,
+    "id": "tests/test_review.py::test_operator_works_only_with_own_applications",
+    "kind": "test",
+-   "line": 55,
++   "line": 96,
+    "name": "test_operator_works_only_with_own_applications",
+    "path": "tests/test_review.py",
+    "signature": "()",
+    "type": "test"
+   },
++  {
++   "end_line": 93,
++   "id": "tests/test_review.py::test_snils_change_returns_other_applications_to_review",
++   "kind": "test",
++   "line": 81,
++   "name": "test_snils_change_returns_other_applications_to_review",
++   "path": "tests/test_review.py",
++   "signature": "()",
++   "type": "test"
++  },
+   {
+    "end_line": 49,
+    "id": "tests/test_scheduling.py::test_booking_only_on_own_venue_and_sphere",
+@@ -36350,6 +36433,11 @@
+      "pk": false,
+      "type": "VARCHAR"
+     },
++    "snils": {
++     "nullable": true,
++     "pk": false,
++     "type": "VARCHAR"
++    },
+     "updated_at": {
+      "nullable": true,
+      "pk": false,
+diff --git a/knowledge/model/db.json b/knowledge/model/db.json
+index f66b7a4..6384660 100644
+--- a/knowledge/model/db.json
++++ b/knowledge/model/db.json
+@@ -6555,9 +6555,14 @@
+      "name": "updated_at",
+      "nullable": true,
+      "type": "timestamp with time zone"
++    },
++    {
++     "name": "snils",
++     "nullable": true,
++     "type": "text"
+     }
+    ],
+-   "hash": "717aaf47dd8f",
++   "hash": "9152856e9180",
+    "id": "applications.clients",
+    "line": 70,
+    "name": "applications.clients",
+diff --git a/knowledge/model/events.json b/knowledge/model/events.json
+index bf77ce8..e066169 100644
+--- a/knowledge/model/events.json
++++ b/knowledge/model/events.json
+@@ -1150,7 +1150,7 @@
+    "condition": "isinstance(obj, Application) and history.deleted and history.added",
+    "dst": "application.stage_changed",
+    "lines": [
+-    18
++    19
+    ],
+    "src": "services/applications/listeners.py::_domain_events",
+    "type": "publishes"
+@@ -1159,7 +1159,7 @@
+    "condition": "not (isinstance(obj, Application)) and isinstance(obj, Client) and changed",
+    "dst": "client.updated",
+    "lines": [
+-    28
++    29
+    ],
+    "src": "services/applications/listeners.py::_domain_events",
+    "type": "publishes"
+@@ -1167,7 +1167,7 @@
+   {
+    "dst": "application.review_passed",
+    "lines": [
+-    183
++    184
+    ],
+    "src": "services/applications/service.py::approve",
+    "type": "publishes"
+@@ -1175,7 +1175,7 @@
+   {
+    "dst": "application.archived",
+    "lines": [
+-    261
++    262
+    ],
+    "src": "services/applications/service.py::archive",
+    "type": "publishes"
+@@ -1183,7 +1183,7 @@
+   {
+    "dst": "application.venue_changed",
+    "lines": [
+-    220
++    221
+    ],
+    "src": "services/applications/service.py::change_venue",
+    "type": "publishes"
+@@ -1191,7 +1191,7 @@
+   {
+    "dst": "application.ready_for_booking",
+    "lines": [
+-    160
++    161
+    ],
+    "src": "services/applications/service.py::mark_ready_for_booking",
+    "type": "publishes"
+@@ -1199,7 +1199,7 @@
+   {
+    "dst": "application.unarchived",
+    "lines": [
+-    299
++    300
+    ],
+    "src": "services/applications/service.py::unarchive",
+    "type": "publishes"
+diff --git a/knowledge/rules/applications.yaml b/knowledge/rules/applications.yaml
+index bd0cc74..aef9756 100644
+--- a/knowledge/rules/applications.yaml
++++ b/knowledge/rules/applications.yaml
+@@ -271,7 +271,7 @@ rules:
+   implemented_by:
+   - symbol: services/applications/service.py::approve
+     lines: 169-172
+-    hash: 263c830daa5d
++    hash: 9c0488acaab9
+   - symbol: services/applications/service.py::return_for_rework
+     lines: 193-195
+     hash: 746748d2d78d
+@@ -282,12 +282,13 @@ rules:
+   - tests/test_review.py::test_only_assigned_reviewer_approves
+   - tests/test_review.py::test_incomplete_client_goes_to_rework
+   schema_ref: §2 Проверяющий
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-APP-REVIEW-04
+-  title: Заявку нельзя подтвердить без ФИО, паспорта и даты рождения клиента
++  title: Заявку нельзя подтвердить без ФИО, паспорта, СНИЛС и даты рождения клиента
+   text: >
+     При подтверждении проверяются обязательные поля клиента из REQUIRED_CLIENT_FIELDS (full_name, passport,
+-    birth_date); если чего-то нет — DomainError «не хватает данных клиента: …».
++    snils, birth_date); если чего-то нет — DomainError «не хватает данных клиента: …».
+   kind: guard
+   applies_to:
+   - table:applications.clients
+@@ -300,16 +301,18 @@ rules:
+   implemented_by:
+   - symbol: services/applications/service.py::approve
+     lines: 173-175
+-    hash: 263c830daa5d
++    hash: 9c0488acaab9
+   - symbol: services/applications/review.py::missing_client_fields
+     lines: 6-7
+-    hash: 0eebe786926a
++    hash: 5f4d077d1118
+   config:
+   - services/applications/review.py::REQUIRED_CLIENT_FIELDS
+   tested_by:
+   - tests/test_review.py::test_incomplete_client_goes_to_rework
++  - tests/test_review.py::test_client_without_snils_is_not_approved
+   schema_ref: §6 Клиент и проверка данных
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-APP-REVIEW-05
+   title: Этап после проверки зависит от вида заявки и наличия действующего счёта
+   text: >
+@@ -333,7 +336,7 @@ rules:
+   implemented_by:
+   - symbol: services/applications/service.py::approve
+     lines: 177-185
+-    hash: 263c830daa5d
++    hash: 9c0488acaab9
+   - transition: on_review->awaiting_invoice
+     hash: a323ed5d9506
+   - transition: on_review->awaiting_payment
+@@ -346,8 +349,9 @@ rules:
+   - tests/test_kinds.py::test_debt_application_skips_invoice
+   - tests/test_kinds.py::test_social_application_skips_invoice
+   schema_ref: §4 Порядок прохождения заявки
+-  status: verified
++  status: suspect
+   verified_at: '2026-10-23'
++  suspect_since: '2026-10-23'
+ - id: R-APP-BOOKING-01
+   title: Готовность к записи фиксируется и запускает выдачу ссылки на запись
+   text: >
+@@ -384,7 +388,7 @@ rules:
+   title: Данные клиента обновляет проверяющий заявки-источника
+   text: >
+     Если указана заявка-источник, обновить клиента может только её проверяющий (AccessDenied иначе). Разрешены
+-    только поля CLIENT_EDITABLE_FIELDS (full_name, passport, birth_date, email), прочие — DomainError
++    только поля CLIENT_EDITABLE_FIELDS (full_name, passport, snils, birth_date, email), прочие — DomainError
+     «неизвестные поля клиента». Без source_application_id проверка прав не выполняется.
+   kind: permission
+   applies_to:
+@@ -399,21 +403,24 @@ rules:
+   implemented_by:
+   - symbol: services/applications/service.py::update_client
+     lines: 140-153
+-    hash: e66be2942058
++    hash: cc42604d951c
+   config:
+   - services/applications/service.py::CLIENT_EDITABLE_FIELDS
+   tested_by:
+   - tests/test_review.py::test_incomplete_client_goes_to_rework
++  - tests/test_review.py::test_client_without_snils_is_not_approved
+   schema_ref: §6 Клиент и проверка данных
+   discrepancy: >
+     Схема: данные клиента обновляет только проверяющий. Код: при вызове без source_application_id роль
+     и закрепление не проверяются — обновить данные может кто угодно.
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-APP-CLIENT-02
+-  title: Изменение ФИО, паспорта или даты рождения клиента публикует client.updated (слушатель ORM)
++  title: Изменение ФИО, паспорта, СНИЛС или даты рождения клиента публикует client.updated (слушатель
++    ORM)
+   text: >
+-    Слушатель before_flush при изменении полей TRACKED_FIELDS (full_name, passport, birth_date) неявно
+-    ставит clients.updated_at и публикует client.updated с полями и source_application_id (из session.info).
++    Слушатель before_flush при изменении полей TRACKED_FIELDS (full_name, passport, snils, birth_date)
++    неявно ставит clients.updated_at и публикует client.updated с полями и source_application_id (из session.info).
+     Изменение email событие не порождает.
+   kind: effect
+   applies_to:
+@@ -430,11 +437,14 @@ rules:
+   implemented_by:
+   - symbol: services/applications/listeners.py::_domain_events
+     lines: 23-36
+-    hash: ae1acbff72cf
++    hash: 879f4849561e
+   config:
+   - services/applications/listeners.py::TRACKED_FIELDS
++  tested_by:
++  - tests/test_review.py::test_snils_change_returns_other_applications_to_review
+   schema_ref: §6 Клиент и проверка данных
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-APP-CLIENT-03
+   title: Обновление клиента возвращает его заявки из ожидания счёта или оплаты на проверку
+   text: >
+@@ -461,6 +471,8 @@ rules:
+     hash: bb5857d29271
+   - transition: awaiting_payment->on_review
+     hash: bb5857d29271
++  tested_by:
++  - tests/test_review.py::test_snils_change_returns_other_applications_to_review
+   schema_ref: §6 Клиент и проверка данных
+   discrepancy: >
+     Схема: перепроверка не должна приводить к потере заявки. Код: review_started_at остаётся от первой
+@@ -1066,7 +1078,7 @@ rules:
+   implemented_by:
+   - symbol: services/applications/listeners.py::_domain_events
+     lines: 14-22
+-    hash: ae1acbff72cf
++    hash: 879f4849561e
+   - symbol: services/chat/consumers.py::_handler
+     lines: 24-25
+     hash: f46c9b143853
+@@ -1076,7 +1088,8 @@ rules:
+   tested_by:
+   - tests/test_chat_api.py::test_stage_changes_appear_in_chat
+   schema_ref: §15 Чат заявки
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-APP-CALC-01
+   title: Стоимость книг заявки — сумма цен прайса текущей площадки, надбавку берёт billing у представителя
+   text: >
+diff --git a/knowledge/rules/chat.yaml b/knowledge/rules/chat.yaml
+index 43bef1f..300d1f1 100644
+--- a/knowledge/rules/chat.yaml
++++ b/knowledge/rules/chat.yaml
+@@ -423,7 +423,7 @@ rules:
+   implemented_by:
+   - symbol: services/applications/listeners.py::_domain_events
+     lines: 16-22
+-    hash: ae1acbff72cf
++    hash: 879f4849561e
+   - symbol: services/chat/consumers.py::_handler
+     lines: 24-25
+     hash: f46c9b143853
+@@ -432,7 +432,8 @@ rules:
+   tested_by:
+   - tests/test_chat_api.py::test_stage_changes_appear_in_chat
+   schema_ref: §15 Чат заявки
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-CHAT-EVENTS-03
+   title: Смена площадки, архив, возврат из архива и закрытие как дубль пишутся в чат
+   text: >
+diff --git a/migrations/versions/0002_client_snils.py b/migrations/versions/0002_client_snils.py
+new file mode 100644
+index 0000000..5d3f11c
+--- /dev/null
++++ b/migrations/versions/0002_client_snils.py
+@@ -0,0 +1,20 @@
++"""client snils
++
++Revision ID: 0002
++Revises: 0001
++"""
++
++from alembic import op
++
++revision = "0002"
++down_revision = "0001"
++branch_labels = None
++depends_on = None
++
++
++def upgrade() -> None:
++    op.execute("ALTER TABLE applications.clients ADD COLUMN snils text")
++
++
++def downgrade() -> None:
++    op.execute("ALTER TABLE applications.clients DROP COLUMN snils")
+diff --git a/services/applications/listeners.py b/services/applications/listeners.py
+index e5ce2e1..e08e870 100644
+--- a/services/applications/listeners.py
++++ b/services/applications/listeners.py
+@@ -6,9 +6,10 @@ from sqlalchemy.orm import Session
+ from libs import clock, events
+ from services.applications.models import Application, Client
+ 
+-TRACKED_FIELDS = ("full_name", "passport", "birth_date")
++TRACKED_FIELDS = ("full_name", "passport", "snils", "birth_date")
+ 
+ 
++# @rule R-APP-CLIENT-02
+ @event.listens_for(Session, "before_flush")
+ def _domain_events(session: Session, flush_context: Any, instances: Any) -> None:
+     for obj in list(session.dirty):
+diff --git a/services/applications/models.py b/services/applications/models.py
+index f2adf37..7a12dd3 100644
+--- a/services/applications/models.py
++++ b/services/applications/models.py
+@@ -74,6 +74,7 @@ class Client(Base):
+     id: Mapped[int] = mapped_column(primary_key=True)
+     full_name: Mapped[str | None]
+     passport: Mapped[str | None]
++    snils: Mapped[str | None]
+     birth_date: Mapped[date | None]
+     email: Mapped[str]
+     updated_at: Mapped[datetime | None]
+diff --git a/services/applications/review.py b/services/applications/review.py
+index 7088892..6efe110 100644
+--- a/services/applications/review.py
++++ b/services/applications/review.py
+@@ -1,7 +1,8 @@
+ from services.applications.models import Client
+ 
+-REQUIRED_CLIENT_FIELDS = ("full_name", "passport", "birth_date")
++REQUIRED_CLIENT_FIELDS = ("full_name", "passport", "snils", "birth_date")
+ 
+ 
++# @rule R-APP-REVIEW-04
+ def missing_client_fields(client: Client) -> list[str]:
+     return [f for f in REQUIRED_CLIENT_FIELDS if not getattr(client, f)]
+diff --git a/services/applications/service.py b/services/applications/service.py
+index fb24228..dd6a2b4 100644
+--- a/services/applications/service.py
++++ b/services/applications/service.py
+@@ -25,7 +25,7 @@ from services.billing import public as billing
+ 
+ PAID_VENUE_LOCKED_STAGES = ("awaiting_issue", "books_out")
+ TERMINAL_STAGES = ("closed", "closed_duplicate")
+-CLIENT_EDITABLE_FIELDS = ("full_name", "passport", "birth_date", "email")
++CLIENT_EDITABLE_FIELDS = ("full_name", "passport", "snils", "birth_date", "email")
+ 
+ 
+ async def load(session: AsyncSession, application_id: int) -> Application:
+@@ -128,6 +128,7 @@ async def assign_reviewer(session: AsyncSession, application_id: int, reviewer_i
+     return app
+ 
+ 
++# @rule R-APP-CLIENT-01
+ async def update_client(
+     session: AsyncSession,
+     client_id: int,
+diff --git a/tests/factories.py b/tests/factories.py
+index e30f1f1..ecf43d0 100644
+--- a/tests/factories.py
++++ b/tests/factories.py
+@@ -83,6 +83,7 @@ async def seed() -> None:
+                     id=CLIENT_A,
+                     full_name="Анна Петрова",
+                     passport="4510 000001",
++                    snils="112-233-445 95",
+                     birth_date=date(1990, 5, 1),
+                     email="anna@example.org",
+                 ),
+@@ -90,6 +91,7 @@ async def seed() -> None:
+                     id=CLIENT_B,
+                     full_name="Борис Сидоров",
+                     passport="4510 000002",
++                    snils="123-456-789 64",
+                     birth_date=date(1985, 2, 3),
+                     email="boris@example.org",
+                 ),
+@@ -97,6 +99,7 @@ async def seed() -> None:
+                     id=CLIENT_INCOMPLETE,
+                     full_name="Вера Ким",
+                     passport=None,
++                    snils=None,
+                     birth_date=None,
+                     email="vera@example.org",
+                 ),
+diff --git a/tests/test_review.py b/tests/test_review.py
+index 0eae4a7..67fe16b 100644
+--- a/tests/test_review.py
++++ b/tests/test_review.py
+@@ -5,13 +5,17 @@ import pytest
+ from libs.errors import AccessDenied, DomainError
+ from services.applications import service as apps
+ from tests.factories import (
++    BOOK_L1,
++    CLIENT_A,
+     CLIENT_INCOMPLETE,
++    LAW,
+     OPERATOR,
+     OPERATOR_2,
+     REVIEWER,
+     REVIEWER_2,
+     act,
+     new_application,
++    pass_review,
+     stage,
+     submit,
+ )
+@@ -46,12 +50,49 @@ async def test_incomplete_client_goes_to_rework() -> None:
+         REVIEWER,
+         source_application_id=app_id,
+         passport="4510 000003",
++        snils="987-654-321 00",
+         birth_date=date(2000, 1, 1),
+     )
+     await act(apps.approve, app_id, REVIEWER)
+     assert await stage(app_id) == "awaiting_invoice"
+ 
+ 
++async def test_client_without_snils_is_not_approved() -> None:
++    app_id = await new_application(client=CLIENT_INCOMPLETE)
++    await submit(app_id)
++    await act(
++        apps.update_client,
++        CLIENT_INCOMPLETE,
++        REVIEWER,
++        source_application_id=app_id,
++        passport="4510 000003",
++        birth_date=date(2000, 1, 1),
++    )
++    with pytest.raises(DomainError, match="не хватает данных клиента: snils"):
++        await act(apps.approve, app_id, REVIEWER)
++
++    await act(
++        apps.update_client, CLIENT_INCOMPLETE, REVIEWER, source_application_id=app_id, snils="987-654-321 00"
++    )
++    await act(apps.approve, app_id, REVIEWER)
++    assert await stage(app_id) == "awaiting_invoice"
++
++
++async def test_snils_change_returns_other_applications_to_review() -> None:
++    waiting = await new_application(client=CLIENT_A)
++    await pass_review(waiting)
++    assert await stage(waiting) == "awaiting_invoice"
++    source = await new_application(client=CLIENT_A, sphere=LAW, books=(BOOK_L1,))
++    await submit(source)
++
++    client = await act(
++        apps.update_client, CLIENT_A, REVIEWER, source_application_id=source, snils="111-222-333 44"
++    )
++    assert client.updated_at is not None
++    assert await stage(waiting) == "on_review"
++    assert await stage(source) == "on_review"
++
++
+ async def test_operator_works_only_with_own_applications() -> None:
+     app_id = await new_application(operator=OPERATOR)
+     with pytest.raises(AccessDenied):

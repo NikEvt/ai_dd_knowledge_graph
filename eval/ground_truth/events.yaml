@@ -1,0 +1,68 @@
+# Карта событий на v0: кто публикует и кто подписан. Прямых импортов между издателем и подписчиком нет.
+events:
+  application.stage_changed:
+    publishers: [services/applications/listeners.py::_domain_events]
+    consumers: [services/chat/consumers.py::EVENT_TEXT]
+  application.review_passed:
+    publishers: [services/applications/service.py::approve]
+    consumers: [services/applications/consumers.py::on_review_passed]
+  application.ready_for_booking:
+    publishers: [services/applications/service.py::mark_ready_for_booking]
+    consumers: [services/scheduling/consumers.py::on_ready_for_booking]
+  application.venue_changed:
+    publishers: [services/applications/service.py::change_venue]
+    consumers:
+      - services/billing/consumers.py::on_venue_changed
+      - services/scheduling/consumers.py::on_venue_changed
+      - services/chat/consumers.py::EVENT_TEXT
+  application.archived:
+    publishers: [services/applications/service.py::archive]
+    consumers: [services/scheduling/consumers.py::on_archived, services/chat/consumers.py::EVENT_TEXT]
+  application.unarchived:
+    publishers: [services/applications/service.py::unarchive]
+    consumers: [services/billing/consumers.py::on_unarchived, services/chat/consumers.py::EVENT_TEXT]
+  application.closed_duplicate:
+    publishers: [services/applications/dedup.py::close_duplicates]
+    consumers:
+      - services/billing/consumers.py::on_closed_duplicate
+      - services/scheduling/consumers.py::on_closed_duplicate
+      - services/chat/consumers.py::EVENT_TEXT
+  client.updated:
+    publishers: [services/applications/listeners.py::_domain_events]
+    consumers: [services/applications/consumers.py::on_client_updated]
+  venue.settings_changed:
+    publishers: [services/applications/admin.py::set_venue_max_capacity]
+    consumers: [services/scheduling/consumers.py::on_venue_settings_changed]
+  invoice.issued:
+    publishers: [services/billing/service.py::issue_books_invoice, services/billing/service.py::issue_fine_invoice]
+    consumers: [services/applications/consumers.py::on_invoice_issued, services/chat/consumers.py::EVENT_TEXT]
+  invoice.cancelled:
+    publishers: [services/billing/service.py::cancel_invoice]
+    consumers: [services/applications/consumers.py::on_invoice_cancelled, services/chat/consumers.py::EVENT_TEXT]
+  payment.linked:
+    publishers: [services/billing/service.py::link_payment]
+    consumers: [services/chat/consumers.py::EVENT_TEXT]
+  payment.fully_paid:
+    publishers: [services/billing/service.py::link_payment]
+    consumers: [services/applications/consumers.py::on_fully_paid]
+  payment.refunded:
+    publishers: [services/billing/service.py::refund_payment]
+    consumers: [services/applications/consumers.py::on_payment_refunded]
+  booking.created:
+    publishers: [services/scheduling/service.py::book]
+    consumers: [services/notifications/consumers.py::on_booking_created, services/chat/consumers.py::EVENT_TEXT]
+  booking.cancelled:
+    publishers: [services/scheduling/service.py::_cancel]
+    consumers: [services/notifications/consumers.py::on_booking_cancelled, services/chat/consumers.py::EVENT_TEXT]
+  books.issued:
+    publishers: [services/scheduling/service.py::issue_books]
+    consumers: [services/applications/consumers.py::on_books_issued]
+  loan.overdue:
+    publishers: [services/scheduling/jobs.py::flag_overdue]
+    consumers: [services/billing/consumers.py::on_loan_overdue, services/chat/consumers.py::EVENT_TEXT]
+  loan.lost:
+    publishers: [services/scheduling/service.py::mark_lost]
+    consumers: [services/billing/consumers.py::on_loan_lost]
+  loan.damaged:
+    publishers: [services/scheduling/service.py::return_book]
+    consumers: [services/billing/consumers.py::on_loan_damaged]

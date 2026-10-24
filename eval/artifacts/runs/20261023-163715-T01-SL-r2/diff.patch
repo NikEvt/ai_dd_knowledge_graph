@@ -1,0 +1,778 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 8cffa20..b6ed608 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -101,5 +101,5 @@ args = ["run", "--quiet", "python", "mcp/knowledge_server.py"]
+ 
+ События: `application.archived`, `application.closed_duplicate`, `application.ready_for_booking`, `application.review_passed`, `application.stage_changed`, `application.unarchived`, `application.venue_changed`, `booking.cancelled`, `booking.created`, `books.issued`, `client.updated`, `halls.booking_cancelled`, `halls.booking_confirmed`, `halls.booking_created`, `halls.booking_held`, `halls.booking_prepaid`, `halls.invoice_issued`, `halls.payment_received`, `halls.venue_changed`, `inventory.copy_damaged`, `inventory.copy_lost`, `inventory.copy_registered`, `inventory.copy_relocated`, `inventory.copy_written_off`, `inventory.ill_issued`, `inventory.ill_overdue`, `inventory.ill_penalty_accrued`, `inventory.ill_returned`, `inventory.partner_resumed`, `inventory.partner_suspended`, `inventory.transfer_cancelled`, `inventory.transfer_received`, `inventory.transfer_shipped`, `invoice.cancelled`, `invoice.issued`, `lectures.capacity_increased`, `lectures.event_cancelled`, `lectures.event_moved`, `lectures.registration_cancelled`, `lectures.registration_created`, `lectures.seat_released`, `lectures.venue_limit_changed`, `lectures.waitlist_expired`, `lectures.waitlist_promoted`, `loan.damaged`, `loan.lost`, `loan.overdue`, `marketing.campaign_finished`, `marketing.campaign_launched`, `marketing.campaign_prepared`, `marketing.message_bounced`, `marketing.unsubscribed`, `partners.commission_accrued`, `partners.contract_activated`, `partners.contract_expired`, `partners.contract_rate_changed`, `partners.contract_resumed`, `partners.contract_suspended`, `partners.contract_terminated`, `partners.credit_overdue`, `partners.deal_cancelled`, `partners.deal_closed`, `partners.deal_created`, `partners.deal_paid`, `partners.partner_onboarded`, `partners.payout_closed`, `partners.request_approved`, `partners.request_closed_duplicate`, `partners.request_rejected`, `partners.request_submitted`, `payment.fully_paid`, `payment.linked`, `payment.refunded`, `reports.definition_deactivated`, `reports.run_cancelled`, `reports.run_completed`, `reports.run_failed`, `reports.run_requested`, `staff.clearance_expired`, `staff.clearance_granted`, `staff.clearance_revoked`, `staff.employee_dismissed`, `staff.employee_hired`, `staff.employee_transferred`, `staff.employee_updated`, `staff.shift_member_removed`, `staff.shift_understaffed`, `subscriptions.activated`, `subscriptions.closed_duplicate`, `subscriptions.created`, `subscriptions.expired`, `subscriptions.grace_started`, `subscriptions.holder_rejected`, `subscriptions.holder_updated`, `subscriptions.invoice_issued`, `subscriptions.payment_completed`, `subscriptions.refund_required`, `subscriptions.renewed`, `venue.settings_changed`.
+ 
+-Правил в модели: 478 (draft: 456, verified: 22).
++Правил в модели: 478 (draft: 455, suspect: 1, verified: 22).
+ <!-- END L0 -->
+diff --git a/docs/README.md b/docs/README.md
+index dc1a666..99c44a9 100644
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -34,6 +34,6 @@
+ | status | 10 |
+ | symbol | 732 |
+ | table | 81 |
+-| test | 284 |
++| test | 287 |
+ 
+-Правила по статусу: draft — 456, verified — 22
++Правила по статусу: draft — 455, suspect — 1, verified — 22
+diff --git a/docs/coverage.md b/docs/coverage.md
+index 3732683..46ac567 100644
+--- a/docs/coverage.md
++++ b/docs/coverage.md
+@@ -4,14 +4,14 @@
+ 
+ - Правил: 478; verified: 22
+ - Без реализации (implemented_by / enforced_by_db): 8
+-- Без тестов (tested_by): 129
+-- suspect: 0
++- Без тестов (tested_by): 128
++- suspect: 1
+ - Ограничения БД без правил: 9
+ - Проверки в коде без правил: 1
+ 
+-## suspect (0)
++## suspect (1)
+ 
+-- нет
++- R-APP-VENUE-CHANGE-02 (с 2026-10-23) Платной заявке после оплаты площадку не меняют; после выдачи книг — никому
+ 
+ ## Правила без реализации (8)
+ 
+@@ -24,7 +24,7 @@
+ - R-SCHEMA-ROLE-01 Один сотрудник — одна роль
+ - R-SUBSCRIPTIONS-REMIND-01 Напоминание перед концом льготного периода не реализовано
+ 
+-## Правила без тестов (129)
++## Правила без тестов (128)
+ 
+ - R-APP-CREATE-03 В заявке есть книги, и все они из сферы заявки и прайса площадки
+ - R-APP-CORE-01 Сферу и представителя заявки сменить нельзя
+@@ -131,7 +131,6 @@
+ - R-SCHED-FINE-01 Порча и утеря книги порождают штраф в billing
+ - R-SCHED-OVERDUE-01 Фоновая задача отмечает просрочку через 30 дней с выдачи и создаёт штраф
+ - R-SCHED-RESET-01 Архив и закрытие дублем сбрасывают записи, книги и ссылку
+-- R-SCHED-VENUE-CHANGE-01 Смена площадки отменяет запись и выдаёт новую ссылку
+ - R-SCHEMA-NOTIF-01 Ссылка на запись уходит клиенту и представителю письмом
+ - R-SCHEMA-NOTIF-02 Оператор может повторно отправить письмо со ссылкой
+ - R-SCHEMA-ADMIN-01 Размеры штрафов по представителю и площадке задаёт администратор в админке
+diff --git a/docs/entities/applications.applications.md b/docs/entities/applications.applications.md
+index 72629cd..90cd9d6 100644
+--- a/docs/entities/applications.applications.md
++++ b/docs/entities/applications.applications.md
+@@ -89,7 +89,7 @@
+ - R-APP-UNARCHIVE-03 [draft] После возврата из архива счёт аннулируется при изменении суммы, иначе срок оплаты отсчитывается заново
+ 
+ - R-APP-VENUE-CHANGE-01 [draft] Смену площадки выполняет оператор заявки; закрытую заявку не меняют
+-- R-APP-VENUE-CHANGE-02 [draft] Платной заявке после оплаты площадку не меняют; после выдачи книг — никому
++- R-APP-VENUE-CHANGE-02 [suspect] Платной заявке после оплаты площадку не меняют; после выдачи книг — никому
+ - R-APP-VENUE-CHANGE-03 [draft] Смена площадки переназначает проверяющего оператора и запускает реакции billing, scheduling и chat
+ - R-BILL-CANCEL-03 [draft] Аннулирование счёта за книги возвращает заявку в «Ожидает счёта»
+ - R-BILL-INVOICE-08 [verified] Выставление счёта за книги переводит заявку в «Ожидает оплаты»
+diff --git a/docs/reconciliation.md b/docs/reconciliation.md
+index 2cd6fe9..3f379bc 100644
+--- a/docs/reconciliation.md
++++ b/docs/reconciliation.md
+@@ -163,7 +163,7 @@
+ - R-APP-DEDUP-01: Схема: остаётся та заявка, что первой дошла до записи. Код: OPEN_STAGES включает awaiting_issue, поэтому более поздний «победитель» (например, заявка в долг, прошедшая проверку после оплаты платной) закрывает уже дошедшую до записи и оплаченную заявку. Для социальных заявок дедупликация не запускается вообще.
+ - R-APP-REVIEW-02: Схема: назначает и переназначает только руководитель проверяющих. Код: роль вызывающего не проверяется, назначить может любой вызывающий.
+ - R-APP-UNARCHIVE-03: Схема: новый счёт выставляется после проверки, если сумма изменилась. Код: счёт аннулируется сразу при возврате из архива, до проверки; сравнивается только цена по прайсу без надбавки.
+-- R-APP-VENUE-CHANGE-02: Схема: social/debt меняют площадку только до формирования ссылки на запись. Код сервиса этого не проверяет — запрет срабатывает только в триггере БД на flush, без доменного сообщения.
++- R-APP-VENUE-CHANGE-02: Схема: social/debt меняют площадку только до формирования ссылки на запись; для social запрет снят миграцией 0002 (смена разрешена до выдачи книг) — §7 схемы нужно обновить. Код сервиса запрет для debt не проверяет — он срабатывает только в триггере БД на flush, без доменного сообщения.
+ - R-APP-VENUE-CHANGE-03: Схема: до оплаты счёт аннулируется и выставляется заново по прайсу и реквизитам новой площадки. Код: при частичной оплате (paid_amount > 0) счёт не аннулируется, а заявка остаётся в awaiting_payment со счётом на реквизиты и цены старой площадки.
+ - R-BILL-ASSIGN-01: Схема: бухгалтер берёт в работу платные заявки, прошедшие проверку. Код не проверяет этап и роль: заявку можно взять на любом этапе, в том числе в черновике или после закрытия.
+ - R-BILL-CANCEL-02: Схема: аннулирует счёт бухгалтер, закреплённый за заявкой. Код cancel_invoice не проверяет роль и закрепление, причину не требует. HTTP-маршрута для него нет: вызывается только подписчиками.
+@@ -206,7 +206,7 @@
+ - R-SCHED-LINK-03: Схема: по закрытой заявке ссылка не работает. Код: на закрытие заявки (books_out->closed) модуль не подписан, ссылка на сдачу (purpose=return) после закрытия остаётся активной.
+ - R-SCHED-OVERDUE-01: Срок просрочки зашит литералом timedelta(days=30), а не берётся из LOAN_PERIOD_DAYS или loans.due_at. Если настройку изменить, due_at и момент начисления штрафа разойдутся. Схема: «месяц с выдачи», а не фиксированные 30 дней. Книга, возвращённая с опозданием до запуска задачи, штраф не получает.
+ - R-SCHED-RETURN-01: Возврат не связан с записью на сдачу: return_book не требует записи и не закрывает её, поэтому запись с purpose=return остаётся в статусе active после приёма книг.
+-- R-SCHED-VENUE-CHANGE-01: Схема: у социальных заявок и заявок в долг площадку меняют только до формирования ссылки, после выдачи — никогда. Код change_venue блокирует смену только для paid на awaiting_issue и books_out. У debt/social на этапе books_out смена проходит: записи на сдачу отменяются, ссылка на сдачу гаснет, а новая не выпускается (выпуск только при awaiting_issue) — клиент не может записаться на сдачу. Письмо об отмене уходит по шаблону старой площадки (venue_id окна).
++- R-SCHED-VENUE-CHANGE-01: Схема: у заявок в долг площадку меняют только до формирования ссылки, у социальных — до выдачи книг, после выдачи — никогда. Код change_venue блокирует смену только для paid на awaiting_issue и books_out; остальное запрещает триггер forbid_venue_change (books_out и далее — для всех, debt — после ссылки), поэтому на практике новая ссылка выпускается только для social на awaiting_issue. Письмо об отмене уходит по шаблону старой площадки (venue_id окна).
+ - R-SCHEMA-ACCESS-01: в проекте не реализовано: GET /applications/{application_id} (services/applications/api.py::get) отдаёт заявку без идентификации и проверки роли
+ - R-SCHEMA-ADMIN-01: в проекте не реализовано: billing.fine_rates только читается в services/billing/service.py::create_fine; функции или эндпоинта для записи ставок нет ни в applications/admin.py, ни в billing
+ - R-SCHEMA-APP-01: реализовано неявно: operator_id задаётся только при создании и в коде нигде не меняется; в БД защиты нет — trg_applications_core_immutable охраняет только sphere_id и representative_id
+diff --git a/docs/roles.md b/docs/roles.md
+index 0f69d8d..4a8b117 100644
+--- a/docs/roles.md
++++ b/docs/roles.md
+@@ -14,7 +14,7 @@
+ - R-APP-BOOKS-01 [draft] Книги меняют только в черновике или на доработке
+ - R-APP-REVIEW-01 [draft] Отправка на проверку фиксирует начало проверки один раз
+ - R-APP-VENUE-CHANGE-01 [draft] Смену площадки выполняет оператор заявки; закрытую заявку не меняют
+-- R-APP-VENUE-CHANGE-02 [draft] Платной заявке после оплаты площадку не меняют; после выдачи книг — никому
++- R-APP-VENUE-CHANGE-02 [suspect] Платной заявке после оплаты площадку не меняют; после выдачи книг — никому
+ - R-APP-VENUE-CHANGE-03 [draft] Смена площадки переназначает проверяющего оператора и запускает реакции billing, scheduling и chat
+ - R-APP-ARCHIVE-03 [draft] Ручной архив и его последствия — закрытие попытки, сброс записей, сообщение в чат
+ - R-APP-UNARCHIVE-01 [draft] Возврат из архива начинает новую попытку и новую проверку
+diff --git a/docs/rules/README.md b/docs/rules/README.md
+index 2073b20..6d24880 100644
+--- a/docs/rules/README.md
++++ b/docs/rules/README.md
+@@ -4,7 +4,7 @@
+ 
+ | Модуль | Правил | verified | draft | suspect |
+ |---|---|---|---|---|
+-| [applications](applications.md) | 40 | 5 | 35 | 0 |
++| [applications](applications.md) | 40 | 5 | 34 | 1 |
+ | [billing](billing.md) | 36 | 6 | 30 | 0 |
+ | [chat](chat.md) | 22 | 5 | 17 | 0 |
+ | [halls](halls.md) | 35 | 0 | 35 | 0 |
+diff --git a/docs/rules/applications.md b/docs/rules/applications.md
+index 50fc264..65577a8 100644
+--- a/docs/rules/applications.md
++++ b/docs/rules/applications.md
+@@ -264,17 +264,17 @@
+ 
+ ## R-APP-VENUE-CHANGE-02 — Платной заявке после оплаты площадку не меняют; после выдачи книг — никому
+ 
+-`draft` · invariant · §7 Площадки и цены
++`suspect` · invariant · §7 Площадки и цены
+ 
+-Код запрещает смену площадки платной заявки на этапах PAID_VENUE_LOCKED_STAGES (awaiting_issue, books_out): «после оплаты площадку меняют только через возврат платежа». Триггер БД дополнительно запрещает смену для любой заявки на books_out, closed, closed_duplicate, а для social и debt — на любом этапе, кроме draft, on_review, needs_rework, archived (после формирования ссылки на запись). Для social/debt запрет есть только в БД — пользователь получит ошибку check_violation, а не DomainError.
++Код запрещает смену площадки платной заявки на этапах PAID_VENUE_LOCKED_STAGES (awaiting_issue, books_out): «после оплаты площадку меняют только через возврат платежа». Триггер БД дополнительно запрещает смену для любой заявки на books_out, closed, closed_duplicate, а для debt — на любом этапе, кроме draft, on_review, needs_rework, archived (после формирования ссылки на запись). Социальной заявке площадку можно менять и после формирования ссылки — вплоть до выдачи книг (на awaiting_issue); запись при этом сбрасывается и выдаётся новая ссылка (R-SCHED-VENUE-CHANGE-01). Для debt запрет есть только в БД — пользователь получит ошибку check_violation, а не DomainError.
+ 
+ - Реализация: [`services/applications/service.py::change_venue:206-207`](../../services/applications/service.py#L206)
+ - БД: [`trg_applications_venue_lock`](../../migrations/versions/0001_initial.py#L141), [`applications.forbid_venue_change`](../../migrations/versions/0001_initial.py#L125)
+ - Настройки: `services/applications/service.py::PAID_VENUE_LOCKED_STAGES`
+-- Тесты: `tests/test_venue_change.py::test_paid_venue_change_after_payment_forbidden`
++- Тесты: `tests/test_venue_change.py::test_paid_venue_change_after_payment_forbidden`, `tests/test_venue_change.py::test_social_venue_change_after_booking_link_reissues_link`, `tests/test_venue_change.py::test_social_venue_change_after_books_issued_forbidden`, `tests/test_venue_change.py::test_debt_venue_change_after_booking_link_forbidden`
+ - Роли: Оператор
+ - Связанные: R-APP-VENUE-CHANGE-01, R-APP-PAY-04
+-- ⚠ Расхождение со схемой: Схема: social/debt меняют площадку только до формирования ссылки на запись. Код сервиса этого не проверяет — запрет срабатывает только в триггере БД на flush, без доменного сообщения.
++- ⚠ Расхождение со схемой: Схема: social/debt меняют площадку только до формирования ссылки на запись; для social запрет снят миграцией 0002 (смена разрешена до выдачи книг) — §7 схемы нужно обновить. Код сервиса запрет для debt не проверяет — он срабатывает только в триггере БД на flush, без доменного сообщения.
+ 
+ ## R-APP-VENUE-CHANGE-03 — Смена площадки переназначает проверяющего оператора и запускает реакции billing, scheduling и chat
+ 
+diff --git a/docs/rules/scheduling.md b/docs/rules/scheduling.md
+index 5697d25..f8b66a3 100644
+--- a/docs/rules/scheduling.md
++++ b/docs/rules/scheduling.md
+@@ -341,9 +341,10 @@ flag_overdue выбирает выдачи со статусом out без фл
+ На application.venue_changed модуль сбрасывает записи (reason=venue_changed: письмо об отмене, освобождение книг, гашение ссылок). Если заявка на этапе awaiting_issue, выпускается новая ссылка purpose=issue. Проверяющий оператор новой площадки назначается в applications.change_venue.
+ 
+ - Реализация: [`services/scheduling/consumers.py::on_venue_changed:17-21`](../../services/scheduling/consumers.py#L17), [`services/scheduling/service.py::reset_bookings:286-299`](../../services/scheduling/service.py#L286)
++- Тесты: `tests/test_venue_change.py::test_social_venue_change_after_booking_link_reissues_link`
+ - Роли: Оператор
+ - Связанные: R-SCHED-RESET-01, R-SCHED-LINK-01
+-- ⚠ Расхождение со схемой: Схема: у социальных заявок и заявок в долг площадку меняют только до формирования ссылки, после выдачи — никогда. Код change_venue блокирует смену только для paid на awaiting_issue и books_out. У debt/social на этапе books_out смена проходит: записи на сдачу отменяются, ссылка на сдачу гаснет, а новая не выпускается (выпуск только при awaiting_issue) — клиент не может записаться на сдачу. Письмо об отмене уходит по шаблону старой площадки (venue_id окна).
++- ⚠ Расхождение со схемой: Схема: у заявок в долг площадку меняют только до формирования ссылки, у социальных — до выдачи книг, после выдачи — никогда. Код change_venue блокирует смену только для paid на awaiting_issue и books_out; остальное запрещает триггер forbid_venue_change (books_out и далее — для всех, debt — после ссылки), поэтому на практике новая ссылка выпускается только для social на awaiting_issue. Письмо об отмене уходит по шаблону старой площадки (venue_id окна).
+ 
+ ## R-SCHED-CLOSE-01 — Заявку нельзя закрыть, пока есть книги на руках
+ 
+diff --git a/knowledge/model/code.json b/knowledge/model/code.json
+index f46dac8..d813220 100644
+--- a/knowledge/model/code.json
++++ b/knowledge/model/code.json
+@@ -11649,11 +11649,26 @@
+    "src": "services/applications/service.py::approve",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_venue_change.py::test_debt_venue_change_after_booking_link_forbidden",
++   "src": "services/applications/service.py::approve",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_venue_change.py::test_paid_venue_change_after_payment_forbidden",
+    "src": "services/applications/service.py::approve",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_venue_change.py::test_social_venue_change_after_booking_link_reissues_link",
++   "src": "services/applications/service.py::approve",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_venue_change.py::test_social_venue_change_after_books_issued_forbidden",
++   "src": "services/applications/service.py::approve",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_venue_change.py::test_venue_change_before_payment_reissues_invoice",
+    "src": "services/applications/service.py::approve",
+@@ -11774,16 +11789,36 @@
+    "src": "services/applications/service.py::assign_reviewer",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_venue_change.py::test_debt_venue_change_after_booking_link_forbidden",
++   "src": "services/applications/service.py::assign_reviewer",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_venue_change.py::test_paid_venue_change_after_payment_forbidden",
+    "src": "services/applications/service.py::assign_reviewer",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_venue_change.py::test_social_venue_change_after_booking_link_reissues_link",
++   "src": "services/applications/service.py::assign_reviewer",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_venue_change.py::test_social_venue_change_after_books_issued_forbidden",
++   "src": "services/applications/service.py::assign_reviewer",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_venue_change.py::test_venue_change_before_payment_reissues_invoice",
+    "src": "services/applications/service.py::assign_reviewer",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_venue_change.py::test_debt_venue_change_after_booking_link_forbidden",
++   "src": "services/applications/service.py::change_venue",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_venue_change.py::test_new_venue_must_have_sphere",
+    "src": "services/applications/service.py::change_venue",
+@@ -11794,6 +11829,16 @@
+    "src": "services/applications/service.py::change_venue",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_venue_change.py::test_social_venue_change_after_booking_link_reissues_link",
++   "src": "services/applications/service.py::change_venue",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_venue_change.py::test_social_venue_change_after_books_issued_forbidden",
++   "src": "services/applications/service.py::change_venue",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_venue_change.py::test_venue_change_before_payment_reissues_invoice",
+    "src": "services/applications/service.py::change_venue",
+@@ -11954,6 +11999,11 @@
+    "src": "services/applications/service.py::create_application",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_venue_change.py::test_debt_venue_change_after_booking_link_forbidden",
++   "src": "services/applications/service.py::create_application",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_venue_change.py::test_new_venue_must_have_sphere",
+    "src": "services/applications/service.py::create_application",
+@@ -11964,6 +12014,16 @@
+    "src": "services/applications/service.py::create_application",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_venue_change.py::test_social_venue_change_after_booking_link_reissues_link",
++   "src": "services/applications/service.py::create_application",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_venue_change.py::test_social_venue_change_after_books_issued_forbidden",
++   "src": "services/applications/service.py::create_application",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_venue_change.py::test_venue_change_before_payment_reissues_invoice",
+    "src": "services/applications/service.py::create_application",
+@@ -12029,6 +12089,11 @@
+    "src": "services/applications/service.py::load",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_venue_change.py::test_social_venue_change_after_booking_link_reissues_link",
++   "src": "services/applications/service.py::load",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_venue_change.py::test_venue_change_before_payment_reissues_invoice",
+    "src": "services/applications/service.py::load",
+@@ -12159,11 +12224,26 @@
+    "src": "services/applications/service.py::submit_for_review",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_venue_change.py::test_debt_venue_change_after_booking_link_forbidden",
++   "src": "services/applications/service.py::submit_for_review",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_venue_change.py::test_paid_venue_change_after_payment_forbidden",
+    "src": "services/applications/service.py::submit_for_review",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_venue_change.py::test_social_venue_change_after_booking_link_reissues_link",
++   "src": "services/applications/service.py::submit_for_review",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_venue_change.py::test_social_venue_change_after_books_issued_forbidden",
++   "src": "services/applications/service.py::submit_for_review",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_venue_change.py::test_venue_change_before_payment_reissues_invoice",
+    "src": "services/applications/service.py::submit_for_review",
+@@ -15784,6 +15864,21 @@
+    "src": "services/scheduling/service.py::active_link",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_venue_change.py::test_debt_venue_change_after_booking_link_forbidden",
++   "src": "services/scheduling/service.py::active_link",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_venue_change.py::test_social_venue_change_after_booking_link_reissues_link",
++   "src": "services/scheduling/service.py::active_link",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_venue_change.py::test_social_venue_change_after_books_issued_forbidden",
++   "src": "services/scheduling/service.py::active_link",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_kinds.py::test_social_application_skips_invoice",
+    "src": "services/scheduling/service.py::book",
+@@ -15834,6 +15929,16 @@
+    "src": "services/scheduling/service.py::book",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_venue_change.py::test_social_venue_change_after_booking_link_reissues_link",
++   "src": "services/scheduling/service.py::book",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_venue_change.py::test_social_venue_change_after_books_issued_forbidden",
++   "src": "services/scheduling/service.py::book",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_scheduling.py::test_client_cannot_cancel_less_than_two_days_before",
+    "src": "services/scheduling/service.py::cancel_booking",
+@@ -15904,6 +16009,16 @@
+    "src": "services/scheduling/service.py::create_slot",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_venue_change.py::test_social_venue_change_after_booking_link_reissues_link",
++   "src": "services/scheduling/service.py::create_slot",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_venue_change.py::test_social_venue_change_after_books_issued_forbidden",
++   "src": "services/scheduling/service.py::create_slot",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_scheduling.py::test_free_slots_hide_full_windows",
+    "src": "services/scheduling/service.py::free_slots",
+@@ -15929,6 +16044,16 @@
+    "src": "services/scheduling/service.py::issue_books",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_venue_change.py::test_social_venue_change_after_booking_link_reissues_link",
++   "src": "services/scheduling/service.py::issue_books",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_venue_change.py::test_social_venue_change_after_books_issued_forbidden",
++   "src": "services/scheduling/service.py::issue_books",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_scheduling.py::test_no_show_cancels_booking_and_allows_rebooking",
+    "src": "services/scheduling/service.py::mark_no_show",
+@@ -33313,50 +33438,50 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 103,
++   "end_line": 108,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_bpm_layer_links_guards_and_code",
+    "kind": "test",
+-   "line": 94,
++   "line": 99,
+    "name": "test_bpm_layer_links_guards_and_code",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 80,
++   "end_line": 85,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_code_layer_finds_links_invisible_to_imports",
+    "kind": "test",
+-   "line": 59,
++   "line": 64,
+    "name": "test_code_layer_finds_links_invisible_to_imports",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(code_model)",
+    "type": "test"
+   },
+   {
+-   "end_line": 132,
++   "end_line": 137,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_entity_resolves_russian_term",
+    "kind": "test",
+-   "line": 129,
++   "line": 134,
+    "name": "test_entity_resolves_russian_term",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(g)",
+    "type": "test"
+   },
+   {
+-   "end_line": 91,
++   "end_line": 96,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_event_layer_resolves_dynamic_subscribers",
+    "kind": "test",
+-   "line": 83,
++   "line": 88,
+    "name": "test_event_layer_resolves_dynamic_subscribers",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 115,
++   "end_line": 120,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_find_entry_maps_russian_task_to_setting",
+    "kind": "test",
+-   "line": 113,
++   "line": 118,
+    "name": "test_find_entry_maps_russian_task_to_setting",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(g)",
+@@ -33373,30 +33498,30 @@
+    "type": "test"
+   },
+   {
+-   "end_line": 126,
++   "end_line": 131,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_impact_respects_budget_and_crosses_services",
+    "kind": "test",
+-   "line": 119,
++   "line": 124,
+    "name": "test_impact_respects_budget_and_crosses_services",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(g, budget)",
+    "type": "test"
+   },
+   {
+-   "end_line": 153,
++   "end_line": 158,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_mcp_log_line",
+    "kind": "test",
+-   "line": 135,
++   "line": 140,
+    "name": "test_mcp_log_line",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(monkeypatch, tmp_path, g)",
+    "type": "test"
+   },
+   {
+-   "end_line": 160,
++   "end_line": 165,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_rule_annotation_binds_to_function",
+    "kind": "test",
+-   "line": 156,
++   "line": 161,
+    "name": "test_rule_annotation_binds_to_function",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "()",
+@@ -36114,40 +36239,70 @@
+    "type": "test"
+   },
+   {
+-   "end_line": 35,
++   "end_line": 102,
++   "id": "tests/test_venue_change.py::test_debt_venue_change_after_booking_link_forbidden",
++   "kind": "test",
++   "line": 97,
++   "name": "test_debt_venue_change_after_booking_link_forbidden",
++   "path": "tests/test_venue_change.py",
++   "signature": "()",
++   "type": "test"
++  },
++  {
++   "end_line": 46,
+    "id": "tests/test_venue_change.py::test_new_venue_must_have_sphere",
+    "kind": "test",
+-   "line": 32,
++   "line": 43,
+    "name": "test_new_venue_must_have_sphere",
+    "path": "tests/test_venue_change.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 55,
++   "end_line": 66,
+    "id": "tests/test_venue_change.py::test_paid_venue_change_after_payment_forbidden",
+    "kind": "test",
+-   "line": 52,
++   "line": 63,
+    "name": "test_paid_venue_change_after_payment_forbidden",
+    "path": "tests/test_venue_change.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 49,
++   "end_line": 86,
++   "id": "tests/test_venue_change.py::test_social_venue_change_after_booking_link_reissues_link",
++   "kind": "test",
++   "line": 69,
++   "name": "test_social_venue_change_after_booking_link_reissues_link",
++   "path": "tests/test_venue_change.py",
++   "signature": "()",
++   "type": "test"
++  },
++  {
++   "end_line": 94,
++   "id": "tests/test_venue_change.py::test_social_venue_change_after_books_issued_forbidden",
++   "kind": "test",
++   "line": 89,
++   "name": "test_social_venue_change_after_books_issued_forbidden",
++   "path": "tests/test_venue_change.py",
++   "signature": "()",
++   "type": "test"
++  },
++  {
++   "end_line": 60,
+    "id": "tests/test_venue_change.py::test_venue_change_before_payment_reissues_invoice",
+    "kind": "test",
+-   "line": 38,
++   "line": 49,
+    "name": "test_venue_change_before_payment_reissues_invoice",
+    "path": "tests/test_venue_change.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 29,
++   "end_line": 40,
+    "id": "tests/test_venue_change.py::test_venue_change_reassigns_site_checker",
+    "kind": "test",
+-   "line": 24,
++   "line": 35,
+    "name": "test_venue_change_reassigns_site_checker",
+    "path": "tests/test_venue_change.py",
+    "signature": "()",
+diff --git a/knowledge/model/db.json b/knowledge/model/db.json
+index f66b7a4..d1d91cc 100644
+--- a/knowledge/model/db.json
++++ b/knowledge/model/db.json
+@@ -2223,8 +2223,8 @@
+    "type": "db_constraint"
+   },
+   {
+-   "body": "BEGIN\n    IF NEW.venue_id IS DISTINCT FROM OLD.venue_id THEN\n        IF OLD.stage IN ('books_out','closed','closed_duplicate') THEN\n            RAISE EXCEPTION 'venue change forbidden after books were issued'\n                USING ERRCODE = 'check_violation';\n        END IF;\n        IF OLD.kind IN ('social','debt')\n           AND OLD.stage NOT IN ('draft','on_review','needs_rework','archived') THEN\n            RAISE EXCEPTION 'venue change forbidden after booking link for % application', OLD.kind\n                USING ERRCODE = 'check_violation';\n        END IF;\n    END IF;\n    RETURN NEW;\nEND",
+-   "hash": "5116886e4d27",
++   "body": "BEGIN\n    IF NEW.venue_id IS DISTINCT FROM OLD.venue_id THEN\n        IF OLD.stage IN ('books_out','closed','closed_duplicate') THEN\n            RAISE EXCEPTION 'venue change forbidden after books were issued'\n                USING ERRCODE = 'check_violation';\n        END IF;\n        IF OLD.kind IN ('debt')\n           AND OLD.stage NOT IN ('draft','on_review','needs_rework','archived') THEN\n            RAISE EXCEPTION 'venue change forbidden after booking link for % application', OLD.kind\n                USING ERRCODE = 'check_violation';\n        END IF;\n    END IF;\n    RETURN NEW;\nEND",
++   "hash": "1f59670e22e3",
+    "id": "applications.forbid_venue_change",
+    "kind": "function",
+    "language": "plpgsql",
+diff --git a/knowledge/rules/applications.yaml b/knowledge/rules/applications.yaml
+index bd0cc74..f592958 100644
+--- a/knowledge/rules/applications.yaml
++++ b/knowledge/rules/applications.yaml
+@@ -669,9 +669,11 @@ rules:
+   text: >
+     Код запрещает смену площадки платной заявки на этапах PAID_VENUE_LOCKED_STAGES (awaiting_issue, books_out):
+     «после оплаты площадку меняют только через возврат платежа». Триггер БД дополнительно запрещает смену
+-    для любой заявки на books_out, closed, closed_duplicate, а для social и debt — на любом этапе, кроме
+-    draft, on_review, needs_rework, archived (после формирования ссылки на запись). Для social/debt запрет
+-    есть только в БД — пользователь получит ошибку check_violation, а не DomainError.
++    для любой заявки на books_out, closed, closed_duplicate, а для debt — на любом этапе, кроме draft,
++    on_review, needs_rework, archived (после формирования ссылки на запись). Социальной заявке площадку
++    можно менять и после формирования ссылки — вплоть до выдачи книг (на awaiting_issue); запись при этом
++    сбрасывается и выдаётся новая ссылка (R-SCHED-VENUE-CHANGE-01). Для debt запрет есть только в БД —
++    пользователь получит ошибку check_violation, а не DomainError.
+   kind: invariant
+   applies_to:
+   - table:applications.applications
+@@ -689,16 +691,21 @@ rules:
+   - constraint: trg_applications_venue_lock
+     hash: 76edd93dbab6
+   - constraint: applications.forbid_venue_change
+-    hash: 5116886e4d27
++    hash: 1f59670e22e3
+   config:
+   - services/applications/service.py::PAID_VENUE_LOCKED_STAGES
+   tested_by:
+   - tests/test_venue_change.py::test_paid_venue_change_after_payment_forbidden
++  - tests/test_venue_change.py::test_social_venue_change_after_booking_link_reissues_link
++  - tests/test_venue_change.py::test_social_venue_change_after_books_issued_forbidden
++  - tests/test_venue_change.py::test_debt_venue_change_after_booking_link_forbidden
+   schema_ref: §7 Площадки и цены
+   discrepancy: >
+-    Схема: social/debt меняют площадку только до формирования ссылки на запись. Код сервиса этого не проверяет
+-    — запрет срабатывает только в триггере БД на flush, без доменного сообщения.
+-  status: draft
++    Схема: social/debt меняют площадку только до формирования ссылки на запись; для social запрет снят
++    миграцией 0002 (смена разрешена до выдачи книг) — §7 схемы нужно обновить. Код сервиса запрет для
++    debt не проверяет — он срабатывает только в триггере БД на flush, без доменного сообщения.
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-APP-VENUE-CHANGE-03
+   title: Смена площадки переназначает проверяющего оператора и запускает реакции billing, scheduling и
+     chat
+diff --git a/knowledge/rules/scheduling.yaml b/knowledge/rules/scheduling.yaml
+index a3955d7..4604434 100644
+--- a/knowledge/rules/scheduling.yaml
++++ b/knowledge/rules/scheduling.yaml
+@@ -913,12 +913,14 @@ rules:
+   - symbol: services/scheduling/service.py::reset_bookings
+     lines: 286-299
+     hash: c39779723a67
++  tested_by:
++  - tests/test_venue_change.py::test_social_venue_change_after_booking_link_reissues_link
+   schema_ref: §7 Площадки и цены
+   discrepancy: >
+-    Схема: у социальных заявок и заявок в долг площадку меняют только до формирования ссылки, после выдачи
+-    — никогда. Код change_venue блокирует смену только для paid на awaiting_issue и books_out. У debt/social
+-    на этапе books_out смена проходит: записи на сдачу отменяются, ссылка на сдачу гаснет, а новая не
+-    выпускается (выпуск только при awaiting_issue) — клиент не может записаться на сдачу. Письмо об отмене
++    Схема: у заявок в долг площадку меняют только до формирования ссылки, у социальных — до выдачи книг,
++    после выдачи — никогда. Код change_venue блокирует смену только для paid на awaiting_issue и books_out;
++    остальное запрещает триггер forbid_venue_change (books_out и далее — для всех, debt — после ссылки),
++    поэтому на практике новая ссылка выпускается только для social на awaiting_issue. Письмо об отмене
+     уходит по шаблону старой площадки (venue_id окна).
+   status: draft
+ - id: R-SCHED-CLOSE-01
+diff --git a/migrations/versions/0002_social_venue_change.py b/migrations/versions/0002_social_venue_change.py
+new file mode 100644
+index 0000000..371812d
+--- /dev/null
++++ b/migrations/versions/0002_social_venue_change.py
+@@ -0,0 +1,40 @@
++"""social applications may change venue after booking link, until books are issued
++
++Revision ID: 0002
++Revises: 0001
++"""
++
++from alembic import op
++
++revision = "0002"
++down_revision = "0001"
++branch_labels = None
++depends_on = None
++
++
++def _venue_lock(locked_kinds: str) -> str:
++    return f"""
++CREATE OR REPLACE FUNCTION applications.forbid_venue_change() RETURNS trigger AS $$
++BEGIN
++    IF NEW.venue_id IS DISTINCT FROM OLD.venue_id THEN
++        IF OLD.stage IN ('books_out','closed','closed_duplicate') THEN
++            RAISE EXCEPTION 'venue change forbidden after books were issued'
++                USING ERRCODE = 'check_violation';
++        END IF;
++        IF OLD.kind IN ({locked_kinds})
++           AND OLD.stage NOT IN ('draft','on_review','needs_rework','archived') THEN
++            RAISE EXCEPTION 'venue change forbidden after booking link for % application', OLD.kind
++                USING ERRCODE = 'check_violation';
++        END IF;
++    END IF;
++    RETURN NEW;
++END $$ LANGUAGE plpgsql
++"""
++
++
++def upgrade() -> None:
++    op.get_bind().exec_driver_sql(_venue_lock("'debt'"))
++
++
++def downgrade() -> None:
++    op.get_bind().exec_driver_sql(_venue_lock("'social','debt'"))
+diff --git a/tests/test_venue_change.py b/tests/test_venue_change.py
+index 9d00238..2f61b1e 100644
+--- a/tests/test_venue_change.py
++++ b/tests/test_venue_change.py
+@@ -1,23 +1,34 @@
++from datetime import timedelta
++
+ import pytest
+ 
+ from libs.errors import DomainError
+ from services.applications import service as apps
+ from services.billing.public import active_books_invoice
++from services.scheduling.models import Booking
+ from tests.factories import (
+     BOOK_L1,
+     CHECKER,
++    HISTORY,
+     KZN,
+     LAW,
++    MSK,
+     OPERATOR,
++    REP_DEBT,
++    T0,
+     TVR,
+     act,
+     application,
++    book,
+     invoice,
++    issue,
+     new_application,
+     paid_application,
+     pass_review,
+     read,
++    slot,
+     stage,
++    token,
+ )
+ 
+ 
+@@ -53,3 +64,39 @@ async def test_paid_venue_change_after_payment_forbidden() -> None:
+     app_id, _ = await paid_application()
+     with pytest.raises(DomainError, match="возврат платежа"):
+         await act(apps.change_venue, app_id, OPERATOR, KZN)
++
++
++async def test_social_venue_change_after_booking_link_reissues_link() -> None:
++    app_id = await new_application(social=True)
++    await pass_review(app_id)
++    old_token = await token(app_id)
++    booking_id = await book(app_id, await slot(MSK, HISTORY, T0 + timedelta(days=3)))
++
++    await act(apps.change_venue, app_id, OPERATOR, KZN)
++
++    app = await application(app_id)
++    assert app.venue_id == KZN
++    assert app.site_checker_id == CHECKER[KZN]
++    assert app.stage == "awaiting_issue"
++    assert (await read(lambda s: s.get(Booking, booking_id))).status == "cancelled"
++    new_token = await token(app_id)
++    assert new_token is not None and new_token != old_token
++
++    await issue(app_id, venue=KZN)
++    assert await stage(app_id) == "books_out"
++
++
++async def test_social_venue_change_after_books_issued_forbidden() -> None:
++    app_id = await new_application(social=True)
++    await pass_review(app_id)
++    await issue(app_id)
++    with pytest.raises(Exception, match="after books were issued"):
++        await act(apps.change_venue, app_id, OPERATOR, KZN)
++
++
++async def test_debt_venue_change_after_booking_link_forbidden() -> None:
++    app_id = await new_application(rep=REP_DEBT)
++    await pass_review(app_id)
++    assert await token(app_id) is not None
++    with pytest.raises(Exception, match="booking link for debt"):
++        await act(apps.change_venue, app_id, OPERATOR, KZN)

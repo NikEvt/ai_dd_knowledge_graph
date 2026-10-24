@@ -1,0 +1,3049 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 8cffa20..041a122 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -101,5 +101,5 @@ args = ["run", "--quiet", "python", "mcp/knowledge_server.py"]
+ 
+ События: `application.archived`, `application.closed_duplicate`, `application.ready_for_booking`, `application.review_passed`, `application.stage_changed`, `application.unarchived`, `application.venue_changed`, `booking.cancelled`, `booking.created`, `books.issued`, `client.updated`, `halls.booking_cancelled`, `halls.booking_confirmed`, `halls.booking_created`, `halls.booking_held`, `halls.booking_prepaid`, `halls.invoice_issued`, `halls.payment_received`, `halls.venue_changed`, `inventory.copy_damaged`, `inventory.copy_lost`, `inventory.copy_registered`, `inventory.copy_relocated`, `inventory.copy_written_off`, `inventory.ill_issued`, `inventory.ill_overdue`, `inventory.ill_penalty_accrued`, `inventory.ill_returned`, `inventory.partner_resumed`, `inventory.partner_suspended`, `inventory.transfer_cancelled`, `inventory.transfer_received`, `inventory.transfer_shipped`, `invoice.cancelled`, `invoice.issued`, `lectures.capacity_increased`, `lectures.event_cancelled`, `lectures.event_moved`, `lectures.registration_cancelled`, `lectures.registration_created`, `lectures.seat_released`, `lectures.venue_limit_changed`, `lectures.waitlist_expired`, `lectures.waitlist_promoted`, `loan.damaged`, `loan.lost`, `loan.overdue`, `marketing.campaign_finished`, `marketing.campaign_launched`, `marketing.campaign_prepared`, `marketing.message_bounced`, `marketing.unsubscribed`, `partners.commission_accrued`, `partners.contract_activated`, `partners.contract_expired`, `partners.contract_rate_changed`, `partners.contract_resumed`, `partners.contract_suspended`, `partners.contract_terminated`, `partners.credit_overdue`, `partners.deal_cancelled`, `partners.deal_closed`, `partners.deal_created`, `partners.deal_paid`, `partners.partner_onboarded`, `partners.payout_closed`, `partners.request_approved`, `partners.request_closed_duplicate`, `partners.request_rejected`, `partners.request_submitted`, `payment.fully_paid`, `payment.linked`, `payment.refunded`, `reports.definition_deactivated`, `reports.run_cancelled`, `reports.run_completed`, `reports.run_failed`, `reports.run_requested`, `staff.clearance_expired`, `staff.clearance_granted`, `staff.clearance_revoked`, `staff.employee_dismissed`, `staff.employee_hired`, `staff.employee_transferred`, `staff.employee_updated`, `staff.shift_member_removed`, `staff.shift_understaffed`, `subscriptions.activated`, `subscriptions.closed_duplicate`, `subscriptions.created`, `subscriptions.expired`, `subscriptions.grace_started`, `subscriptions.holder_rejected`, `subscriptions.holder_updated`, `subscriptions.invoice_issued`, `subscriptions.payment_completed`, `subscriptions.refund_required`, `subscriptions.renewed`, `venue.settings_changed`.
+ 
+-Правил в модели: 478 (draft: 456, verified: 22).
++Правил в модели: 479 (draft: 457, verified: 22).
+ <!-- END L0 -->
+diff --git a/docs/README.md b/docs/README.md
+index dc1a666..3cccde7 100644
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -29,11 +29,11 @@
+ | event | 99 |
+ | job | 24 |
+ | role | 6 |
+-| rule | 478 |
++| rule | 479 |
+ | service | 5 |
+ | status | 10 |
+-| symbol | 732 |
++| symbol | 733 |
+ | table | 81 |
+-| test | 284 |
++| test | 287 |
+ 
+-Правила по статусу: draft — 456, verified — 22
++Правила по статусу: draft — 457, verified — 22
+diff --git a/docs/config.md b/docs/config.md
+index a583dd7..3dfef48 100644
+--- a/docs/config.md
++++ b/docs/config.md
+@@ -8,10 +8,10 @@
+ |---|---|---|---|
+ | [`engine.py::PROCESS_FILE`](../libs/bpm/engine.py#L13) | `Path(__file__).resolve().parents[2] / 'bpm' / 'application_process.yaml'` |  | [`engine.py::process`](../libs/bpm/engine.py#L33) |
+ | [`relay.py::STREAM_PREFIX`](../libs/events/relay.py#L13) | `events:` |  | [`relay.py::consume_forever`](../libs/events/relay.py#L39)<br>[`relay.py::relay_forever`](../libs/events/relay.py#L16) |
+-| [`settings.py::CLIENT_RESCHEDULE_MIN_DAYS`](../libs/settings.py#L14) | `2` | Клиент может перенести или отменить визит не позднее чем за столько дней. | [`service.py::cancel_booking`](../services/scheduling/service.py#L193) |
++| [`settings.py::CLIENT_RESCHEDULE_MIN_DAYS`](../libs/settings.py#L14) | `2` | Клиент может перенести или отменить визит не позднее чем за столько дней. | [`service.py::cancel_booking`](../services/scheduling/service.py#L237) |
+ | [`settings.py::DATABASE_URL`](../libs/settings.py#L4) | `os.environ.get('DATABASE_URL', f'postgresql+asyncpg://erp:erp@localhost:{DB_POR…` |  | [`db.py::engine`](../libs/db.py#L27) |
+ | [`settings.py::DB_PORT`](../libs/settings.py#L3) | `os.environ.get('DB_PORT', '55432')` |  | — |
+-| [`settings.py::LOAN_PERIOD_DAYS`](../libs/settings.py#L8) | `30` | Срок пользования книгами с даты выдачи. | [`service.py::issue_books`](../services/scheduling/service.py#L223) |
++| [`settings.py::LOAN_PERIOD_DAYS`](../libs/settings.py#L8) | `30` | Срок пользования книгами с даты выдачи. | [`service.py::issue_books`](../services/scheduling/service.py#L267) |
+ | [`settings.py::PAYMENT_ARCHIVE_DAYS`](../libs/settings.py#L12) | `30` | Платная заявка уходит в архив, если счёт не оплачен за столько дней. | [`jobs.py::archive_stale`](../services/applications/jobs.py#L14) |
+ | [`settings.py::REDIS_URL`](../libs/settings.py#L5) | `os.environ.get('REDIS_URL', f"redis://localhost:{os.environ.get('REDIS_PORT', '…` |  | [`relay.py::consume_forever`](../libs/events/relay.py#L39)<br>[`relay.py::relay_forever`](../libs/events/relay.py#L16) |
+ | [`settings.py::REVIEW_ARCHIVE_DAYS`](../libs/settings.py#L10) | `30` | Заявка уходит в архив, если с начала проверки прошло столько дней, а данные не получены. | [`jobs.py::archive_stale`](../services/applications/jobs.py#L14) |
+@@ -98,7 +98,7 @@
+ | [`settings.py::RUNS_COMPLETED_METRIC`](../services/reports/settings.py#L25) | `reports.runs_completed` | Служебная метрика: число построенных отчётов за день в разрезе кода отчёта. | [`consumers.py::count_completed_run`](../services/reports/consumers.py#L21) |
+ | [`settings.py::RUNS_PAGE_LIMIT`](../services/reports/settings.py#L22) | `100` | Сколько запусков отдаёт список за один раз. | [`service.py::list_runs`](../services/reports/service.py#L345) |
+ | [`settings.py::RUN_TIMEOUT_MINUTES`](../services/reports/settings.py#L6) | `30` | Запуск, который строится дольше этого, считается зависшим и помечается неуспешным. | [`jobs.py::fail_stuck_runs`](../services/reports/jobs.py#L42) |
+-| [`service.py::CLIENT_SIDE`](../services/scheduling/service.py#L14) | `['client', 'representative']` |  | [`service.py::cancel_booking`](../services/scheduling/service.py#L193) |
++| [`service.py::CLIENT_SIDE`](../services/scheduling/service.py#L14) | `['client', 'representative']` |  | [`service.py::cancel_booking`](../services/scheduling/service.py#L237) |
+ | [`listeners.py::TRACKED_FIELDS`](../services/staff/listeners.py#L9) | `['full_name', 'passport', 'snils', 'birth_date', 'role']` |  | [`listeners.py::_employee_changes`](../services/staff/listeners.py#L13) |
+ | [`service.py::EDITABLE_FIELDS`](../services/staff/service.py#L24) | `['full_name', 'passport', 'snils', 'birth_date', 'role']` |  | [`service.py::update_employee`](../services/staff/service.py#L125) |
+ | [`settings.py::BRIEFING_VALID_DAYS`](../services/staff/settings.py#L25) | `30` | Инструктаж годится для оформления допуска, если проведён не раньше чем столько дней назад. | [`service.py::_fresh_briefing`](../services/staff/service.py#L486)<br>[`service.py::grant_clearance`](../services/staff/service.py#L496) |
+diff --git a/docs/coverage.md b/docs/coverage.md
+index 3732683..21bdabd 100644
+--- a/docs/coverage.md
++++ b/docs/coverage.md
+@@ -2,7 +2,7 @@
+ 
+ # Покрытие модели
+ 
+-- Правил: 478; verified: 22
++- Правил: 479; verified: 22
+ - Без реализации (implemented_by / enforced_by_db): 8
+ - Без тестов (tested_by): 129
+ - suspect: 0
+diff --git a/docs/entities/README.md b/docs/entities/README.md
+index d775404..23d01f2 100644
+--- a/docs/entities/README.md
++++ b/docs/entities/README.md
+@@ -67,7 +67,7 @@
+ | [scheduling.bookings](scheduling.bookings.md) | 7 | 4 | models.py::Booking |
+ | [scheduling.holds](scheduling.holds.md) | 2 | 0 | models.py::Hold |
+ | [scheduling.loans](scheduling.loans.md) | 9 | 1 | models.py::Loan |
+-| [scheduling.slots](scheduling.slots.md) | 6 | 2 | models.py::Slot |
++| [scheduling.slots](scheduling.slots.md) | 7 | 2 | models.py::Slot |
+ | [scheduling.venue_limits](scheduling.venue_limits.md) | 2 | 1 | models.py::VenueLimit |
+ | [staff.alerts](staff.alerts.md) | 8 | 2 | models.py::Alert |
+ | [staff.assignments](staff.assignments.md) | 5 | 3 | models.py::Assignment |
+diff --git a/docs/entities/scheduling.booking_links.md b/docs/entities/scheduling.booking_links.md
+index efc3b07..5ab3b00 100644
+--- a/docs/entities/scheduling.booking_links.md
++++ b/docs/entities/scheduling.booking_links.md
+@@ -16,7 +16,7 @@
+ - booking_links_token_key (unique на scheduling.booking_links): UNIQUE (token) (migrations/versions/0001_initial.py:266)
+ 
+ ## ORM
+-- services/scheduling/models.py::BookingLink:33 (orm_model)
++- services/scheduling/models.py::BookingLink:35 (orm_model)
+ 
+ ## Пишут (код)
+ - services/scheduling/service.py::issue_link
+diff --git a/docs/entities/scheduling.bookings.md b/docs/entities/scheduling.bookings.md
+index 7a99401..0639bcd 100644
+--- a/docs/entities/scheduling.bookings.md
++++ b/docs/entities/scheduling.bookings.md
+@@ -22,7 +22,7 @@
+ - uq_bookings_one_active (partial_unique_index на scheduling.bookings): CREATE UNIQUE INDEX uq_bookings_one_active ON scheduling.bookings USING btree (application_id) WHERE (status … (migrations/versions/0001_initial.py:282)
+ 
+ ## ORM
+-- services/scheduling/models.py::Booking:44 (orm_model)
++- services/scheduling/models.py::Booking:46 (orm_model)
+ 
+ ## Пишут (код)
+ - services/scheduling/service.py::_cancel [status]
+diff --git a/docs/entities/scheduling.holds.md b/docs/entities/scheduling.holds.md
+index 9277311..acd04e3 100644
+--- a/docs/entities/scheduling.holds.md
++++ b/docs/entities/scheduling.holds.md
+@@ -8,7 +8,7 @@
+ - book_id: integer NOT NULL PK
+ 
+ ## ORM
+-- services/scheduling/models.py::Hold:57 (orm_model)
++- services/scheduling/models.py::Hold:59 (orm_model)
+ 
+ ## Пишут (код)
+ - services/scheduling/service.py::book
+diff --git a/docs/entities/scheduling.loans.md b/docs/entities/scheduling.loans.md
+index c899ec5..d3fe5e0 100644
+--- a/docs/entities/scheduling.loans.md
++++ b/docs/entities/scheduling.loans.md
+@@ -18,7 +18,7 @@
+ - loans_status_check (check на scheduling.loans): CHECK ((status = ANY (ARRAY['out'::text, 'returned'::text, 'lost'::text]))) (migrations/versions/0001_initial.py:298)
+ 
+ ## ORM
+-- services/scheduling/models.py::Loan:67 (orm_model)
++- services/scheduling/models.py::Loan:69 (orm_model)
+ 
+ ## Пишут (код)
+ - services/scheduling/jobs.py::flag_overdue [overdue_flagged]
+diff --git a/docs/entities/scheduling.slots.md b/docs/entities/scheduling.slots.md
+index 28e50b2..3e897e3 100644
+--- a/docs/entities/scheduling.slots.md
++++ b/docs/entities/scheduling.slots.md
+@@ -10,6 +10,7 @@
+ - starts_at: timestamp with time zone NOT NULL
+ - capacity: integer NOT NULL
+ - removed: boolean NOT NULL
++- capacity_manual: boolean NOT NULL
+ 
+ ## Связи (FK)
+ - scheduling.bookings.slot_id → сюда
+@@ -23,8 +24,9 @@
+ - services/scheduling/models.py::Slot:21 (orm_model)
+ 
+ ## Пишут (код)
++- services/scheduling/service.py::apply_venue_limit [capacity]
+ - services/scheduling/service.py::create_slot
+-- services/scheduling/service.py::reduce_capacity [capacity]
++- services/scheduling/service.py::reduce_capacity [capacity, capacity_manual]
+ - services/scheduling/service.py::remove_slot [removed]
+ 
+ ## Правила
+@@ -34,3 +36,5 @@
+ - R-SCHED-SLOT-03 [draft] Число мест в окне не больше максимума площадки (контроль в БД)
+ - R-SCHED-SLOT-04 [draft] Проверяющий оператор может только уменьшить число мест в окне
+ - R-SCHED-SLOT-05 [draft] Удаление окна отменяет записи на него
++- R-SCHED-VENUE-LIMIT-01 [draft] Максимум мест площадки реплицируется из админки событием
++- R-SCHED-VENUE-LIMIT-02 [draft] Число мест будущих окон без уменьшения следует за максимумом площадки
+diff --git a/docs/entities/scheduling.venue_limits.md b/docs/entities/scheduling.venue_limits.md
+index 9dc5ed2..9ca1452 100644
+--- a/docs/entities/scheduling.venue_limits.md
++++ b/docs/entities/scheduling.venue_limits.md
+@@ -14,8 +14,8 @@
+ - services/scheduling/models.py::VenueLimit:11 (orm_model)
+ 
+ ## Пишут (код)
+-- services/scheduling/consumers.py::on_venue_settings_changed [max_capacity]
++- services/scheduling/service.py::apply_venue_limit [max_capacity]
+ 
+ ## Правила
+-- R-APP-ADMIN-03 [draft] Максимум мест в окне площадки положителен и передаётся в scheduling событием
+ - R-SCHED-VENUE-LIMIT-01 [draft] Максимум мест площадки реплицируется из админки событием
++- R-SCHED-VENUE-LIMIT-02 [draft] Число мест будущих окон без уменьшения следует за максимумом площадки
+diff --git a/docs/events.md b/docs/events.md
+index c9993e8..b9f1a26 100644
+--- a/docs/events.md
++++ b/docs/events.md
+@@ -165,16 +165,16 @@ flowchart LR
+ 
+ | Событие | Публикует | Обрабатывает | Данные | Эффекты |
+ |---|---|---|---|---|
+-| `application.archived` | [`service.py::archive`](../services/applications/service.py#L246) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_archived`](../services/scheduling/consumers.py#L25) | application_id, outcome | effect:chat.event_log |
+-| `application.closed_duplicate` | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) | [`consumers.py::on_closed_duplicate`](../services/billing/consumers.py#L20)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_closed_duplicate`](../services/scheduling/consumers.py#L30) | application_id, winner_id | effect:chat.event_log |
+-| `application.ready_for_booking` | [`service.py::mark_ready_for_booking`](../services/applications/service.py#L157) | [`consumers.py::on_ready_for_booking`](../services/scheduling/consumers.py#L12) | application_id, sphere_id, venue_id | — |
++| `application.archived` | [`service.py::archive`](../services/applications/service.py#L246) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_archived`](../services/scheduling/consumers.py#L24) | application_id, outcome | effect:chat.event_log |
++| `application.closed_duplicate` | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) | [`consumers.py::on_closed_duplicate`](../services/billing/consumers.py#L20)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_closed_duplicate`](../services/scheduling/consumers.py#L29) | application_id, winner_id | effect:chat.event_log |
++| `application.ready_for_booking` | [`service.py::mark_ready_for_booking`](../services/applications/service.py#L157) | [`consumers.py::on_ready_for_booking`](../services/scheduling/consumers.py#L11) | application_id, sphere_id, venue_id | — |
+ | `application.review_passed` | [`service.py::approve`](../services/applications/service.py#L167) | [`consumers.py::on_review_passed`](../services/applications/consumers.py#L43) | application_id, kind | — |
+ | `application.stage_changed` | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) | [`consumers.py::_handler`](../services/chat/consumers.py#L23) | application_id, from, to | effect:chat.event_log |
+ | `application.unarchived` | [`service.py::unarchive`](../services/applications/service.py#L265) | [`consumers.py::on_unarchived`](../services/billing/consumers.py#L27)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23) | amount_changed, application_id | effect:chat.event_log |
+-| `application.venue_changed` | [`service.py::change_venue`](../services/applications/service.py#L199) | [`consumers.py::on_venue_changed`](../services/billing/consumers.py#L13)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_venue_changed`](../services/scheduling/consumers.py#L17) | application_id, kind, new_venue_id, old_venue_id, stage | effect:chat.event_log |
+-| `booking.cancelled` | [`service.py::_cancel`](../services/scheduling/service.py#L178) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_booking_cancelled`](../services/notifications/consumers.py#L21) | application_id, booking_id, reason, starts_at, venue_id | effect:chat.event_log, effect:email.cancel |
+-| `booking.created` | [`service.py::book`](../services/scheduling/service.py#L126) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_booking_created`](../services/notifications/consumers.py#L10) | application_id, booking_id, purpose, starts_at, venue_id | effect:chat.event_log, effect:email.booking |
+-| `books.issued` | [`service.py::issue_books`](../services/scheduling/service.py#L223) | [`consumers.py::on_books_issued`](../services/applications/consumers.py#L67) | application_id | — |
++| `application.venue_changed` | [`service.py::change_venue`](../services/applications/service.py#L199) | [`consumers.py::on_venue_changed`](../services/billing/consumers.py#L13)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_venue_changed`](../services/scheduling/consumers.py#L16) | application_id, kind, new_venue_id, old_venue_id, stage | effect:chat.event_log |
++| `booking.cancelled` | [`service.py::_cancel`](../services/scheduling/service.py#L222) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_booking_cancelled`](../services/notifications/consumers.py#L21) | application_id, booking_id, reason, starts_at, venue_id | effect:chat.event_log, effect:email.cancel |
++| `booking.created` | [`service.py::book`](../services/scheduling/service.py#L170) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_booking_created`](../services/notifications/consumers.py#L10) | application_id, booking_id, purpose, starts_at, venue_id | effect:chat.event_log, effect:email.booking |
++| `books.issued` | [`service.py::issue_books`](../services/scheduling/service.py#L267) | [`consumers.py::on_books_issued`](../services/applications/consumers.py#L67) | application_id | — |
+ | `client.updated` | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L51) | client_id, fields, source_application_id | — |
+ | `halls.booking_cancelled` | [`service.py::_cancel`](../services/halls/service.py#L217) | [`consumers.py::on_booking_cancelled`](../services/halls/consumers.py#L35) | booking_id, reason, starts_at, venue_id | — |
+ | `halls.booking_confirmed` | [`service.py::apply_payments`](../services/halls/service.py#L372) | [`consumers.py::on_booking_confirmed`](../services/halls/consumers.py#L25) |  | — |
+@@ -209,8 +209,8 @@ flowchart LR
+ | `lectures.venue_limit_changed` | [`service.py::set_venue_capacity_limit`](../services/lectures/service.py#L75) | [`consumers.py::on_venue_limit_changed`](../services/lectures/consumers.py#L16) | max_capacity, venue_id | — |
+ | `lectures.waitlist_expired` | [`jobs.py::close_waitlists`](../services/lectures/jobs.py#L11) | [`consumers.py::on_waitlist_expired`](../services/lectures/consumers.py#L113) | event_id, listener_id, waitlist_id | — |
+ | `lectures.waitlist_promoted` | [`service.py::fill_from_waitlist`](../services/lectures/service.py#L436) | [`consumers.py::on_waitlist_promoted`](../services/lectures/consumers.py#L71) | event_id, listener_id, registration_id, waitlist_id | — |
+-| `loan.damaged` | [`service.py::return_book`](../services/scheduling/service.py#L267) | [`consumers.py::on_loan_damaged`](../services/billing/consumers.py#L49) | application_id, loan_id | — |
+-| `loan.lost` | [`service.py::mark_lost`](../services/scheduling/service.py#L279) | [`consumers.py::on_loan_lost`](../services/billing/consumers.py#L44) | application_id, loan_id | — |
++| `loan.damaged` | [`service.py::return_book`](../services/scheduling/service.py#L311) | [`consumers.py::on_loan_damaged`](../services/billing/consumers.py#L49) | application_id, loan_id | — |
++| `loan.lost` | [`service.py::mark_lost`](../services/scheduling/service.py#L323) | [`consumers.py::on_loan_lost`](../services/billing/consumers.py#L44) | application_id, loan_id | — |
+ | `loan.overdue` | [`jobs.py::flag_overdue`](../services/scheduling/jobs.py#L10) | [`consumers.py::on_loan_overdue`](../services/billing/consumers.py#L39)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23) | application_id, book_id, loan_id | effect:chat.event_log |
+ | `marketing.campaign_finished` | [`service.py::deliver_messages`](../services/marketing/service.py#L382) | [`consumers.py::on_campaign_finished`](../services/marketing/consumers.py#L20) | audience_id, campaign_id, finished_at | — |
+ | `marketing.campaign_launched` | [`service.py::start`](../services/marketing/service.py#L295) | [`consumers.py::on_campaign_launched`](../services/marketing/consumers.py#L10) | audience_id, campaign_id, venue_id | — |
+@@ -263,4 +263,4 @@ flowchart LR
+ | `subscriptions.payment_completed` | [`service.py::record_payment`](../services/subscriptions/service.py#L272) | [`consumers.py::on_payment_completed`](../services/subscriptions/consumers.py#L40) | invoice_id, subscription_id | — |
+ | `subscriptions.refund_required` | [`service.py::apply_payment`](../services/subscriptions/service.py#L358)<br>[`service.py::void_open_invoices`](../services/subscriptions/service.py#L303) | [`consumers.py::on_refund_required`](../services/subscriptions/consumers.py#L86) | amount, invoice_id, subscription_id | — |
+ | `subscriptions.renewed` | [`service.py::apply_payment`](../services/subscriptions/service.py#L358) | [`consumers.py::on_renewed`](../services/subscriptions/consumers.py#L52) | paid_until, subscription_id | — |
+-| `venue.settings_changed` | [`admin.py::set_venue_max_capacity`](../services/applications/admin.py#L32) | [`consumers.py::on_venue_settings_changed`](../services/scheduling/consumers.py#L35) | max_capacity, old_max_capacity, venue_id | — |
++| `venue.settings_changed` | [`admin.py::set_venue_max_capacity`](../services/applications/admin.py#L32) | [`consumers.py::on_venue_settings_changed`](../services/scheduling/consumers.py#L34) | max_capacity, old_max_capacity, venue_id | — |
+diff --git a/docs/roles.md b/docs/roles.md
+index 0f69d8d..478841d 100644
+--- a/docs/roles.md
++++ b/docs/roles.md
+@@ -127,6 +127,7 @@
+ - R-SCHED-SLOT-03 [draft] Число мест в окне не больше максимума площадки (контроль в БД)
+ - R-SCHED-SLOT-04 [draft] Проверяющий оператор может только уменьшить число мест в окне
+ - R-SCHED-SLOT-05 [draft] Удаление окна отменяет записи на него
++- R-SCHED-VENUE-LIMIT-02 [draft] Число мест будущих окон без уменьшения следует за максимумом площадки
+ - R-SCHED-HOLD-02 [draft] Отмена, перенос и неявка не освобождают книги
+ - R-SCHED-CANCEL-01 [draft] Отмена записи — письмо об отмене и событие в чате
+ - R-SCHED-NO-SHOW-01 [draft] Неявка отменяет запись, клиент может записаться снова
+@@ -152,6 +153,7 @@
+ - R-NOTIF-TEMPLATE-06 [draft] Сохранение шаблона создаёт его или заменяет текст
+ - R-NOTIF-TEMPLATE-07 [draft] Настройка шаблонов не ограничена ролью администратора
+ - R-SCHED-VENUE-LIMIT-01 [draft] Максимум мест площадки реплицируется из админки событием
++- R-SCHED-VENUE-LIMIT-02 [draft] Число мест будущих окон без уменьшения следует за максимумом площадки
+ - R-SCHEMA-ADMIN-01 [draft] Размеры штрафов по представителю и площадке задаёт администратор в админке
+ - R-SUBSCRIPTIONS-PLAN-01 [draft] Тариф создаётся только известного вида, с положительной ценой и уникальным кодом
+ - R-SUBSCRIPTIONS-PLAN-02 [draft] Архивный тариф не продаётся и не показывается, но действующие абонементы на нём продлеваются
+@@ -422,19 +424,19 @@
+ | [`service.py::cancel_run`](../services/reports/service.py#L320) | — | отменить запуск может только тот, кто его запросил |
+ | [`service.py::deactivate_schedule`](../services/reports/service.py#L415) | — | отключить выгрузку может её автор или владелец отчёта |
+ | [`service.py::mark_read`](../services/reports/service.py#L490) | — | уведомление адресовано другому сотруднику |
+-| [`service.py::_link_by_token`](../services/scheduling/service.py#L95) | Клиент | — |
+-| [`service.py::_loan_for_checker`](../services/scheduling/service.py#L255) | Проверяющий оператор | книги принимает проверяющий оператор площадки заявки |
++| [`service.py::_link_by_token`](../services/scheduling/service.py#L139) | Клиент | — |
++| [`service.py::_loan_for_checker`](../services/scheduling/service.py#L299) | Проверяющий оператор | книги принимает проверяющий оператор площадки заявки |
+ | [`service.py::_require_site_checker`](../services/scheduling/service.py#L17) | Проверяющий оператор | проверяющий оператор работает только со своей площадкой |
+-| [`service.py::book`](../services/scheduling/service.py#L126) | Клиент | — |
+-| [`service.py::book_by_operator`](../services/scheduling/service.py#L166) | Оператор | заявка закреплена за другим оператором |
++| [`service.py::book`](../services/scheduling/service.py#L170) | Клиент | — |
++| [`service.py::book_by_operator`](../services/scheduling/service.py#L210) | Оператор | заявка закреплена за другим оператором |
+ | [`service.py::create_slot`](../services/scheduling/service.py#L23) | Проверяющий оператор | — |
+-| [`service.py::free_slots`](../services/scheduling/service.py#L102) | Клиент | — |
+-| [`service.py::issue_books`](../services/scheduling/service.py#L223) | Проверяющий оператор | книги выдаёт проверяющий оператор площадки заявки |
+-| [`service.py::mark_lost`](../services/scheduling/service.py#L279) | Проверяющий оператор | — |
+-| [`service.py::mark_no_show`](../services/scheduling/service.py#L213) | Проверяющий оператор | — |
+-| [`service.py::reduce_capacity`](../services/scheduling/service.py#L52) | Проверяющий оператор | — |
+-| [`service.py::remove_slot`](../services/scheduling/service.py#L66) | Проверяющий оператор | — |
+-| [`service.py::return_book`](../services/scheduling/service.py#L267) | Проверяющий оператор | — |
++| [`service.py::free_slots`](../services/scheduling/service.py#L146) | Клиент | — |
++| [`service.py::issue_books`](../services/scheduling/service.py#L267) | Проверяющий оператор | книги выдаёт проверяющий оператор площадки заявки |
++| [`service.py::mark_lost`](../services/scheduling/service.py#L323) | Проверяющий оператор | — |
++| [`service.py::mark_no_show`](../services/scheduling/service.py#L257) | Проверяющий оператор | — |
++| [`service.py::reduce_capacity`](../services/scheduling/service.py#L56) | Проверяющий оператор | — |
++| [`service.py::remove_slot`](../services/scheduling/service.py#L110) | Проверяющий оператор | — |
++| [`service.py::return_book`](../services/scheduling/service.py#L311) | Проверяющий оператор | — |
+ | [`service.py::_require_hr`](../services/staff/service.py#L51) | — | кадровые операции выполняет только отдел кадров |
+ | [`service.py::_require_responsible`](../services/staff/service.py#L58) | — | сменами площадки управляет только ответственный за площадку |
+ | [`service.py::mark_alert_read`](../services/staff/service.py#L626) | — | уведомление адресовано другому сотруднику |
+diff --git a/docs/rules/README.md b/docs/rules/README.md
+index 2073b20..f7707c9 100644
+--- a/docs/rules/README.md
++++ b/docs/rules/README.md
+@@ -14,7 +14,7 @@
+ | [notifications](notifications.md) | 21 | 4 | 17 | 0 |
+ | [partners](partners.md) | 38 | 0 | 38 | 0 |
+ | [reports](reports.md) | 41 | 0 | 41 | 0 |
+-| [scheduling](scheduling.md) | 31 | 2 | 29 | 0 |
++| [scheduling](scheduling.md) | 32 | 2 | 30 | 0 |
+ | [schema](schema.md) | 12 | 0 | 12 | 0 |
+ | [staff](staff.md) | 44 | 0 | 44 | 0 |
+ | [subscriptions](subscriptions.md) | 35 | 0 | 35 | 0 |
+diff --git a/docs/rules/applications.md b/docs/rules/applications.md
+index 50fc264..5176cd5 100644
+--- a/docs/rules/applications.md
++++ b/docs/rules/applications.md
+@@ -143,7 +143,7 @@
+ 
+ При переходе в awaiting_issue (после проверки debt/social или после полной оплаты paid) заполняется booking_reached_at (один раз) и публикуется application.ready_for_booking; scheduling по нему формирует публичную ссылку на запись (issue_link).
+ 
+-- Реализация: [`services/applications/service.py::mark_ready_for_booking:158-164`](../../services/applications/service.py#L158), [`services/scheduling/consumers.py::on_ready_for_booking:13-13`](../../services/scheduling/consumers.py#L13)
++- Реализация: [`services/applications/service.py::mark_ready_for_booking:158-164`](../../services/applications/service.py#L158), [`services/scheduling/consumers.py::on_ready_for_booking:12-12`](../../services/scheduling/consumers.py#L12)
+ - Тесты: `tests/test_kinds.py::test_debt_application_skips_invoice`, `tests/test_paid_flow.py::test_paid_application_full_path`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-APP-REVIEW-05, R-APP-PAY-03, R-APP-UNARCHIVE-02
+@@ -282,7 +282,7 @@
+ 
+ При смене площадки за заявкой закрепляется site_checker новой площадки и публикуется application.venue_changed. Billing аннулирует действующий счёт за книги без оплат (дальше invoice.cancelled возвращает заявку в awaiting_invoice); scheduling сбрасывает записи и, если заявка в awaiting_issue, выдаёт новую ссылку; чат фиксирует смену.
+ 
+-- Реализация: [`services/applications/service.py::change_venue:216-230`](../../services/applications/service.py#L216), [`services/billing/consumers.py::on_venue_changed:14-16`](../../services/billing/consumers.py#L14), [`services/scheduling/consumers.py::on_venue_changed:18-21`](../../services/scheduling/consumers.py#L18), [`services/chat/consumers.py::_handler:24-25`](../../services/chat/consumers.py#L24), [`awaiting_payment->awaiting_invoice`](../../bpm/application_process.yaml#L28)
++- Реализация: [`services/applications/service.py::change_venue:216-230`](../../services/applications/service.py#L216), [`services/billing/consumers.py::on_venue_changed:14-16`](../../services/billing/consumers.py#L14), [`services/scheduling/consumers.py::on_venue_changed:17-20`](../../services/scheduling/consumers.py#L17), [`services/chat/consumers.py::_handler:24-25`](../../services/chat/consumers.py#L24), [`awaiting_payment->awaiting_invoice`](../../bpm/application_process.yaml#L28)
+ - Тесты: `tests/test_venue_change.py::test_venue_change_reassigns_site_checker`, `tests/test_venue_change.py::test_venue_change_before_payment_reissues_invoice`
+ - Роли: Оператор
+ - Связанные: R-APP-PAY-02, R-APP-VENUE-CHANGE-01
+@@ -322,7 +322,7 @@ archive_stale архивирует платные заявки на awaiting_pay
+ 
+ Оператор заявки отправляет в архив заявку на этапах draft, on_review, needs_rework, awaiting_invoice или awaiting_payment (любой вид); из awaiting_issue в архив уводит только chief_accountant (возврат платежа); после books_out архив невозможен. Архив закрывает текущую попытку (ended_at, outcome) и публикует application.archived — scheduling сбрасывает записи, чат фиксирует событие.
+ 
+-- Реализация: [`services/applications/service.py::archive:255-261`](../../services/applications/service.py#L255), [`services/scheduling/consumers.py::on_archived:26-26`](../../services/scheduling/consumers.py#L26), [`draft->archived`](../../bpm/application_process.yaml#L39), [`on_review->archived`](../../bpm/application_process.yaml#L37), [`needs_rework->archived`](../../bpm/application_process.yaml#L37), [`awaiting_invoice->archived`](../../bpm/application_process.yaml#L39), [`awaiting_payment->archived`](../../bpm/application_process.yaml#L38), [`awaiting_issue->archived`](../../bpm/application_process.yaml#L40)
++- Реализация: [`services/applications/service.py::archive:255-261`](../../services/applications/service.py#L255), [`services/scheduling/consumers.py::on_archived:25-25`](../../services/scheduling/consumers.py#L25), [`draft->archived`](../../bpm/application_process.yaml#L39), [`on_review->archived`](../../bpm/application_process.yaml#L37), [`needs_rework->archived`](../../bpm/application_process.yaml#L37), [`awaiting_invoice->archived`](../../bpm/application_process.yaml#L39), [`awaiting_payment->archived`](../../bpm/application_process.yaml#L38), [`awaiting_issue->archived`](../../bpm/application_process.yaml#L40)
+ - БД: [`attempts_outcome_check`](../../migrations/versions/0001_initial.py#L108)
+ - Тесты: `tests/test_archive.py::test_paid_application_cannot_be_archived_by_operator_after_payment`, `tests/test_archive.py::test_unarchive_starts_new_attempt_and_review`
+ - Роли: Оператор, Главный бухгалтер, Система (события и фоновые задачи)
+@@ -381,7 +381,7 @@ close_duplicates вызывается при полной оплате плат
+ 
+ По application.closed_duplicate billing аннулирует все действующие счета заявки без оплат, scheduling сбрасывает записи, чат фиксирует закрытие как дубль. Оплаченные счета дубля остаются действующими.
+ 
+-- Реализация: [`services/billing/consumers.py::on_closed_duplicate:21-23`](../../services/billing/consumers.py#L21), [`services/scheduling/consumers.py::on_closed_duplicate:31-31`](../../services/scheduling/consumers.py#L31), [`services/chat/consumers.py::_handler:24-25`](../../services/chat/consumers.py#L24)
++- Реализация: [`services/billing/consumers.py::on_closed_duplicate:21-23`](../../services/billing/consumers.py#L21), [`services/scheduling/consumers.py::on_closed_duplicate:30-30`](../../services/scheduling/consumers.py#L30), [`services/chat/consumers.py::_handler:24-25`](../../services/chat/consumers.py#L24)
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-APP-DEDUP-01
+ 
+@@ -443,9 +443,9 @@ set_venue_requisites записывает реквизиты организац
+ 
+ `draft` · config · §2 Администратор
+ 
+-set_venue_max_capacity отклоняет значение меньше 1 (DomainError, плюс CHECK в БД), сохраняет max_slot_capacity и публикует venue.settings_changed; scheduling обновляет VenueLimit площадки, которым ограничивается число мест в окнах.
++set_venue_max_capacity отклоняет значение меньше 1 (DomainError, плюс CHECK в БД), сохраняет max_slot_capacity и публикует venue.settings_changed; scheduling обновляет VenueLimit площадки, которым ограничивается число мест в окнах, и подтягивает к новому максимуму будущие окна со старым максимумом (R-SCHED-VENUE-LIMIT-02).
+ 
+-- Реализация: [`services/applications/admin.py::set_venue_max_capacity:36-44`](../../services/applications/admin.py#L36), [`services/scheduling/consumers.py::on_venue_settings_changed:36-40`](../../services/scheduling/consumers.py#L36)
++- Реализация: [`services/applications/admin.py::set_venue_max_capacity:36-44`](../../services/applications/admin.py#L36), [`services/scheduling/consumers.py::on_venue_settings_changed:34-36`](../../services/scheduling/consumers.py#L34)
+ - БД: [`venues_max_slot_capacity_check`](../../migrations/versions/0001_initial.py#L33)
+ - Роли: Администратор
+ 
+diff --git a/docs/rules/scheduling.md b/docs/rules/scheduling.md
+index 5697d25..bede10f 100644
+--- a/docs/rules/scheduling.md
++++ b/docs/rules/scheduling.md
+@@ -10,7 +10,7 @@
+ 
+ Создать окно, уменьшить в нём число мест, убрать окно и отметить неявку может только проверяющий оператор площадки окна (venue.site_checker_id). Иначе — AccessDenied «проверяющий оператор работает только со своей площадкой». Проверка общая, в _require_site_checker.
+ 
+-- Реализация: [`services/scheduling/service.py::_require_site_checker:17-20`](../../services/scheduling/service.py#L17), [`services/scheduling/service.py::create_slot:32`](../../services/scheduling/service.py#L32), [`services/scheduling/service.py::reduce_capacity:56`](../../services/scheduling/service.py#L56), [`services/scheduling/service.py::remove_slot:70`](../../services/scheduling/service.py#L70), [`services/scheduling/service.py::mark_no_show:218`](../../services/scheduling/service.py#L218)
++- Реализация: [`services/scheduling/service.py::_require_site_checker:17-20`](../../services/scheduling/service.py#L17), [`services/scheduling/service.py::create_slot:32`](../../services/scheduling/service.py#L32), [`services/scheduling/service.py::reduce_capacity:60`](../../services/scheduling/service.py#L60), [`services/scheduling/service.py::remove_slot:114`](../../services/scheduling/service.py#L114), [`services/scheduling/service.py::mark_no_show:262`](../../services/scheduling/service.py#L262)
+ - Роли: Проверяющий оператор
+ - Связанные: R-SCHED-SLOT-01, R-SCHED-SLOT-04, R-SCHED-SLOT-05, R-SCHED-NO-SHOW-01
+ 
+@@ -29,9 +29,9 @@
+ 
+ `draft` · calculation · §12 Расписание площадок
+ 
+-Если при создании окна число мест не передано, берётся max_capacity площадки из реплики scheduling.venue_limits. Если лимит для площадки не задан — DomainError «для площадки не задан максимум мест». Окна создаются по паре площадка+сфера, без признака цели (выдача/сдача).
++Если при создании окна число мест не передано, берётся max_capacity площадки из реплики scheduling.venue_limits. Если лимит для площадки не задан — DomainError «для площадки не задан максимум мест». Окна создаются по паре площадка+сфера, без признака цели (выдача/сдача). Окно, созданное с числом мест меньше максимума, получает capacity_manual = true и за максимумом не следует (R-SCHED-VENUE-LIMIT-02).
+ 
+-- Реализация: [`services/scheduling/service.py::create_slot:35-41`](../../services/scheduling/service.py#L35)
++- Реализация: [`services/scheduling/service.py::create_slot:35-45`](../../services/scheduling/service.py#L35)
+ - БД: [`trg_slot_capacity_limit`](../../migrations/versions/0001_initial.py#L259)
+ - Тесты: `tests/test_scheduling.py::test_checker_can_only_reduce_capacity`
+ - Роли: Проверяющий оператор
+@@ -43,7 +43,7 @@
+ 
+ Триггер trg_slot_capacity_limit (функция check_slot_capacity) на INSERT и UPDATE OF capacity таблицы scheduling.slots отклоняет запись, если для площадки нет строки в venue_limits («no capacity limit for venue») или capacity больше max_capacity («slot capacity exceeds venue maximum»). В коде create_slot явно переданное число мест с максимумом не сверяется, так что ограничение держит только БД. CHECK slots_capacity_check требует capacity > 0.
+ 
+-- Реализация: [`services/scheduling/service.py::create_slot:40-42`](../../services/scheduling/service.py#L40)
++- Реализация: [`services/scheduling/service.py::create_slot:42-46`](../../services/scheduling/service.py#L42)
+ - БД: [`trg_slot_capacity_limit`](../../migrations/versions/0001_initial.py#L259), [`check_slot_capacity`](../../migrations/versions/0001_initial.py#L244), [`slots_capacity_check`](../../migrations/versions/0001_initial.py#L240)
+ - Тесты: `tests/test_scheduling.py::test_slot_capacity_cannot_exceed_venue_maximum`
+ - Роли: Проверяющий оператор
+@@ -53,9 +53,9 @@
+ 
+ `draft` · guard · §12 Расписание площадок
+ 
+-reduce_capacity принимает только значение строго меньше текущего capacity окна («проверяющий оператор может только уменьшить число мест») и не меньше числа действующих записей в окне («в окне уже записано больше клиентов»). Действующие записи — bookings со статусом active.
++reduce_capacity принимает только значение строго меньше текущего capacity окна («проверяющий оператор может только уменьшить число мест») и не меньше числа действующих записей в окне («в окне уже записано больше клиентов»). Действующие записи — bookings со статусом active. Уменьшенное окно получает capacity_manual = true и больше не следует за изменениями максимума площадки (R-SCHED-VENUE-LIMIT-02).
+ 
+-- Реализация: [`services/scheduling/service.py::reduce_capacity:57-61`](../../services/scheduling/service.py#L57), [`services/scheduling/service.py::_active_bookings:46-49`](../../services/scheduling/service.py#L46)
++- Реализация: [`services/scheduling/service.py::reduce_capacity:61-65`](../../services/scheduling/service.py#L61), [`services/scheduling/service.py::_active_bookings:50-53`](../../services/scheduling/service.py#L50)
+ - БД: [`trg_slot_capacity_limit`](../../migrations/versions/0001_initial.py#L259), [`slots_capacity_check`](../../migrations/versions/0001_initial.py#L240)
+ - Тесты: `tests/test_scheduling.py::test_checker_can_only_reduce_capacity`
+ - Роли: Проверяющий оператор
+@@ -67,7 +67,7 @@ reduce_capacity принимает только значение строго м
+ 
+ Окно удаляется мягко (slots.removed = true). Сначала все действующие записи на окно отменяются с причиной slot_removed, на каждую публикуется booking.cancelled. Из-за этого клиент и представитель получают письмо об отмене, в чат заявки пишется событие. Закреплённые книги и ссылка на запись остаются.
+ 
+-- Реализация: [`services/scheduling/service.py::remove_slot:71-76`](../../services/scheduling/service.py#L71), [`services/scheduling/service.py::_cancel:178-190`](../../services/scheduling/service.py#L178)
++- Реализация: [`services/scheduling/service.py::remove_slot:115-120`](../../services/scheduling/service.py#L115), [`services/scheduling/service.py::_cancel:222-234`](../../services/scheduling/service.py#L222)
+ - Роли: Проверяющий оператор
+ - Связанные: R-SCHED-CANCEL-01, R-SCHED-SITE-CHECKER-01
+ 
+@@ -75,12 +75,24 @@ reduce_capacity принимает только значение строго м
+ 
+ `draft` · effect · §2 Администратор; §12 Расписание площадок
+ 
+-Подписчик venue.settings_changed (публикует admin.set_venue_max_capacity) создаёт или обновляет строку scheduling.venue_limits с новым max_capacity. Уже созданные окна не пересчитываются: триггер срабатывает только на INSERT или изменение capacity, поэтому после снижения максимума окна со старым, большим числом мест остаются. CHECK требует max_capacity > 0.
++Подписчик venue.settings_changed (публикует admin.set_venue_max_capacity) вызывает apply_venue_limit: он создаёт или обновляет строку scheduling.venue_limits с новым max_capacity, а затем подтягивает к нему будущие окна площадки (R-SCHED-VENUE-LIMIT-02). Лимит записывается раньше окон, иначе триггер trg_slot_capacity_limit отклонит повышение. CHECK требует max_capacity > 0.
+ 
+-- Реализация: [`services/scheduling/consumers.py::on_venue_settings_changed:35-40`](../../services/scheduling/consumers.py#L35)
++- Реализация: [`services/scheduling/consumers.py::on_venue_settings_changed:34-36`](../../services/scheduling/consumers.py#L34), [`services/scheduling/service.py::apply_venue_limit:78-87`](../../services/scheduling/service.py#L78)
+ - БД: [`venue_limits_max_capacity_check`](../../migrations/versions/0001_initial.py#L232)
+ - Роли: Администратор
+-- Связанные: R-SCHED-SLOT-02, R-SCHED-SLOT-03
++- Связанные: R-SCHED-SLOT-02, R-SCHED-SLOT-03, R-SCHED-VENUE-LIMIT-02
++
++## R-SCHED-VENUE-LIMIT-02 — Число мест будущих окон без уменьшения следует за максимумом площадки
++
++`draft` · calculation · §2 Администратор; §12 Расписание площадок
++
++При смене максимума мест площадки apply_venue_limit приравнивает число мест к новому максимуму только у неудалённых окон этой площадки, которые ещё не начались, у которых число мест равнялось старому максимуму и capacity_manual = false. Флаг capacity_manual ставит reduce_capacity, а create_slot — если окно создано с числом мест меньше максимума. Прошедшие, удалённые и уменьшенные проверяющим оператором окна не меняются, даже если их число мест совпадает со старым максимумом. Записи в окне не проверяются: при снижении максимума ниже числа записей записи остаются, свободных мест в окне просто нет.
++
++- Реализация: [`services/scheduling/service.py::apply_venue_limit:90-105`](../../services/scheduling/service.py#L90), [`services/scheduling/service.py::create_slot:40-41`](../../services/scheduling/service.py#L40), [`services/scheduling/service.py::reduce_capacity:66-67`](../../services/scheduling/service.py#L66)
++- БД: [`trg_slot_capacity_limit`](../../migrations/versions/0001_initial.py#L259)
++- Тесты: `tests/test_scheduling.py::test_venue_maximum_change_moves_future_slots_at_old_maximum`, `tests/test_scheduling.py::test_venue_maximum_change_keeps_reduced_past_and_removed_slots`, `tests/test_scheduling.py::test_reduced_slot_ignores_maximum_even_when_it_matches_old_maximum`
++- Роли: Администратор, Проверяющий оператор
++- Связанные: R-SCHED-VENUE-LIMIT-01, R-SCHED-SLOT-02, R-SCHED-SLOT-04
+ 
+ ## R-SCHED-LINK-01 — Ссылка на запись за книгами выдаётся при готовности к записи
+ 
+@@ -88,7 +100,7 @@ reduce_capacity принимает только значение строго м
+ 
+ На событие application.ready_for_booking (публикует mark_ready_for_booking при переходе в «Ожидает выдачи»: после проверки для debt/social, после полной оплаты для paid) модуль выпускает ссылку с purpose=issue.
+ 
+-- Реализация: [`services/scheduling/consumers.py::on_ready_for_booking:12-13`](../../services/scheduling/consumers.py#L12), [`services/scheduling/service.py::issue_link:79-86`](../../services/scheduling/service.py#L79)
++- Реализация: [`services/scheduling/consumers.py::on_ready_for_booking:11-12`](../../services/scheduling/consumers.py#L11), [`services/scheduling/service.py::issue_link:123-130`](../../services/scheduling/service.py#L123)
+ - Тесты: `tests/test_paid_flow.py::test_paid_application_full_path`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-SCHED-LINK-02, R-SCHED-ISSUE-03
+@@ -99,7 +111,7 @@ reduce_capacity принимает только значение строго м
+ 
+ issue_link гасит все прежние ссылки заявки (active=false) и создаёт новую со случайным токеном (secrets.token_urlsafe(16)). БД гарантирует уникальность токена и не больше одной активной ссылки на заявку. purpose ограничен значениями issue/return.
+ 
+-- Реализация: [`services/scheduling/service.py::issue_link:79-86`](../../services/scheduling/service.py#L79)
++- Реализация: [`services/scheduling/service.py::issue_link:123-130`](../../services/scheduling/service.py#L123)
+ - БД: [`uq_booking_links_one_active`](../../migrations/versions/0001_initial.py#L270), [`booking_links_token_key`](../../migrations/versions/0001_initial.py#L266), [`booking_links_purpose_check`](../../migrations/versions/0001_initial.py#L267)
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-SCHED-LINK-01, R-SCHED-LINK-03
+@@ -110,7 +122,7 @@ issue_link гасит все прежние ссылки заявки (active=fa
+ 
+ Просмотр свободных окон и запись по токену требуют существующую активную ссылку. Иначе — DomainError «ссылка на запись не действует». Ссылка гаснет при архивации, закрытии дублем, смене площадки и выпуске новой ссылки.
+ 
+-- Реализация: [`services/scheduling/service.py::_link_by_token:95-99`](../../services/scheduling/service.py#L95)
++- Реализация: [`services/scheduling/service.py::_link_by_token:139-143`](../../services/scheduling/service.py#L139)
+ - Роли: Клиент, Представитель клиента, Оператор
+ - Связанные: R-SCHED-RESET-01, R-SCHED-LINK-02
+ - ⚠ Расхождение со схемой: Схема: по закрытой заявке ссылка не работает. Код: на закрытие заявки (books_out->closed) модуль не подписан, ссылка на сдачу (purpose=return) после закрытия остаётся активной.
+@@ -121,7 +133,7 @@ issue_link гасит все прежние ссылки заявки (active=fa
+ 
+ free_slots возвращает окна площадки и сферы заявки, кроме удалённых, только с началом позже текущего момента и где действующих записей меньше capacity. Список отсортирован по времени.
+ 
+-- Реализация: [`services/scheduling/service.py::free_slots:102-123`](../../services/scheduling/service.py#L102), [`services/scheduling/api.py::slots:27-31`](../../services/scheduling/api.py#L27)
++- Реализация: [`services/scheduling/service.py::free_slots:146-167`](../../services/scheduling/service.py#L146), [`services/scheduling/api.py::slots:27-31`](../../services/scheduling/api.py#L27)
+ - Тесты: `tests/test_scheduling.py::test_free_slots_hide_full_windows`
+ - Роли: Клиент, Представитель клиента
+ - Связанные: R-SCHED-BOOK-01
+@@ -132,7 +144,7 @@ free_slots возвращает окна площадки и сферы заяв
+ 
+ book отклоняет удалённое окно (NotFound), окно другой площадки или сферы («окно не на площадке или не в сфере заявки»), окно в прошлом («нельзя записаться на прошедшее время») и окно, где действующих записей уже не меньше capacity («в окне нет свободных мест»).
+ 
+-- Реализация: [`services/scheduling/service.py::book:130-137`](../../services/scheduling/service.py#L130)
++- Реализация: [`services/scheduling/service.py::book:174-181`](../../services/scheduling/service.py#L174)
+ - Тесты: `tests/test_scheduling.py::test_booking_only_on_own_venue_and_sphere`
+ - Роли: Клиент, Представитель клиента, Оператор
+ - Связанные: R-SCHED-FREE-SLOTS-01, R-SCHED-BOOK-02
+@@ -144,7 +156,7 @@ book отклоняет удалённое окно (NotFound), окно дру
+ 
+ Частичный уникальный индекс uq_bookings_one_active не даёт создать вторую запись со статусом active на ту же заявку. В коде book такой проверки нет: повторная запись упадёт на ошибке целостности БД, а не на DomainError. Перенос сначала отменяет старую запись.
+ 
+-- Реализация: [`services/scheduling/service.py::book:139-151`](../../services/scheduling/service.py#L139)
++- Реализация: [`services/scheduling/service.py::book:183-195`](../../services/scheduling/service.py#L183)
+ - БД: [`uq_bookings_one_active`](../../migrations/versions/0001_initial.py#L282), [`bookings_status_check`](../../migrations/versions/0001_initial.py#L278), [`bookings_purpose_check`](../../migrations/versions/0001_initial.py#L277)
+ - Роли: Клиент, Представитель клиента, Оператор
+ - Связанные: R-SCHED-RESCHEDULE-01
+@@ -155,7 +167,7 @@ book отклоняет удалённое окно (NotFound), окно дру
+ 
+ У записи purpose берётся из ссылки (issue или return), booked_by — из тела запроса (по умолчанию client). CHECK bookings_booked_by_check допускает только client, representative, operator.
+ 
+-- Реализация: [`services/scheduling/service.py::book:139-147`](../../services/scheduling/service.py#L139), [`services/scheduling/api.py::book:35-37`](../../services/scheduling/api.py#L35)
++- Реализация: [`services/scheduling/service.py::book:183-191`](../../services/scheduling/service.py#L183), [`services/scheduling/api.py::book:35-37`](../../services/scheduling/api.py#L35)
+ - БД: [`bookings_booked_by_check`](../../migrations/versions/0001_initial.py#L279)
+ - Роли: Клиент, Представитель клиента
+ - Связанные: R-SCHED-CANCEL-02
+@@ -167,7 +179,7 @@ book отклоняет удалённое окно (NotFound), окно дру
+ 
+ При записи с purpose=issue каждая книга заявки (brief.book_ids) записывается в scheduling.holds через merge, поэтому повторная запись не создаёт дублей (PK application_id+book_id). Запись на сдачу (return) книги не закрепляет.
+ 
+-- Реализация: [`services/scheduling/service.py::book:148-150`](../../services/scheduling/service.py#L148)
++- Реализация: [`services/scheduling/service.py::book:192-194`](../../services/scheduling/service.py#L192)
+ - Роли: Клиент, Представитель клиента, Оператор
+ - Связанные: R-SCHED-HOLD-02, R-SCHED-RESET-01
+ 
+@@ -177,7 +189,7 @@ book отклоняет удалённое окно (NotFound), окно дру
+ 
+ _cancel меняет только статус записи и публикует событие, scheduling.holds не трогает. Книги освобождаются только в reset_bookings (смена площадки, архив, дубль) и при выдаче.
+ 
+-- Реализация: [`services/scheduling/service.py::_cancel:178-190`](../../services/scheduling/service.py#L178)
++- Реализация: [`services/scheduling/service.py::_cancel:222-234`](../../services/scheduling/service.py#L222)
+ - Роли: Клиент, Представитель клиента, Оператор, Проверяющий оператор
+ - Связанные: R-SCHED-HOLD-01, R-SCHED-ISSUE-03
+ 
+@@ -187,7 +199,7 @@ _cancel меняет только статус записи и публикуе
+ 
+ После записи публикуется booking.created (application_id, booking_id, venue_id, starts_at, purpose). Подписчик notifications отправляет письмо типа booking получателям заявки по шаблону площадки и группы вида заявки. Обработчик chat пишет в чат «Запись на {starts_at}».
+ 
+-- Реализация: [`services/scheduling/service.py::book:152-162`](../../services/scheduling/service.py#L152), [`services/notifications/consumers.py::on_booking_created:10-17`](../../services/notifications/consumers.py#L10), [`services/chat/consumers.py::_handler:23-27`](../../services/chat/consumers.py#L23)
++- Реализация: [`services/scheduling/service.py::book:196-206`](../../services/scheduling/service.py#L196), [`services/notifications/consumers.py::on_booking_created:10-17`](../../services/notifications/consumers.py#L10), [`services/chat/consumers.py::_handler:23-27`](../../services/chat/consumers.py#L23)
+ - Тесты: `tests/test_notifications.py::test_booking_email_goes_to_client_and_representative`, `tests/test_notifications.py::test_social_uses_social_templates`
+ - Роли: Клиент, Представитель клиента, Оператор
+ - Связанные: R-SCHED-CANCEL-01
+@@ -198,7 +210,7 @@ _cancel меняет только статус записи и публикуе
+ 
+ book_by_operator требует, чтобы заявка была закреплена за этим оператором («заявка закреплена за другим оператором») и у неё была действующая ссылка («по заявке нет действующей ссылки на запись»). Дальше выполняется обычная запись с booked_by=operator.
+ 
+-- Реализация: [`services/scheduling/service.py::book_by_operator:169-175`](../../services/scheduling/service.py#L169)
++- Реализация: [`services/scheduling/service.py::book_by_operator:213-219`](../../services/scheduling/service.py#L213)
+ - Роли: Оператор
+ - Связанные: R-SCHED-BOOK-01
+ 
+@@ -208,7 +220,7 @@ book_by_operator требует, чтобы заявка была закрепл
+ 
+ Любая отмена (клиентом, оператором, удалением окна, неявкой, сбросом) идёт через _cancel. Статус записи становится no_show при причине no_show, иначе cancelled. Публикуется booking.cancelled с причиной: notifications отправляет письмо типа cancel, chat пишет «Запись на … отменена (reason)».
+ 
+-- Реализация: [`services/scheduling/service.py::_cancel:178-190`](../../services/scheduling/service.py#L178), [`services/notifications/consumers.py::on_booking_cancelled:21-28`](../../services/notifications/consumers.py#L21), [`services/chat/consumers.py::_handler:23-27`](../../services/chat/consumers.py#L23)
++- Реализация: [`services/scheduling/service.py::_cancel:222-234`](../../services/scheduling/service.py#L222), [`services/notifications/consumers.py::on_booking_cancelled:21-28`](../../services/notifications/consumers.py#L21), [`services/chat/consumers.py::_handler:23-27`](../../services/chat/consumers.py#L23)
+ - БД: [`bookings_status_check`](../../migrations/versions/0001_initial.py#L278)
+ - Тесты: `tests/test_notifications.py::test_reschedule_sends_cancel_and_booking`
+ - Роли: Клиент, Представитель клиента, Оператор, Проверяющий оператор, Система (события и фоновые задачи)
+@@ -220,7 +232,7 @@ book_by_operator требует, чтобы заявка была закрепл
+ 
+ Отменить можно только действующую запись («запись не действует»). Если отменяет сторона клиента (CLIENT_SIDE = client, representative) и до начала окна меньше CLIENT_RESCHEDULE_MIN_DAYS суток (считается разница во времени, а не календарные даты) — DomainError «менее чем за два дня перенести или отменить визит может только оператор». Для остальных значений by ограничения нет.
+ 
+-- Реализация: [`services/scheduling/service.py::cancel_booking:195-203`](../../services/scheduling/service.py#L195), [`services/scheduling/api.py::cancel:41-42`](../../services/scheduling/api.py#L41)
++- Реализация: [`services/scheduling/service.py::cancel_booking:239-247`](../../services/scheduling/service.py#L239), [`services/scheduling/api.py::cancel:41-42`](../../services/scheduling/api.py#L41)
+ - Настройки: `libs/settings.py::CLIENT_RESCHEDULE_MIN_DAYS`, `services/scheduling/service.py::CLIENT_SIDE`
+ - Тесты: `tests/test_scheduling.py::test_client_cannot_cancel_less_than_two_days_before`
+ - Роли: Клиент, Представитель клиента, Оператор
+@@ -233,7 +245,7 @@ book_by_operator требует, чтобы заявка была закрепл
+ 
+ reschedule отменяет текущую запись через cancel_booking (с проверкой двух дней для стороны клиента) и записывает на новое окно по действующей ссылке заявки, с тем же booked_by. Уходят два письма: об отмене и о новой записи. Отдельного события переноса нет.
+ 
+-- Реализация: [`services/scheduling/service.py::reschedule:206-210`](../../services/scheduling/service.py#L206)
++- Реализация: [`services/scheduling/service.py::reschedule:250-254`](../../services/scheduling/service.py#L250)
+ - БД: [`uq_bookings_one_active`](../../migrations/versions/0001_initial.py#L282)
+ - Настройки: `libs/settings.py::CLIENT_RESCHEDULE_MIN_DAYS`
+ - Тесты: `tests/test_notifications.py::test_reschedule_sends_cancel_and_booking`
+@@ -246,7 +258,7 @@ reschedule отменяет текущую запись через cancel_bookin
+ 
+ Проверяющий оператор площадки окна отмечает неявку по действующей записи: статус no_show, публикуется booking.cancelled с reason=no_show (письмо об отмене, событие в чате). Ссылка и закреплённые книги остаются, этап заявки не меняется, клиент может записаться снова.
+ 
+-- Реализация: [`services/scheduling/service.py::mark_no_show:213-220`](../../services/scheduling/service.py#L213)
++- Реализация: [`services/scheduling/service.py::mark_no_show:257-264`](../../services/scheduling/service.py#L257)
+ - БД: [`bookings_status_check`](../../migrations/versions/0001_initial.py#L278)
+ - Тесты: `tests/test_scheduling.py::test_no_show_cancels_booking_and_allows_rebooking`
+ - Роли: Проверяющий оператор
+@@ -258,7 +270,7 @@ reschedule отменяет текущую запись через cancel_bookin
+ 
+ issue_books требует действующую запись с purpose=issue («нет действующей записи за книгами»). Выдаёт проверяющий оператор площадки заявки («книги выдаёт проверяющий оператор площадки заявки»). Заявка должна быть на этапе awaiting_issue («выдача возможна только на этапе «Ожидает выдачи»»), а дата окна — совпадать с текущей датой («выдача только в выбранную дату»).
+ 
+-- Реализация: [`services/scheduling/service.py::issue_books:224-235`](../../services/scheduling/service.py#L224)
++- Реализация: [`services/scheduling/service.py::issue_books:268-279`](../../services/scheduling/service.py#L268)
+ - Тесты: `tests/test_paid_flow.py::test_issue_only_on_booked_date`, `tests/test_paid_flow.py::test_paid_application_full_path`
+ - Роли: Проверяющий оператор
+ - Связанные: R-SCHED-ISSUE-02, R-SCHED-ISSUE-03
+@@ -269,7 +281,7 @@ issue_books требует действующую запись с purpose=issue
+ 
+ На каждую книгу заявки создаётся выдача (loan) со статусом out, issued_at = now и due_at = now + LOAN_PERIOD_DAYS (30) дней.
+ 
+-- Реализация: [`services/scheduling/service.py::issue_books:237-247`](../../services/scheduling/service.py#L237)
++- Реализация: [`services/scheduling/service.py::issue_books:281-291`](../../services/scheduling/service.py#L281)
+ - БД: [`loans_status_check`](../../migrations/versions/0001_initial.py#L298)
+ - Настройки: `libs/settings.py::LOAN_PERIOD_DAYS`
+ - Тесты: `tests/test_paid_flow.py::test_paid_application_full_path`
+@@ -282,7 +294,7 @@ issue_books требует действующую запись с purpose=issue
+ 
+ После выдачи запись получает статус done, все holds заявки удаляются и выпускается новая ссылка с purpose=return (прежняя гаснет). Публикуется books.issued: подписчик applications переводит заявку awaiting_issue->books_out от имени site_checker.
+ 
+-- Реализация: [`services/scheduling/service.py::issue_books:248-251`](../../services/scheduling/service.py#L248), [`services/applications/consumers.py::on_books_issued:67-69`](../../services/applications/consumers.py#L67), [`awaiting_issue->books_out`](../../bpm/application_process.yaml#L34)
++- Реализация: [`services/scheduling/service.py::issue_books:292-295`](../../services/scheduling/service.py#L292), [`services/applications/consumers.py::on_books_issued:67-69`](../../services/applications/consumers.py#L67), [`awaiting_issue->books_out`](../../bpm/application_process.yaml#L34)
+ - Тесты: `tests/test_paid_flow.py::test_paid_application_full_path`, `tests/test_kinds.py::test_social_application_skips_invoice`
+ - Роли: Проверяющий оператор
+ - Связанные: R-SCHED-ISSUE-01, R-SCHED-HOLD-02, R-SCHED-LINK-02
+@@ -294,7 +306,7 @@ issue_books требует действующую запись с purpose=issue
+ 
+ Возврат и утеря отмечаются по отдельной выдаче. Это может только проверяющий оператор площадки заявки («книги принимает проверяющий оператор площадки заявки») и только для выдачи в статусе out («книга уже возвращена или списана»). Возврат ставит status=returned, returned_at и флаг damaged; утеря ставит status=lost.
+ 
+-- Реализация: [`services/scheduling/service.py::_loan_for_checker:255-264`](../../services/scheduling/service.py#L255), [`services/scheduling/service.py::return_book:270-276`](../../services/scheduling/service.py#L270), [`services/scheduling/service.py::mark_lost:279-283`](../../services/scheduling/service.py#L279)
++- Реализация: [`services/scheduling/service.py::_loan_for_checker:299-308`](../../services/scheduling/service.py#L299), [`services/scheduling/service.py::return_book:314-320`](../../services/scheduling/service.py#L314), [`services/scheduling/service.py::mark_lost:323-327`](../../services/scheduling/service.py#L323)
+ - БД: [`loans_status_check`](../../migrations/versions/0001_initial.py#L298)
+ - Тесты: `tests/test_paid_flow.py::test_paid_application_full_path`
+ - Роли: Проверяющий оператор
+@@ -307,7 +319,7 @@ issue_books требует действующую запись с purpose=issue
+ 
+ При возврате с damaged=true публикуется loan.damaged, при отметке утери — loan.lost. Подписчики billing создают штраф заявки с видом damaged или lost (create_fine). Эти события в чат не пишутся.
+ 
+-- Реализация: [`services/scheduling/service.py::return_book:274-275`](../../services/scheduling/service.py#L274), [`services/scheduling/service.py::mark_lost:282`](../../services/scheduling/service.py#L282), [`services/billing/consumers.py::on_loan_damaged:48-50`](../../services/billing/consumers.py#L48), [`services/billing/consumers.py::on_loan_lost:43-45`](../../services/billing/consumers.py#L43)
++- Реализация: [`services/scheduling/service.py::return_book:318-319`](../../services/scheduling/service.py#L318), [`services/scheduling/service.py::mark_lost:326`](../../services/scheduling/service.py#L326), [`services/billing/consumers.py::on_loan_damaged:48-50`](../../services/billing/consumers.py#L48), [`services/billing/consumers.py::on_loan_lost:43-45`](../../services/billing/consumers.py#L43)
+ - Роли: Проверяющий оператор
+ - Связанные: R-SCHED-RETURN-01, R-SCHED-OVERDUE-01
+ - ⚠ Расхождение со схемой: Схема (§15): в чат попадают все события заявки. Код: loan.damaged и loan.lost в EVENT_TEXT чата нет, в чат они не попадают.
+@@ -330,7 +342,7 @@ flag_overdue выбирает выдачи со статусом out без фл
+ 
+ На application.archived и application.closed_duplicate вызывается reset_bookings: действующие записи отменяются с причиной archived или duplicate (booking.cancelled, письма об отмене, чат), holds заявки удаляются, все ссылки гаснут.
+ 
+-- Реализация: [`services/scheduling/consumers.py::on_archived:25-26`](../../services/scheduling/consumers.py#L25), [`services/scheduling/consumers.py::on_closed_duplicate:30-31`](../../services/scheduling/consumers.py#L30), [`services/scheduling/service.py::reset_bookings:286-299`](../../services/scheduling/service.py#L286)
++- Реализация: [`services/scheduling/consumers.py::on_archived:24-25`](../../services/scheduling/consumers.py#L24), [`services/scheduling/consumers.py::on_closed_duplicate:29-30`](../../services/scheduling/consumers.py#L29), [`services/scheduling/service.py::reset_bookings:330-343`](../../services/scheduling/service.py#L330)
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-SCHED-LINK-03, R-SCHED-VENUE-CHANGE-01
+ 
+@@ -340,7 +352,7 @@ flag_overdue выбирает выдачи со статусом out без фл
+ 
+ На application.venue_changed модуль сбрасывает записи (reason=venue_changed: письмо об отмене, освобождение книг, гашение ссылок). Если заявка на этапе awaiting_issue, выпускается новая ссылка purpose=issue. Проверяющий оператор новой площадки назначается в applications.change_venue.
+ 
+-- Реализация: [`services/scheduling/consumers.py::on_venue_changed:17-21`](../../services/scheduling/consumers.py#L17), [`services/scheduling/service.py::reset_bookings:286-299`](../../services/scheduling/service.py#L286)
++- Реализация: [`services/scheduling/consumers.py::on_venue_changed:16-20`](../../services/scheduling/consumers.py#L16), [`services/scheduling/service.py::reset_bookings:330-343`](../../services/scheduling/service.py#L330)
+ - Роли: Оператор
+ - Связанные: R-SCHED-RESET-01, R-SCHED-LINK-01
+ - ⚠ Расхождение со схемой: Схема: у социальных заявок и заявок в долг площадку меняют только до формирования ссылки, после выдачи — никогда. Код change_venue блокирует смену только для paid на awaiting_issue и books_out. У debt/social на этапе books_out смена проходит: записи на сдачу отменяются, ссылка на сдачу гаснет, а новая не выпускается (выпуск только при awaiting_issue) — клиент не может записаться на сдачу. Письмо об отмене уходит по шаблону старой площадки (venue_id окна).
+diff --git a/knowledge/model/code.json b/knowledge/model/code.json
+index f46dac8..aaeb13c 100644
+--- a/knowledge/model/code.json
++++ b/knowledge/model/code.json
+@@ -4264,7 +4264,7 @@
+   {
+    "dst": "services/scheduling/service.py::reset_bookings",
+    "lines": [
+-    26
++    25
+    ],
+    "src": "services/scheduling/consumers.py::on_archived",
+    "type": "calls"
+@@ -4272,7 +4272,7 @@
+   {
+    "dst": "services/scheduling/service.py::reset_bookings",
+    "lines": [
+-    31
++    30
+    ],
+    "src": "services/scheduling/consumers.py::on_closed_duplicate",
+    "type": "calls"
+@@ -4280,7 +4280,7 @@
+   {
+    "dst": "services/scheduling/service.py::issue_link",
+    "lines": [
+-    13
++    12
+    ],
+    "src": "services/scheduling/consumers.py::on_ready_for_booking",
+    "type": "calls"
+@@ -4288,7 +4288,7 @@
+   {
+    "dst": "services/applications/public.py::get_brief",
+    "lines": [
+-    19
++    18
+    ],
+    "src": "services/scheduling/consumers.py::on_venue_changed",
+    "type": "calls"
+@@ -4296,7 +4296,7 @@
+   {
+    "dst": "services/scheduling/service.py::issue_link",
+    "lines": [
+-    21
++    20
+    ],
+    "src": "services/scheduling/consumers.py::on_venue_changed",
+    "type": "calls"
+@@ -4304,15 +4304,23 @@
+   {
+    "dst": "services/scheduling/service.py::reset_bookings",
+    "lines": [
+-    18
++    17
+    ],
+    "src": "services/scheduling/consumers.py::on_venue_changed",
+    "type": "calls"
+   },
++  {
++   "dst": "services/scheduling/service.py::apply_venue_limit",
++   "lines": [
++    36
++   ],
++   "src": "services/scheduling/consumers.py::on_venue_settings_changed",
++   "type": "calls"
++  },
+   {
+    "dst": "services/applications/public.py::get_brief",
+    "lines": [
+-    259
++    303
+    ],
+    "src": "services/scheduling/service.py::_loan_for_checker",
+    "type": "calls"
+@@ -4328,7 +4336,7 @@
+   {
+    "dst": "services/applications/public.py::get_brief",
+    "lines": [
+-    128
++    172
+    ],
+    "src": "services/scheduling/service.py::book",
+    "type": "calls"
+@@ -4336,7 +4344,7 @@
+   {
+    "dst": "services/scheduling/service.py::_active_bookings",
+    "lines": [
+-    136
++    180
+    ],
+    "src": "services/scheduling/service.py::book",
+    "type": "calls"
+@@ -4344,7 +4352,7 @@
+   {
+    "dst": "services/scheduling/service.py::_link_by_token",
+    "lines": [
+-    127
++    171
+    ],
+    "src": "services/scheduling/service.py::book",
+    "type": "calls"
+@@ -4352,7 +4360,7 @@
+   {
+    "dst": "services/applications/public.py::get_brief",
+    "lines": [
+-    169
++    213
+    ],
+    "src": "services/scheduling/service.py::book_by_operator",
+    "type": "calls"
+@@ -4360,7 +4368,7 @@
+   {
+    "dst": "services/scheduling/service.py::active_link",
+    "lines": [
+-    172
++    216
+    ],
+    "src": "services/scheduling/service.py::book_by_operator",
+    "type": "calls"
+@@ -4368,7 +4376,7 @@
+   {
+    "dst": "services/scheduling/service.py::book",
+    "lines": [
+-    175
++    219
+    ],
+    "src": "services/scheduling/service.py::book_by_operator",
+    "type": "calls"
+@@ -4376,7 +4384,7 @@
+   {
+    "dst": "services/scheduling/service.py::_cancel",
+    "lines": [
+-    202
++    246
+    ],
+    "src": "services/scheduling/service.py::cancel_booking",
+    "type": "calls"
+@@ -4392,7 +4400,7 @@
+   {
+    "dst": "services/applications/public.py::get_brief",
+    "lines": [
+-    104
++    148
+    ],
+    "src": "services/scheduling/service.py::free_slots",
+    "type": "calls"
+@@ -4400,7 +4408,7 @@
+   {
+    "dst": "services/scheduling/service.py::_link_by_token",
+    "lines": [
+-    103
++    147
+    ],
+    "src": "services/scheduling/service.py::free_slots",
+    "type": "calls"
+@@ -4408,7 +4416,7 @@
+   {
+    "dst": "services/applications/public.py::get_brief",
+    "lines": [
+-    228
++    272
+    ],
+    "src": "services/scheduling/service.py::issue_books",
+    "type": "calls"
+@@ -4416,7 +4424,7 @@
+   {
+    "dst": "services/scheduling/service.py::issue_link",
+    "lines": [
+-    250
++    294
+    ],
+    "src": "services/scheduling/service.py::issue_books",
+    "type": "calls"
+@@ -4424,7 +4432,7 @@
+   {
+    "dst": "services/scheduling/service.py::_loan_for_checker",
+    "lines": [
+-    280
++    324
+    ],
+    "src": "services/scheduling/service.py::mark_lost",
+    "type": "calls"
+@@ -4432,7 +4440,7 @@
+   {
+    "dst": "services/scheduling/service.py::_cancel",
+    "lines": [
+-    219
++    263
+    ],
+    "src": "services/scheduling/service.py::mark_no_show",
+    "type": "calls"
+@@ -4440,7 +4448,7 @@
+   {
+    "dst": "services/scheduling/service.py::_require_site_checker",
+    "lines": [
+-    218
++    262
+    ],
+    "src": "services/scheduling/service.py::mark_no_show",
+    "type": "calls"
+@@ -4448,7 +4456,7 @@
+   {
+    "dst": "services/scheduling/service.py::_active_bookings",
+    "lines": [
+-    59
++    63
+    ],
+    "src": "services/scheduling/service.py::reduce_capacity",
+    "type": "calls"
+@@ -4456,7 +4464,7 @@
+   {
+    "dst": "services/scheduling/service.py::_require_site_checker",
+    "lines": [
+-    56
++    60
+    ],
+    "src": "services/scheduling/service.py::reduce_capacity",
+    "type": "calls"
+@@ -4464,7 +4472,7 @@
+   {
+    "dst": "services/scheduling/service.py::_cancel",
+    "lines": [
+-    75
++    119
+    ],
+    "src": "services/scheduling/service.py::remove_slot",
+    "type": "calls"
+@@ -4472,7 +4480,7 @@
+   {
+    "dst": "services/scheduling/service.py::_require_site_checker",
+    "lines": [
+-    70
++    114
+    ],
+    "src": "services/scheduling/service.py::remove_slot",
+    "type": "calls"
+@@ -4480,7 +4488,7 @@
+   {
+    "dst": "services/scheduling/service.py::active_link",
+    "lines": [
+-    209
++    253
+    ],
+    "src": "services/scheduling/service.py::reschedule",
+    "type": "calls"
+@@ -4488,7 +4496,7 @@
+   {
+    "dst": "services/scheduling/service.py::book",
+    "lines": [
+-    210
++    254
+    ],
+    "src": "services/scheduling/service.py::reschedule",
+    "type": "calls"
+@@ -4496,7 +4504,7 @@
+   {
+    "dst": "services/scheduling/service.py::cancel_booking",
+    "lines": [
+-    207
++    251
+    ],
+    "src": "services/scheduling/service.py::reschedule",
+    "type": "calls"
+@@ -4504,7 +4512,7 @@
+   {
+    "dst": "services/scheduling/service.py::_cancel",
+    "lines": [
+-    295
++    339
+    ],
+    "src": "services/scheduling/service.py::reset_bookings",
+    "type": "calls"
+@@ -4512,7 +4520,7 @@
+   {
+    "dst": "services/scheduling/service.py::_loan_for_checker",
+    "lines": [
+-    270
++    314
+    ],
+    "src": "services/scheduling/service.py::return_book",
+    "type": "calls"
+@@ -7533,6 +7541,11 @@
+    "src": "services/scheduling/service.py::active_link",
+    "type": "part_of"
+   },
++  {
++   "dst": "service:scheduling",
++   "src": "services/scheduling/service.py::apply_venue_limit",
++   "type": "part_of"
++  },
+   {
+    "dst": "service:scheduling",
+    "src": "services/scheduling/service.py::book",
+@@ -9581,14 +9594,6 @@
+    "src": "services/reports/service.py::record_snapshot",
+    "type": "reads"
+   },
+-  {
+-   "dst": "scheduling.venue_limits",
+-   "lines": [
+-    36
+-   ],
+-   "src": "services/scheduling/consumers.py::on_venue_settings_changed",
+-   "type": "reads"
+-  },
+   {
+    "dst": "scheduling.loans",
+    "lines": [
+@@ -9611,7 +9616,7 @@
+   {
+    "dst": "scheduling.bookings",
+    "lines": [
+-    48
++    52
+    ],
+    "src": "services/scheduling/service.py::_active_bookings",
+    "type": "reads"
+@@ -9619,7 +9624,7 @@
+   {
+    "dst": "scheduling.booking_links",
+    "lines": [
+-    96
++    140
+    ],
+    "src": "services/scheduling/service.py::_link_by_token",
+    "type": "reads"
+@@ -9627,7 +9632,7 @@
+   {
+    "dst": "scheduling.loans",
+    "lines": [
+-    256
++    300
+    ],
+    "src": "services/scheduling/service.py::_loan_for_checker",
+    "type": "reads"
+@@ -9635,7 +9640,7 @@
+   {
+    "dst": "scheduling.booking_links",
+    "lines": [
+-    91
++    135
+    ],
+    "src": "services/scheduling/service.py::active_link",
+    "type": "reads"
+@@ -9643,7 +9648,28 @@
+   {
+    "dst": "scheduling.slots",
+    "lines": [
+-    129
++    93,
++    95,
++    96,
++    97,
++    98,
++    99
++   ],
++   "src": "services/scheduling/service.py::apply_venue_limit",
++   "type": "reads"
++  },
++  {
++   "dst": "scheduling.venue_limits",
++   "lines": [
++    79
++   ],
++   "src": "services/scheduling/service.py::apply_venue_limit",
++   "type": "reads"
++  },
++  {
++   "dst": "scheduling.slots",
++   "lines": [
++    173
+    ],
+    "src": "services/scheduling/service.py::book",
+    "type": "reads"
+@@ -9651,7 +9677,7 @@
+   {
+    "dst": "scheduling.bookings",
+    "lines": [
+-    194
++    238
+    ],
+    "src": "services/scheduling/service.py::cancel_booking",
+    "type": "reads"
+@@ -9659,7 +9685,7 @@
+   {
+    "dst": "scheduling.slots",
+    "lines": [
+-    197
++    241
+    ],
+    "src": "services/scheduling/service.py::cancel_booking",
+    "type": "reads"
+@@ -9667,7 +9693,7 @@
+   {
+    "dst": "scheduling.venue_limits",
+    "lines": [
+-    36
++    35
+    ],
+    "src": "services/scheduling/service.py::create_slot",
+    "type": "reads"
+@@ -9675,9 +9701,9 @@
+   {
+    "dst": "scheduling.bookings",
+    "lines": [
+-    106,
+-    107,
+-    108
++    150,
++    151,
++    152
+    ],
+    "src": "services/scheduling/service.py::free_slots",
+    "type": "reads"
+@@ -9685,14 +9711,14 @@
+   {
+    "dst": "scheduling.slots",
+    "lines": [
+-    112,
+-    113,
+-    115,
+-    116,
+-    117,
+-    118,
+-    119,
+-    121
++    156,
++    157,
++    159,
++    160,
++    161,
++    162,
++    163,
++    165
+    ],
+    "src": "services/scheduling/service.py::free_slots",
+    "type": "reads"
+@@ -9700,7 +9726,7 @@
+   {
+    "dst": "scheduling.bookings",
+    "lines": [
+-    224
++    268
+    ],
+    "src": "services/scheduling/service.py::issue_books",
+    "type": "reads"
+@@ -9708,7 +9734,7 @@
+   {
+    "dst": "scheduling.holds",
+    "lines": [
+-    249
++    293
+    ],
+    "src": "services/scheduling/service.py::issue_books",
+    "type": "reads"
+@@ -9716,7 +9742,7 @@
+   {
+    "dst": "scheduling.slots",
+    "lines": [
+-    227
++    271
+    ],
+    "src": "services/scheduling/service.py::issue_books",
+    "type": "reads"
+@@ -9724,7 +9750,7 @@
+   {
+    "dst": "scheduling.booking_links",
+    "lines": [
+-    81
++    125
+    ],
+    "src": "services/scheduling/service.py::issue_link",
+    "type": "reads"
+@@ -9732,7 +9758,7 @@
+   {
+    "dst": "scheduling.bookings",
+    "lines": [
+-    214
++    258
+    ],
+    "src": "services/scheduling/service.py::mark_no_show",
+    "type": "reads"
+@@ -9740,7 +9766,7 @@
+   {
+    "dst": "scheduling.slots",
+    "lines": [
+-    217
++    261
+    ],
+    "src": "services/scheduling/service.py::mark_no_show",
+    "type": "reads"
+@@ -9748,7 +9774,7 @@
+   {
+    "dst": "scheduling.slots",
+    "lines": [
+-    53
++    57
+    ],
+    "src": "services/scheduling/service.py::reduce_capacity",
+    "type": "reads"
+@@ -9756,7 +9782,7 @@
+   {
+    "dst": "scheduling.bookings",
+    "lines": [
+-    72
++    116
+    ],
+    "src": "services/scheduling/service.py::remove_slot",
+    "type": "reads"
+@@ -9764,7 +9790,7 @@
+   {
+    "dst": "scheduling.slots",
+    "lines": [
+-    67
++    111
+    ],
+    "src": "services/scheduling/service.py::remove_slot",
+    "type": "reads"
+@@ -9772,7 +9798,7 @@
+   {
+    "dst": "scheduling.booking_links",
+    "lines": [
+-    298
++    342
+    ],
+    "src": "services/scheduling/service.py::reset_bookings",
+    "type": "reads"
+@@ -9780,7 +9806,7 @@
+   {
+    "dst": "scheduling.bookings",
+    "lines": [
+-    290
++    334
+    ],
+    "src": "services/scheduling/service.py::reset_bookings",
+    "type": "reads"
+@@ -9788,7 +9814,7 @@
+   {
+    "dst": "scheduling.holds",
+    "lines": [
+-    296
++    340
+    ],
+    "src": "services/scheduling/service.py::reset_bookings",
+    "type": "reads"
+@@ -9796,7 +9822,7 @@
+   {
+    "dst": "scheduling.slots",
+    "lines": [
+-    294
++    338
+    ],
+    "src": "services/scheduling/service.py::reset_bookings",
+    "type": "reads"
+@@ -11172,7 +11198,7 @@
+   {
+    "dst": "libs/settings.py::CLIENT_RESCHEDULE_MIN_DAYS",
+    "lines": [
+-    199
++    243
+    ],
+    "src": "services/scheduling/service.py::cancel_booking",
+    "type": "reads_config"
+@@ -11180,7 +11206,7 @@
+   {
+    "dst": "services/scheduling/service.py::CLIENT_SIDE",
+    "lines": [
+-    198
++    242
+    ],
+    "src": "services/scheduling/service.py::cancel_booking",
+    "type": "reads_config"
+@@ -11188,7 +11214,7 @@
+   {
+    "dst": "libs/settings.py::LOAN_PERIOD_DAYS",
+    "lines": [
+-    242
++    286
+    ],
+    "src": "services/scheduling/service.py::issue_books",
+    "type": "reads_config"
+@@ -11534,6 +11560,21 @@
+    "src": "services/reports/service.py::build_run",
+    "type": "refs"
+   },
++  {
++   "dst": "tests/test_scheduling.py::test_reduced_slot_ignores_maximum_even_when_it_matches_old_maximum",
++   "src": "services/applications/admin.py::set_venue_max_capacity",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_scheduling.py::test_venue_maximum_change_keeps_reduced_past_and_removed_slots",
++   "src": "services/applications/admin.py::set_venue_max_capacity",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_scheduling.py::test_venue_maximum_change_moves_future_slots_at_old_maximum",
++   "src": "services/applications/admin.py::set_venue_max_capacity",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_archive.py::test_stuck_review_goes_to_archive_after_month",
+    "src": "services/applications/jobs.py::archive_stale",
+@@ -15894,6 +15935,11 @@
+    "src": "services/scheduling/service.py::create_slot",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_scheduling.py::test_reduced_slot_ignores_maximum_even_when_it_matches_old_maximum",
++   "src": "services/scheduling/service.py::create_slot",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_scheduling.py::test_slot_capacity_cannot_exceed_venue_maximum",
+    "src": "services/scheduling/service.py::create_slot",
+@@ -15904,6 +15950,16 @@
+    "src": "services/scheduling/service.py::create_slot",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_scheduling.py::test_venue_maximum_change_keeps_reduced_past_and_removed_slots",
++   "src": "services/scheduling/service.py::create_slot",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_scheduling.py::test_venue_maximum_change_moves_future_slots_at_old_maximum",
++   "src": "services/scheduling/service.py::create_slot",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_scheduling.py::test_free_slots_hide_full_windows",
+    "src": "services/scheduling/service.py::free_slots",
+@@ -15939,6 +15995,21 @@
+    "src": "services/scheduling/service.py::reduce_capacity",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_scheduling.py::test_reduced_slot_ignores_maximum_even_when_it_matches_old_maximum",
++   "src": "services/scheduling/service.py::reduce_capacity",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_scheduling.py::test_venue_maximum_change_keeps_reduced_past_and_removed_slots",
++   "src": "services/scheduling/service.py::reduce_capacity",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_scheduling.py::test_venue_maximum_change_keeps_reduced_past_and_removed_slots",
++   "src": "services/scheduling/service.py::remove_slot",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_notifications.py::test_reschedule_sends_cancel_and_booking",
+    "src": "services/scheduling/service.py::reschedule",
+@@ -19407,18 +19478,6 @@
+    "src": "services/reports/service.py::update_definition",
+    "type": "writes"
+   },
+-  {
+-   "columns": [
+-    "max_capacity"
+-   ],
+-   "dst": "scheduling.venue_limits",
+-   "lines": [
+-    38,
+-    40
+-   ],
+-   "src": "services/scheduling/consumers.py::on_venue_settings_changed",
+-   "type": "writes"
+-  },
+   {
+    "columns": [
+     "overdue_flagged"
+@@ -19436,15 +19495,38 @@
+    ],
+    "dst": "scheduling.bookings",
+    "lines": [
+-    179
++    223
+    ],
+    "src": "services/scheduling/service.py::_cancel",
+    "type": "writes"
+   },
++  {
++   "columns": [
++    "capacity"
++   ],
++   "dst": "scheduling.slots",
++   "lines": [
++    105
++   ],
++   "src": "services/scheduling/service.py::apply_venue_limit",
++   "type": "writes"
++  },
++  {
++   "columns": [
++    "max_capacity"
++   ],
++   "dst": "scheduling.venue_limits",
++   "lines": [
++    81,
++    86
++   ],
++   "src": "services/scheduling/service.py::apply_venue_limit",
++   "type": "writes"
++  },
+   {
+    "dst": "scheduling.bookings",
+    "lines": [
+-    139
++    183
+    ],
+    "src": "services/scheduling/service.py::book",
+    "type": "writes"
+@@ -19452,7 +19534,7 @@
+   {
+    "dst": "scheduling.holds",
+    "lines": [
+-    150
++    194
+    ],
+    "src": "services/scheduling/service.py::book",
+    "type": "writes"
+@@ -19460,7 +19542,7 @@
+   {
+    "dst": "scheduling.slots",
+    "lines": [
+-    40
++    42
+    ],
+    "src": "services/scheduling/service.py::create_slot",
+    "type": "writes"
+@@ -19471,7 +19553,7 @@
+    ],
+    "dst": "scheduling.bookings",
+    "lines": [
+-    248
++    292
+    ],
+    "src": "services/scheduling/service.py::issue_books",
+    "type": "writes"
+@@ -19479,7 +19561,7 @@
+   {
+    "dst": "scheduling.holds",
+    "lines": [
+-    249
++    293
+    ],
+    "src": "services/scheduling/service.py::issue_books",
+    "type": "writes"
+@@ -19487,7 +19569,7 @@
+   {
+    "dst": "scheduling.loans",
+    "lines": [
+-    238
++    282
+    ],
+    "src": "services/scheduling/service.py::issue_books",
+    "type": "writes"
+@@ -19495,8 +19577,8 @@
+   {
+    "dst": "scheduling.booking_links",
+    "lines": [
+-    81,
+-    83
++    125,
++    127
+    ],
+    "src": "services/scheduling/service.py::issue_link",
+    "type": "writes"
+@@ -19507,18 +19589,20 @@
+    ],
+    "dst": "scheduling.loans",
+    "lines": [
+-    281
++    325
+    ],
+    "src": "services/scheduling/service.py::mark_lost",
+    "type": "writes"
+   },
+   {
+    "columns": [
+-    "capacity"
++    "capacity",
++    "capacity_manual"
+    ],
+    "dst": "scheduling.slots",
+    "lines": [
+-    61
++    65,
++    67
+    ],
+    "src": "services/scheduling/service.py::reduce_capacity",
+    "type": "writes"
+@@ -19529,7 +19613,7 @@
+    ],
+    "dst": "scheduling.slots",
+    "lines": [
+-    76
++    120
+    ],
+    "src": "services/scheduling/service.py::remove_slot",
+    "type": "writes"
+@@ -19537,7 +19621,7 @@
+   {
+    "dst": "scheduling.booking_links",
+    "lines": [
+-    298
++    342
+    ],
+    "src": "services/scheduling/service.py::reset_bookings",
+    "type": "writes"
+@@ -19545,7 +19629,7 @@
+   {
+    "dst": "scheduling.holds",
+    "lines": [
+-    296
++    340
+    ],
+    "src": "services/scheduling/service.py::reset_bookings",
+    "type": "writes"
+@@ -19558,9 +19642,9 @@
+    ],
+    "dst": "scheduling.loans",
+    "lines": [
+-    271,
+-    272,
+-    273
++    315,
++    316,
++    317
+    ],
+    "src": "services/scheduling/service.py::return_book",
+    "type": "writes"
+@@ -30657,12 +30741,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 26,
++   "end_line": 25,
+    "hash": "eea4dc718507",
+    "hash_own": "29b5c3901669",
+    "id": "services/scheduling/consumers.py::on_archived",
+    "kind": "consumer",
+-   "line": 25,
++   "line": 24,
+    "name": "on_archived",
+    "path": "services/scheduling/consumers.py",
+    "service": "scheduling",
+@@ -30670,12 +30754,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 31,
++   "end_line": 30,
+    "hash": "1230ea8d19ae",
+    "hash_own": "174328273a80",
+    "id": "services/scheduling/consumers.py::on_closed_duplicate",
+    "kind": "consumer",
+-   "line": 30,
++   "line": 29,
+    "name": "on_closed_duplicate",
+    "path": "services/scheduling/consumers.py",
+    "service": "scheduling",
+@@ -30683,12 +30767,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 13,
++   "end_line": 12,
+    "hash": "648936515cb6",
+    "hash_own": "d76521da1729",
+    "id": "services/scheduling/consumers.py::on_ready_for_booking",
+    "kind": "consumer",
+-   "line": 12,
++   "line": 11,
+    "name": "on_ready_for_booking",
+    "path": "services/scheduling/consumers.py",
+    "service": "scheduling",
+@@ -30696,12 +30780,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 21,
++   "end_line": 20,
+    "hash": "d4bfde5996e1",
+    "hash_own": "af9272eb1716",
+    "id": "services/scheduling/consumers.py::on_venue_changed",
+    "kind": "consumer",
+-   "line": 17,
++   "line": 16,
+    "name": "on_venue_changed",
+    "path": "services/scheduling/consumers.py",
+    "service": "scheduling",
+@@ -30709,12 +30793,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 40,
+-   "hash": "37def55ecd07",
+-   "hash_own": "2b68c826d289",
++   "end_line": 36,
++   "hash": "a341d008c4fb",
++   "hash_own": "c1e89595ab3e",
+    "id": "services/scheduling/consumers.py::on_venue_settings_changed",
+    "kind": "consumer",
+-   "line": 35,
++   "line": 34,
+    "name": "on_venue_settings_changed",
+    "path": "services/scheduling/consumers.py",
+    "service": "scheduling",
+@@ -30722,12 +30806,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 54,
++   "end_line": 56,
+    "hash": "799b72f136c1",
+    "hash_own": "799b72f136c1",
+    "id": "services/scheduling/models.py::Booking",
+    "kind": "orm_model",
+-   "line": 44,
++   "line": 46,
+    "name": "Booking",
+    "path": "services/scheduling/models.py",
+    "service": "scheduling",
+@@ -30735,12 +30819,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 41,
++   "end_line": 43,
+    "hash": "d7c9eec0e312",
+    "hash_own": "d7c9eec0e312",
+    "id": "services/scheduling/models.py::BookingLink",
+    "kind": "orm_model",
+-   "line": 33,
++   "line": 35,
+    "name": "BookingLink",
+    "path": "services/scheduling/models.py",
+    "service": "scheduling",
+@@ -30749,12 +30833,12 @@
+   },
+   {
+    "doc": "Книги, закреплённые за заявкой с момента записи за книгами.",
+-   "end_line": 64,
++   "end_line": 66,
+    "hash": "86bd6b53b0cf",
+    "hash_own": "86bd6b53b0cf",
+    "id": "services/scheduling/models.py::Hold",
+    "kind": "orm_model",
+-   "line": 57,
++   "line": 59,
+    "name": "Hold",
+    "path": "services/scheduling/models.py",
+    "service": "scheduling",
+@@ -30762,12 +30846,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 79,
++   "end_line": 81,
+    "hash": "d3ecc0dd2605",
+    "hash_own": "d3ecc0dd2605",
+    "id": "services/scheduling/models.py::Loan",
+    "kind": "orm_model",
+-   "line": 67,
++   "line": 69,
+    "name": "Loan",
+    "path": "services/scheduling/models.py",
+    "service": "scheduling",
+@@ -30775,9 +30859,9 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 30,
+-   "hash": "bf0ea238c7d9",
+-   "hash_own": "bf0ea238c7d9",
++   "end_line": 32,
++   "hash": "5552a8beb92b",
++   "hash_own": "5552a8beb92b",
+    "id": "services/scheduling/models.py::Slot",
+    "kind": "orm_model",
+    "line": 21,
+@@ -30815,12 +30899,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 49,
++   "end_line": 53,
+    "hash": "aa8e00301e30",
+    "hash_own": "d4a9e8abdd83",
+    "id": "services/scheduling/service.py::_active_bookings",
+    "kind": "function",
+-   "line": 46,
++   "line": 50,
+    "name": "_active_bookings",
+    "path": "services/scheduling/service.py",
+    "service": "scheduling",
+@@ -30828,12 +30912,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 190,
++   "end_line": 234,
+    "hash": "6120ee8baf20",
+    "hash_own": "4ced444c18c3",
+    "id": "services/scheduling/service.py::_cancel",
+    "kind": "function",
+-   "line": 178,
++   "line": 222,
+    "name": "_cancel",
+    "path": "services/scheduling/service.py",
+    "service": "scheduling",
+@@ -30845,16 +30929,16 @@
+     {
+      "condition": "link is None or not link.active",
+      "error": "DomainError",
+-     "line": 98,
++     "line": 142,
+      "message": "ссылка на запись не действует"
+     }
+    ],
+-   "end_line": 99,
++   "end_line": 143,
+    "hash": "f72f2a1be4fe",
+    "hash_own": "bd2ddd1e6da4",
+    "id": "services/scheduling/service.py::_link_by_token",
+    "kind": "function",
+-   "line": 95,
++   "line": 139,
+    "name": "_link_by_token",
+    "path": "services/scheduling/service.py",
+    "service": "scheduling",
+@@ -30866,28 +30950,28 @@
+     {
+      "condition": "loan is None",
+      "error": "NotFound",
+-     "line": 258,
++     "line": 302,
+      "message": "f'выдача {loan_id}'"
+     },
+     {
+      "condition": "brief.site_checker_id != site_checker_id",
+      "error": "AccessDenied",
+-     "line": 261,
++     "line": 305,
+      "message": "книги принимает проверяющий оператор площадки заявки"
+     },
+     {
+      "condition": "loan.status != 'out'",
+      "error": "DomainError",
+-     "line": 263,
++     "line": 307,
+      "message": "книга уже возвращена или списана"
+     }
+    ],
+-   "end_line": 264,
++   "end_line": 308,
+    "hash": "c1bffe16b4f5",
+    "hash_own": "c2293c48721d",
+    "id": "services/scheduling/service.py::_loan_for_checker",
+    "kind": "function",
+-   "line": 255,
++   "line": 299,
+    "name": "_loan_for_checker",
+    "path": "services/scheduling/service.py",
+    "service": "scheduling",
+@@ -30916,51 +31000,65 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 92,
++   "end_line": 136,
+    "hash": "55aa7c7ac417",
+    "hash_own": "f197410915e3",
+    "id": "services/scheduling/service.py::active_link",
+    "kind": "function",
+-   "line": 89,
++   "line": 133,
+    "name": "active_link",
+    "path": "services/scheduling/service.py",
+    "service": "scheduling",
+    "signature": "(session, application_id)",
+    "type": "symbol"
+   },
++  {
++   "doc": "Обновляет реплику максимума мест и подтягивает к нему будущие окна площадки.",
++   "end_line": 107,
++   "hash": "626249204717",
++   "hash_own": "95c8fb045726",
++   "id": "services/scheduling/service.py::apply_venue_limit",
++   "kind": "function",
++   "line": 72,
++   "name": "apply_venue_limit",
++   "path": "services/scheduling/service.py",
++   "service": "scheduling",
++   "signature": "(session, venue_id, max_capacity)",
++   "type": "symbol"
++  },
+   {
+    "checks": [
+     {
+      "condition": "slot is None or slot.removed",
+      "error": "NotFound",
+-     "line": 131,
++     "line": 175,
+      "message": "f'окно {slot_id}'"
+     },
+     {
+      "condition": "slot.venue_id != brief.venue_id or slot.sphere_id != brief.sphere_id",
+      "error": "DomainError",
+-     "line": 133,
++     "line": 177,
+      "message": "окно не на площадке или не в сфере заявки"
+     },
+     {
+      "condition": "slot.starts_at <= clock.now()",
+      "error": "DomainError",
+-     "line": 135,
++     "line": 179,
+      "message": "нельзя записаться на прошедшее время"
+     },
+     {
+      "condition": "await _active_bookings(session, slot_id) >= slot.capacity",
+      "error": "DomainError",
+-     "line": 137,
++     "line": 181,
+      "message": "в окне нет свободных мест"
+     }
+    ],
+-   "end_line": 163,
++   "end_line": 207,
+    "hash": "e0cce5e125eb",
+    "hash_own": "b03a4a37c9d7",
+    "id": "services/scheduling/service.py::book",
+    "kind": "function",
+-   "line": 126,
++   "line": 170,
+    "name": "book",
+    "path": "services/scheduling/service.py",
+    "service": "scheduling",
+@@ -30972,22 +31070,22 @@
+     {
+      "condition": "brief.operator_id != operator_id",
+      "error": "AccessDenied",
+-     "line": 171,
++     "line": 215,
+      "message": "заявка закреплена за другим оператором"
+     },
+     {
+      "condition": "link is None",
+      "error": "DomainError",
+-     "line": 174,
++     "line": 218,
+      "message": "по заявке нет действующей ссылки на запись"
+     }
+    ],
+-   "end_line": 175,
++   "end_line": 219,
+    "hash": "4543c4eb44c4",
+    "hash_own": "d7de7d8bf2bd",
+    "id": "services/scheduling/service.py::book_by_operator",
+    "kind": "function",
+-   "line": 166,
++   "line": 210,
+    "name": "book_by_operator",
+    "path": "services/scheduling/service.py",
+    "service": "scheduling",
+@@ -30999,22 +31097,22 @@
+     {
+      "condition": "booking is None or booking.status != 'active'",
+      "error": "DomainError",
+-     "line": 196,
++     "line": 240,
+      "message": "запись не действует"
+     },
+     {
+      "condition": "by in CLIENT_SIDE and slot.starts_at - clock.now() < timedelta(days=settings.CLIENT_RESCHEDULE_MIN_DAYS)",
+      "error": "DomainError",
+-     "line": 201,
++     "line": 245,
+      "message": "менее чем за два дня перенести или отменить визит может только оператор"
+     }
+    ],
+-   "end_line": 203,
++   "end_line": 247,
+    "hash": "3cd89e5dcd70",
+    "hash_own": "ae5474ee0047",
+    "id": "services/scheduling/service.py::cancel_booking",
+    "kind": "function",
+-   "line": 193,
++   "line": 237,
+    "name": "cancel_booking",
+    "path": "services/scheduling/service.py",
+    "service": "scheduling",
+@@ -31036,9 +31134,9 @@
+      "message": "для площадки не задан максимум мест"
+     }
+    ],
+-   "end_line": 43,
+-   "hash": "1f95c51ca4d1",
+-   "hash_own": "66bc35cf6727",
++   "end_line": 47,
++   "hash": "0b5c28743c39",
++   "hash_own": "7dd1c7eeeec9",
+    "id": "services/scheduling/service.py::create_slot",
+    "kind": "function",
+    "line": 23,
+@@ -31049,12 +31147,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 123,
++   "end_line": 167,
+    "hash": "dce191255caf",
+    "hash_own": "3f3e6e14f3b8",
+    "id": "services/scheduling/service.py::free_slots",
+    "kind": "function",
+-   "line": 102,
++   "line": 146,
+    "name": "free_slots",
+    "path": "services/scheduling/service.py",
+    "service": "scheduling",
+@@ -31066,34 +31164,34 @@
+     {
+      "condition": "booking is None or booking.status != 'active' or booking.purpose != 'issue'",
+      "error": "DomainError",
+-     "line": 226,
++     "line": 270,
+      "message": "нет действующей записи за книгами"
+     },
+     {
+      "condition": "brief.site_checker_id != site_checker_id",
+      "error": "AccessDenied",
+-     "line": 230,
++     "line": 274,
+      "message": "книги выдаёт проверяющий оператор площадки заявки"
+     },
+     {
+      "condition": "brief.stage != 'awaiting_issue'",
+      "error": "DomainError",
+-     "line": 232,
++     "line": 276,
+      "message": "выдача возможна только на этапе «Ожидает выдачи»"
+     },
+     {
+      "condition": "slot.starts_at.date() != now.date()",
+      "error": "DomainError",
+-     "line": 235,
++     "line": 279,
+      "message": "выдача только в выбранную дату"
+     }
+    ],
+-   "end_line": 252,
++   "end_line": 296,
+    "hash": "9edf671be6de",
+    "hash_own": "c1d36987a342",
+    "id": "services/scheduling/service.py::issue_books",
+    "kind": "function",
+-   "line": 223,
++   "line": 267,
+    "name": "issue_books",
+    "path": "services/scheduling/service.py",
+    "service": "scheduling",
+@@ -31101,12 +31199,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 86,
++   "end_line": 130,
+    "hash": "f6a14a335442",
+    "hash_own": "bb7603cb9fe4",
+    "id": "services/scheduling/service.py::issue_link",
+    "kind": "function",
+-   "line": 79,
++   "line": 123,
+    "name": "issue_link",
+    "path": "services/scheduling/service.py",
+    "service": "scheduling",
+@@ -31114,12 +31212,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 283,
++   "end_line": 327,
+    "hash": "9d4e9c2e5eb9",
+    "hash_own": "36c17ca76c5c",
+    "id": "services/scheduling/service.py::mark_lost",
+    "kind": "function",
+-   "line": 279,
++   "line": 323,
+    "name": "mark_lost",
+    "path": "services/scheduling/service.py",
+    "service": "scheduling",
+@@ -31131,16 +31229,16 @@
+     {
+      "condition": "booking is None or booking.status != 'active'",
+      "error": "DomainError",
+-     "line": 216,
++     "line": 260,
+      "message": "запись не действует"
+     }
+    ],
+-   "end_line": 220,
++   "end_line": 264,
+    "hash": "7d0ed8f66900",
+    "hash_own": "0357bf201091",
+    "id": "services/scheduling/service.py::mark_no_show",
+    "kind": "function",
+-   "line": 213,
++   "line": 257,
+    "name": "mark_no_show",
+    "path": "services/scheduling/service.py",
+    "service": "scheduling",
+@@ -31152,28 +31250,28 @@
+     {
+      "condition": "slot is None",
+      "error": "NotFound",
+-     "line": 55,
++     "line": 59,
+      "message": "f'окно {slot_id}'"
+     },
+     {
+      "condition": "capacity >= slot.capacity",
+      "error": "DomainError",
+-     "line": 58,
++     "line": 62,
+      "message": "проверяющий оператор может только уменьшить число мест"
+     },
+     {
+      "condition": "capacity < await _active_bookings(session, slot_id)",
+      "error": "DomainError",
+-     "line": 60,
++     "line": 64,
+      "message": "в окне уже записано больше клиентов"
+     }
+    ],
+-   "end_line": 63,
+-   "hash": "b4f9930f0a3c",
+-   "hash_own": "2fccc8ccf185",
++   "end_line": 69,
++   "hash": "f326e4d05cf5",
++   "hash_own": "50e4fcf5d080",
+    "id": "services/scheduling/service.py::reduce_capacity",
+    "kind": "function",
+-   "line": 52,
++   "line": 56,
+    "name": "reduce_capacity",
+    "path": "services/scheduling/service.py",
+    "service": "scheduling",
+@@ -31185,16 +31283,16 @@
+     {
+      "condition": "slot is None",
+      "error": "NotFound",
+-     "line": 69,
++     "line": 113,
+      "message": "f'окно {slot_id}'"
+     }
+    ],
+-   "end_line": 76,
++   "end_line": 120,
+    "hash": "4fd12aa7b697",
+    "hash_own": "2a47758cca7d",
+    "id": "services/scheduling/service.py::remove_slot",
+    "kind": "function",
+-   "line": 66,
++   "line": 110,
+    "name": "remove_slot",
+    "path": "services/scheduling/service.py",
+    "service": "scheduling",
+@@ -31202,12 +31300,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 210,
++   "end_line": 254,
+    "hash": "253da02d3a3c",
+    "hash_own": "224b6fe32ff5",
+    "id": "services/scheduling/service.py::reschedule",
+    "kind": "function",
+-   "line": 206,
++   "line": 250,
+    "name": "reschedule",
+    "path": "services/scheduling/service.py",
+    "service": "scheduling",
+@@ -31216,12 +31314,12 @@
+   },
+   {
+    "doc": "Отменяет действующие записи, освобождает книги и гасит ссылку на запись.",
+-   "end_line": 299,
++   "end_line": 343,
+    "hash": "c39779723a67",
+    "hash_own": "e9237407a2b3",
+    "id": "services/scheduling/service.py::reset_bookings",
+    "kind": "function",
+-   "line": 286,
++   "line": 330,
+    "name": "reset_bookings",
+    "path": "services/scheduling/service.py",
+    "service": "scheduling",
+@@ -31229,12 +31327,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 276,
++   "end_line": 320,
+    "hash": "904dd3175115",
+    "hash_own": "630dc8ea8a50",
+    "id": "services/scheduling/service.py::return_book",
+    "kind": "function",
+-   "line": 267,
++   "line": 311,
+    "name": "return_book",
+    "path": "services/scheduling/service.py",
+    "service": "scheduling",
+@@ -33313,50 +33411,50 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 103,
++   "end_line": 108,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_bpm_layer_links_guards_and_code",
+    "kind": "test",
+-   "line": 94,
++   "line": 99,
+    "name": "test_bpm_layer_links_guards_and_code",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 80,
++   "end_line": 85,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_code_layer_finds_links_invisible_to_imports",
+    "kind": "test",
+-   "line": 59,
++   "line": 64,
+    "name": "test_code_layer_finds_links_invisible_to_imports",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(code_model)",
+    "type": "test"
+   },
+   {
+-   "end_line": 132,
++   "end_line": 137,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_entity_resolves_russian_term",
+    "kind": "test",
+-   "line": 129,
++   "line": 134,
+    "name": "test_entity_resolves_russian_term",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(g)",
+    "type": "test"
+   },
+   {
+-   "end_line": 91,
++   "end_line": 96,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_event_layer_resolves_dynamic_subscribers",
+    "kind": "test",
+-   "line": 83,
++   "line": 88,
+    "name": "test_event_layer_resolves_dynamic_subscribers",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 115,
++   "end_line": 120,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_find_entry_maps_russian_task_to_setting",
+    "kind": "test",
+-   "line": 113,
++   "line": 118,
+    "name": "test_find_entry_maps_russian_task_to_setting",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(g)",
+@@ -33373,30 +33471,30 @@
+    "type": "test"
+   },
+   {
+-   "end_line": 126,
++   "end_line": 131,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_impact_respects_budget_and_crosses_services",
+    "kind": "test",
+-   "line": 119,
++   "line": 124,
+    "name": "test_impact_respects_budget_and_crosses_services",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(g, budget)",
+    "type": "test"
+   },
+   {
+-   "end_line": 153,
++   "end_line": 158,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_mcp_log_line",
+    "kind": "test",
+-   "line": 135,
++   "line": 140,
+    "name": "test_mcp_log_line",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(monkeypatch, tmp_path, g)",
+    "type": "test"
+   },
+   {
+-   "end_line": 160,
++   "end_line": 165,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_rule_annotation_binds_to_function",
+    "kind": "test",
+-   "line": 156,
++   "line": 161,
+    "name": "test_rule_annotation_binds_to_function",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "()",
+@@ -35393,75 +35491,105 @@
+    "type": "test"
+   },
+   {
+-   "end_line": 49,
++   "end_line": 51,
+    "id": "tests/test_scheduling.py::test_booking_only_on_own_venue_and_sphere",
+    "kind": "test",
+-   "line": 42,
++   "line": 44,
+    "name": "test_booking_only_on_own_venue_and_sphere",
+    "path": "tests/test_scheduling.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 34,
++   "end_line": 36,
+    "id": "tests/test_scheduling.py::test_checker_can_only_reduce_capacity",
+    "kind": "test",
+-   "line": 30,
++   "line": 32,
+    "name": "test_checker_can_only_reduce_capacity",
+    "path": "tests/test_scheduling.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 72,
++   "end_line": 74,
+    "id": "tests/test_scheduling.py::test_client_cannot_cancel_less_than_two_days_before",
+    "kind": "test",
+-   "line": 64,
++   "line": 66,
+    "name": "test_client_cannot_cancel_less_than_two_days_before",
+    "path": "tests/test_scheduling.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 61,
++   "end_line": 63,
+    "id": "tests/test_scheduling.py::test_free_slots_hide_full_windows",
+    "kind": "test",
+-   "line": 52,
++   "line": 54,
+    "name": "test_free_slots_hide_full_windows",
+    "path": "tests/test_scheduling.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 83,
++   "end_line": 85,
+    "id": "tests/test_scheduling.py::test_no_show_cancels_booking_and_allows_rebooking",
+    "kind": "test",
+-   "line": 75,
++   "line": 77,
+    "name": "test_no_show_cancels_booking_and_allows_rebooking",
+    "path": "tests/test_scheduling.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 39,
++   "end_line": 125,
++   "id": "tests/test_scheduling.py::test_reduced_slot_ignores_maximum_even_when_it_matches_old_maximum",
++   "kind": "test",
++   "line": 120,
++   "name": "test_reduced_slot_ignores_maximum_even_when_it_matches_old_maximum",
++   "path": "tests/test_scheduling.py",
++   "signature": "()",
++   "type": "test"
++  },
++  {
++   "end_line": 41,
+    "id": "tests/test_scheduling.py::test_slot_capacity_cannot_exceed_venue_maximum",
+    "kind": "test",
+-   "line": 37,
++   "line": 39,
+    "name": "test_slot_capacity_cannot_exceed_venue_maximum",
+    "path": "tests/test_scheduling.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 27,
++   "end_line": 29,
+    "id": "tests/test_scheduling.py::test_slot_in_past_forbidden",
+    "kind": "test",
+-   "line": 25,
++   "line": 27,
+    "name": "test_slot_in_past_forbidden",
+    "path": "tests/test_scheduling.py",
+    "signature": "()",
+    "type": "test"
+   },
++  {
++   "end_line": 117,
++   "id": "tests/test_scheduling.py::test_venue_maximum_change_keeps_reduced_past_and_removed_slots",
++   "kind": "test",
++   "line": 105,
++   "name": "test_venue_maximum_change_keeps_reduced_past_and_removed_slots",
++   "path": "tests/test_scheduling.py",
++   "signature": "()",
++   "type": "test"
++  },
++  {
++   "end_line": 102,
++   "id": "tests/test_scheduling.py::test_venue_maximum_change_moves_future_slots_at_old_maximum",
++   "kind": "test",
++   "line": 95,
++   "name": "test_venue_maximum_change_moves_future_slots_at_old_maximum",
++   "path": "tests/test_scheduling.py",
++   "signature": "()",
++   "type": "test"
++  },
+   {
+    "end_line": 96,
+    "id": "tests/test_staff_employees.py::test_card_change_revokes_clearances_needing_recheck",
+@@ -38941,6 +39069,11 @@
+      "pk": false,
+      "type": "INTEGER"
+     },
++    "capacity_manual": {
++     "nullable": false,
++     "pk": false,
++     "type": "BOOLEAN"
++    },
+     "id": {
+      "nullable": false,
+      "pk": true,
+diff --git a/knowledge/model/db.json b/knowledge/model/db.json
+index f66b7a4..c76e301 100644
+--- a/knowledge/model/db.json
++++ b/knowledge/model/db.json
+@@ -9477,9 +9477,15 @@
+      "name": "removed",
+      "nullable": false,
+      "type": "boolean"
++    },
++    {
++     "default": "false",
++     "name": "capacity_manual",
++     "nullable": false,
++     "type": "boolean"
+     }
+    ],
+-   "hash": "aa3d35dc3961",
++   "hash": "4aca998e1ec0",
+    "id": "scheduling.slots",
+    "line": 235,
+    "name": "scheduling.slots",
+diff --git a/knowledge/model/events.json b/knowledge/model/events.json
+index bf77ce8..f004c60 100644
+--- a/knowledge/model/events.json
++++ b/knowledge/model/events.json
+@@ -755,7 +755,7 @@
+   {
+    "dst": "application.archived",
+    "lines": [
+-    25
++    24
+    ],
+    "src": "services/scheduling/consumers.py::on_archived",
+    "type": "consumes"
+@@ -763,7 +763,7 @@
+   {
+    "dst": "application.closed_duplicate",
+    "lines": [
+-    30
++    29
+    ],
+    "src": "services/scheduling/consumers.py::on_closed_duplicate",
+    "type": "consumes"
+@@ -771,7 +771,7 @@
+   {
+    "dst": "application.ready_for_booking",
+    "lines": [
+-    12
++    11
+    ],
+    "src": "services/scheduling/consumers.py::on_ready_for_booking",
+    "type": "consumes"
+@@ -779,7 +779,7 @@
+   {
+    "dst": "application.venue_changed",
+    "lines": [
+-    17
++    16
+    ],
+    "src": "services/scheduling/consumers.py::on_venue_changed",
+    "type": "consumes"
+@@ -787,7 +787,7 @@
+   {
+    "dst": "venue.settings_changed",
+    "lines": [
+-    35
++    34
+    ],
+    "src": "services/scheduling/consumers.py::on_venue_settings_changed",
+    "type": "consumes"
+@@ -1696,7 +1696,7 @@
+   {
+    "dst": "booking.cancelled",
+    "lines": [
+-    180
++    224
+    ],
+    "src": "services/scheduling/service.py::_cancel",
+    "type": "publishes"
+@@ -1704,7 +1704,7 @@
+   {
+    "dst": "booking.created",
+    "lines": [
+-    152
++    196
+    ],
+    "src": "services/scheduling/service.py::book",
+    "type": "publishes"
+@@ -1712,7 +1712,7 @@
+   {
+    "dst": "books.issued",
+    "lines": [
+-    251
++    295
+    ],
+    "src": "services/scheduling/service.py::issue_books",
+    "type": "publishes"
+@@ -1720,7 +1720,7 @@
+   {
+    "dst": "loan.lost",
+    "lines": [
+-    282
++    326
+    ],
+    "src": "services/scheduling/service.py::mark_lost",
+    "type": "publishes"
+@@ -1729,7 +1729,7 @@
+    "condition": "damaged",
+    "dst": "loan.damaged",
+    "lines": [
+-    275
++    319
+    ],
+    "src": "services/scheduling/service.py::return_book",
+    "type": "publishes"
+diff --git a/knowledge/rules/applications.yaml b/knowledge/rules/applications.yaml
+index bd0cc74..ee90645 100644
+--- a/knowledge/rules/applications.yaml
++++ b/knowledge/rules/applications.yaml
+@@ -373,7 +373,7 @@ rules:
+     lines: 158-164
+     hash: 325452f7ecb6
+   - symbol: services/scheduling/consumers.py::on_ready_for_booking
+-    lines: 13-13
++    lines: 12-12
+     hash: 648936515cb6
+   tested_by:
+   - tests/test_kinds.py::test_debt_application_skips_invoice
+@@ -729,7 +729,7 @@ rules:
+     lines: 14-16
+     hash: 5c9e004dfa4d
+   - symbol: services/scheduling/consumers.py::on_venue_changed
+-    lines: 18-21
++    lines: 17-20
+     hash: d4bfde5996e1
+   - symbol: services/chat/consumers.py::_handler
+     lines: 24-25
+@@ -852,7 +852,7 @@ rules:
+     lines: 255-261
+     hash: 0615233675ae
+   - symbol: services/scheduling/consumers.py::on_archived
+-    lines: 26-26
++    lines: 25-25
+     hash: eea4dc718507
+   - transition: draft->archived
+     hash: 6080e315f1cc
+@@ -1042,7 +1042,7 @@ rules:
+     lines: 21-23
+     hash: 4b35aa862a56
+   - symbol: services/scheduling/consumers.py::on_closed_duplicate
+-    lines: 31-31
++    lines: 30-30
+     hash: 1230ea8d19ae
+   - symbol: services/chat/consumers.py::_handler
+     lines: 24-25
+@@ -1193,7 +1193,8 @@ rules:
+   text: >
+     set_venue_max_capacity отклоняет значение меньше 1 (DomainError, плюс CHECK в БД), сохраняет max_slot_capacity
+     и публикует venue.settings_changed; scheduling обновляет VenueLimit площадки, которым ограничивается
+-    число мест в окнах.
++    число мест в окнах, и подтягивает к новому максимуму будущие окна со старым максимумом
++    (R-SCHED-VENUE-LIMIT-02).
+   kind: config
+   applies_to:
+   - table:applications.venues
+@@ -1208,8 +1209,8 @@ rules:
+     lines: 36-44
+     hash: 9d5a2f96d625
+   - symbol: services/scheduling/consumers.py::on_venue_settings_changed
+-    lines: 36-40
+-    hash: 37def55ecd07
++    lines: 34-36
++    hash: a341d008c4fb
+   enforced_by_db:
+   - constraint: venues_max_slot_capacity_check
+     hash: 009c191bd0d9
+diff --git a/knowledge/rules/scheduling.yaml b/knowledge/rules/scheduling.yaml
+index a3955d7..001ad0f 100644
+--- a/knowledge/rules/scheduling.yaml
++++ b/knowledge/rules/scheduling.yaml
+@@ -24,15 +24,15 @@ rules:
+     hash: 627195aa6f4e
+   - symbol: services/scheduling/service.py::create_slot
+     lines: '32'
+-    hash: 1f95c51ca4d1
++    hash: 0b5c28743c39
+   - symbol: services/scheduling/service.py::reduce_capacity
+-    lines: '56'
+-    hash: b4f9930f0a3c
++    lines: '60'
++    hash: f326e4d05cf5
+   - symbol: services/scheduling/service.py::remove_slot
+-    lines: '70'
++    lines: '114'
+     hash: 4fd12aa7b697
+   - symbol: services/scheduling/service.py::mark_no_show
+-    lines: '218'
++    lines: '262'
+     hash: 7d0ed8f66900
+   schema_ref: §2 Проверяющий оператор; §12 Расписание площадок
+   status: draft
+@@ -52,7 +52,7 @@ rules:
+   implemented_by:
+   - symbol: services/scheduling/service.py::create_slot
+     lines: 33-34
+-    hash: 1f95c51ca4d1
++    hash: 0b5c28743c39
+   tested_by:
+   - tests/test_scheduling.py::test_slot_in_past_forbidden
+   schema_ref: §12 Расписание площадок
+@@ -62,7 +62,8 @@ rules:
+   text: >
+     Если при создании окна число мест не передано, берётся max_capacity площадки из реплики scheduling.venue_limits.
+     Если лимит для площадки не задан — DomainError «для площадки не задан максимум мест». Окна создаются
+-    по паре площадка+сфера, без признака цели (выдача/сдача).
++    по паре площадка+сфера, без признака цели (выдача/сдача). Окно, созданное с числом мест меньше
++    максимума, получает capacity_manual = true и за максимумом не следует (R-SCHED-VENUE-LIMIT-02).
+   kind: calculation
+   applies_to:
+   - table:scheduling.slots
+@@ -77,8 +78,8 @@ rules:
+   - R-SCHED-VENUE-LIMIT-01
+   implemented_by:
+   - symbol: services/scheduling/service.py::create_slot
+-    lines: 35-41
+-    hash: 1f95c51ca4d1
++    lines: 35-45
++    hash: 0b5c28743c39
+   enforced_by_db:
+   - constraint: trg_slot_capacity_limit
+     hash: 9474bb1e6464
+@@ -105,8 +106,8 @@ rules:
+   - R-SCHED-VENUE-LIMIT-01
+   implemented_by:
+   - symbol: services/scheduling/service.py::create_slot
+-    lines: 40-42
+-    hash: 1f95c51ca4d1
++    lines: 42-46
++    hash: 0b5c28743c39
+   enforced_by_db:
+   - constraint: trg_slot_capacity_limit
+     hash: 9474bb1e6464
+@@ -123,7 +124,8 @@ rules:
+   text: >
+     reduce_capacity принимает только значение строго меньше текущего capacity окна («проверяющий оператор
+     может только уменьшить число мест») и не меньше числа действующих записей в окне («в окне уже записано
+-    больше клиентов»). Действующие записи — bookings со статусом active.
++    больше клиентов»). Действующие записи — bookings со статусом active. Уменьшенное окно получает
++    capacity_manual = true и больше не следует за изменениями максимума площадки (R-SCHED-VENUE-LIMIT-02).
+   kind: guard
+   applies_to:
+   - table:scheduling.slots
+@@ -137,10 +139,10 @@ rules:
+   - R-SCHED-SLOT-03
+   implemented_by:
+   - symbol: services/scheduling/service.py::reduce_capacity
+-    lines: 57-61
+-    hash: b4f9930f0a3c
++    lines: 61-65
++    hash: f326e4d05cf5
+   - symbol: services/scheduling/service.py::_active_bookings
+-    lines: 46-49
++    lines: 50-53
+     hash: aa8e00301e30
+   enforced_by_db:
+   - constraint: trg_slot_capacity_limit
+@@ -172,20 +174,20 @@ rules:
+   - R-SCHED-SITE-CHECKER-01
+   implemented_by:
+   - symbol: services/scheduling/service.py::remove_slot
+-    lines: 71-76
++    lines: 115-120
+     hash: 4fd12aa7b697
+   - symbol: services/scheduling/service.py::_cancel
+-    lines: 178-190
++    lines: 222-234
+     hash: 6120ee8baf20
+   schema_ref: §12 Расписание площадок
+   status: draft
+ - id: R-SCHED-VENUE-LIMIT-01
+   title: Максимум мест площадки реплицируется из админки событием
+   text: >
+-    Подписчик venue.settings_changed (публикует admin.set_venue_max_capacity) создаёт или обновляет строку
+-    scheduling.venue_limits с новым max_capacity. Уже созданные окна не пересчитываются: триггер срабатывает
+-    только на INSERT или изменение capacity, поэтому после снижения максимума окна со старым, большим
+-    числом мест остаются. CHECK требует max_capacity > 0.
++    Подписчик venue.settings_changed (публикует admin.set_venue_max_capacity) вызывает apply_venue_limit:
++    он создаёт или обновляет строку scheduling.venue_limits с новым max_capacity, а затем подтягивает
++    к нему будущие окна площадки (R-SCHED-VENUE-LIMIT-02). Лимит записывается раньше окон, иначе триггер
++    trg_slot_capacity_limit отклонит повышение. CHECK требует max_capacity > 0.
+   kind: effect
+   applies_to:
+   - table:scheduling.venue_limits
+@@ -197,15 +199,61 @@ rules:
+   related:
+   - R-SCHED-SLOT-02
+   - R-SCHED-SLOT-03
++  - R-SCHED-VENUE-LIMIT-02
+   implemented_by:
+   - symbol: services/scheduling/consumers.py::on_venue_settings_changed
+-    lines: 35-40
+-    hash: 37def55ecd07
++    lines: 34-36
++    hash: a341d008c4fb
++  - symbol: services/scheduling/service.py::apply_venue_limit
++    lines: 78-87
++    hash: '626249204717'
+   enforced_by_db:
+   - constraint: venue_limits_max_capacity_check
+     hash: 3a9484826b99
+   schema_ref: §2 Администратор; §12 Расписание площадок
+   status: draft
++- id: R-SCHED-VENUE-LIMIT-02
++  title: Число мест будущих окон без уменьшения следует за максимумом площадки
++  text: >
++    При смене максимума мест площадки apply_venue_limit приравнивает число мест к новому максимуму только
++    у неудалённых окон этой площадки, которые ещё не начались, у которых число мест равнялось старому
++    максимуму и capacity_manual = false. Флаг capacity_manual ставит reduce_capacity, а create_slot —
++    если окно создано с числом мест меньше максимума. Прошедшие, удалённые и уменьшенные проверяющим оператором
++    окна не меняются, даже если их число мест совпадает со старым максимумом. Записи в окне не проверяются:
++    при снижении максимума ниже числа записей записи остаются, свободных мест в окне просто нет.
++  kind: calculation
++  applies_to:
++  - table:scheduling.slots
++  - table:scheduling.venue_limits
++  trigger: event:venue.settings_changed
++  effects:
++  - 'writes: table:scheduling.slots'
++  roles:
++  - admin
++  - site_checker
++  related:
++  - R-SCHED-VENUE-LIMIT-01
++  - R-SCHED-SLOT-02
++  - R-SCHED-SLOT-04
++  implemented_by:
++  - symbol: services/scheduling/service.py::apply_venue_limit
++    lines: 90-105
++    hash: '626249204717'
++  - symbol: services/scheduling/service.py::create_slot
++    lines: 40-41
++    hash: 0b5c28743c39
++  - symbol: services/scheduling/service.py::reduce_capacity
++    lines: 66-67
++    hash: f326e4d05cf5
++  enforced_by_db:
++  - constraint: trg_slot_capacity_limit
++    hash: 9474bb1e6464
++  tested_by:
++  - tests/test_scheduling.py::test_venue_maximum_change_moves_future_slots_at_old_maximum
++  - tests/test_scheduling.py::test_venue_maximum_change_keeps_reduced_past_and_removed_slots
++  - tests/test_scheduling.py::test_reduced_slot_ignores_maximum_even_when_it_matches_old_maximum
++  schema_ref: §2 Администратор; §12 Расписание площадок
++  status: draft
+ - id: R-SCHED-LINK-01
+   title: Ссылка на запись за книгами выдаётся при готовности к записи
+   text: >
+@@ -224,10 +272,10 @@ rules:
+   - R-SCHED-ISSUE-03
+   implemented_by:
+   - symbol: services/scheduling/consumers.py::on_ready_for_booking
+-    lines: 12-13
++    lines: 11-12
+     hash: 648936515cb6
+   - symbol: services/scheduling/service.py::issue_link
+-    lines: 79-86
++    lines: 123-130
+     hash: f6a14a335442
+   tested_by:
+   - tests/test_paid_flow.py::test_paid_application_full_path
+@@ -252,7 +300,7 @@ rules:
+   - R-SCHED-LINK-03
+   implemented_by:
+   - symbol: services/scheduling/service.py::issue_link
+-    lines: 79-86
++    lines: 123-130
+     hash: f6a14a335442
+   enforced_by_db:
+   - constraint: uq_booking_links_one_active
+@@ -281,7 +329,7 @@ rules:
+   - R-SCHED-LINK-02
+   implemented_by:
+   - symbol: services/scheduling/service.py::_link_by_token
+-    lines: 95-99
++    lines: 139-143
+     hash: f72f2a1be4fe
+   schema_ref: §13 Запись на визит и письма
+   discrepancy: >
+@@ -304,7 +352,7 @@ rules:
+   - R-SCHED-BOOK-01
+   implemented_by:
+   - symbol: services/scheduling/service.py::free_slots
+-    lines: 102-123
++    lines: 146-167
+     hash: dce191255caf
+   - symbol: services/scheduling/api.py::slots
+     lines: 27-31
+@@ -332,7 +380,7 @@ rules:
+   - R-SCHED-BOOK-02
+   implemented_by:
+   - symbol: services/scheduling/service.py::book
+-    lines: 130-137
++    lines: 174-181
+     hash: e0cce5e125eb
+   tested_by:
+   - tests/test_scheduling.py::test_booking_only_on_own_venue_and_sphere
+@@ -359,7 +407,7 @@ rules:
+   - R-SCHED-RESCHEDULE-01
+   implemented_by:
+   - symbol: services/scheduling/service.py::book
+-    lines: 139-151
++    lines: 183-195
+     hash: e0cce5e125eb
+   enforced_by_db:
+   - constraint: uq_bookings_one_active
+@@ -387,7 +435,7 @@ rules:
+   - R-SCHED-CANCEL-02
+   implemented_by:
+   - symbol: services/scheduling/service.py::book
+-    lines: 139-147
++    lines: 183-191
+     hash: e0cce5e125eb
+   - symbol: services/scheduling/api.py::book
+     lines: 35-37
+@@ -420,7 +468,7 @@ rules:
+   - R-SCHED-RESET-01
+   implemented_by:
+   - symbol: services/scheduling/service.py::book
+-    lines: 148-150
++    lines: 192-194
+     hash: e0cce5e125eb
+   schema_ref: §8 Сферы и книги
+   status: draft
+@@ -443,7 +491,7 @@ rules:
+   - R-SCHED-ISSUE-03
+   implemented_by:
+   - symbol: services/scheduling/service.py::_cancel
+-    lines: 178-190
++    lines: 222-234
+     hash: 6120ee8baf20
+   schema_ref: §8 Сферы и книги
+   status: draft
+@@ -469,7 +517,7 @@ rules:
+   - R-SCHED-CANCEL-01
+   implemented_by:
+   - symbol: services/scheduling/service.py::book
+-    lines: 152-162
++    lines: 196-206
+     hash: e0cce5e125eb
+   - symbol: services/notifications/consumers.py::on_booking_created
+     lines: 10-17
+@@ -501,7 +549,7 @@ rules:
+   - R-SCHED-BOOK-01
+   implemented_by:
+   - symbol: services/scheduling/service.py::book_by_operator
+-    lines: 169-175
++    lines: 213-219
+     hash: 4543c4eb44c4
+   schema_ref: §13 Запись на визит и письма
+   status: draft
+@@ -532,7 +580,7 @@ rules:
+   - R-SCHED-SLOT-05
+   implemented_by:
+   - symbol: services/scheduling/service.py::_cancel
+-    lines: 178-190
++    lines: 222-234
+     hash: 6120ee8baf20
+   - symbol: services/notifications/consumers.py::on_booking_cancelled
+     lines: 21-28
+@@ -567,7 +615,7 @@ rules:
+   - R-SCHED-BOOK-03
+   implemented_by:
+   - symbol: services/scheduling/service.py::cancel_booking
+-    lines: 195-203
++    lines: 239-247
+     hash: 3cd89e5dcd70
+   - symbol: services/scheduling/api.py::cancel
+     lines: 41-42
+@@ -607,7 +655,7 @@ rules:
+   - R-SCHED-BOOK-EVENT-01
+   implemented_by:
+   - symbol: services/scheduling/service.py::reschedule
+-    lines: 206-210
++    lines: 250-254
+     hash: 253da02d3a3c
+   enforced_by_db:
+   - constraint: uq_bookings_one_active
+@@ -638,7 +686,7 @@ rules:
+   - R-SCHED-HOLD-02
+   implemented_by:
+   - symbol: services/scheduling/service.py::mark_no_show
+-    lines: 213-220
++    lines: 257-264
+     hash: 7d0ed8f66900
+   enforced_by_db:
+   - constraint: bookings_status_check
+@@ -665,7 +713,7 @@ rules:
+   - R-SCHED-ISSUE-03
+   implemented_by:
+   - symbol: services/scheduling/service.py::issue_books
+-    lines: 224-235
++    lines: 268-279
+     hash: 9edf671be6de
+   tested_by:
+   - tests/test_paid_flow.py::test_issue_only_on_booked_date
+@@ -689,7 +737,7 @@ rules:
+   - R-SCHED-OVERDUE-01
+   implemented_by:
+   - symbol: services/scheduling/service.py::issue_books
+-    lines: 237-247
++    lines: 281-291
+     hash: 9edf671be6de
+   enforced_by_db:
+   - constraint: loans_status_check
+@@ -726,7 +774,7 @@ rules:
+   - R-SCHED-LINK-02
+   implemented_by:
+   - symbol: services/scheduling/service.py::issue_books
+-    lines: 248-251
++    lines: 292-295
+     hash: 9edf671be6de
+   - symbol: services/applications/consumers.py::on_books_issued
+     lines: 67-69
+@@ -761,13 +809,13 @@ rules:
+   - R-SCHED-CLOSE-01
+   implemented_by:
+   - symbol: services/scheduling/service.py::_loan_for_checker
+-    lines: 255-264
++    lines: 299-308
+     hash: c1bffe16b4f5
+   - symbol: services/scheduling/service.py::return_book
+-    lines: 270-276
++    lines: 314-320
+     hash: 904dd3175115
+   - symbol: services/scheduling/service.py::mark_lost
+-    lines: 279-283
++    lines: 323-327
+     hash: 9d4e9c2e5eb9
+   enforced_by_db:
+   - constraint: loans_status_check
+@@ -800,10 +848,10 @@ rules:
+   - R-SCHED-OVERDUE-01
+   implemented_by:
+   - symbol: services/scheduling/service.py::return_book
+-    lines: 274-275
++    lines: 318-319
+     hash: 904dd3175115
+   - symbol: services/scheduling/service.py::mark_lost
+-    lines: '282'
++    lines: '326'
+     hash: 9d4e9c2e5eb9
+   - symbol: services/billing/consumers.py::on_loan_damaged
+     lines: 48-50
+@@ -876,13 +924,13 @@ rules:
+   - R-SCHED-VENUE-CHANGE-01
+   implemented_by:
+   - symbol: services/scheduling/consumers.py::on_archived
+-    lines: 25-26
++    lines: 24-25
+     hash: eea4dc718507
+   - symbol: services/scheduling/consumers.py::on_closed_duplicate
+-    lines: 30-31
++    lines: 29-30
+     hash: 1230ea8d19ae
+   - symbol: services/scheduling/service.py::reset_bookings
+-    lines: 286-299
++    lines: 330-343
+     hash: c39779723a67
+   schema_ref: §5 Архив и попытки; §6 Клиент и проверка данных
+   status: draft
+@@ -908,10 +956,10 @@ rules:
+   - R-SCHED-LINK-01
+   implemented_by:
+   - symbol: services/scheduling/consumers.py::on_venue_changed
+-    lines: 17-21
++    lines: 16-20
+     hash: d4bfde5996e1
+   - symbol: services/scheduling/service.py::reset_bookings
+-    lines: 286-299
++    lines: 330-343
+     hash: c39779723a67
+   schema_ref: §7 Площадки и цены
+   discrepancy: >
+diff --git a/migrations/versions/0002_slot_capacity_manual.py b/migrations/versions/0002_slot_capacity_manual.py
+new file mode 100644
+index 0000000..d577026
+--- /dev/null
++++ b/migrations/versions/0002_slot_capacity_manual.py
+@@ -0,0 +1,24 @@
++"""scheduling.slots.capacity_manual: окно с уменьшенным числом мест не следует за максимумом площадки
++
++Revision ID: 0002
++Revises: 0001
++"""
++
++from alembic import op
++
++revision = "0002"
++down_revision = "0001"
++branch_labels = None
++depends_on = None
++
++
++def upgrade() -> None:
++    op.execute("ALTER TABLE scheduling.slots ADD COLUMN capacity_manual boolean NOT NULL DEFAULT false")
++    op.execute(
++        "UPDATE scheduling.slots s SET capacity_manual = true "
++        "FROM scheduling.venue_limits l WHERE l.venue_id = s.venue_id AND s.capacity < l.max_capacity"
++    )
++
++
++def downgrade() -> None:
++    op.execute("ALTER TABLE scheduling.slots DROP COLUMN capacity_manual")
+diff --git a/services/scheduling/consumers.py b/services/scheduling/consumers.py
+index 5341474..6664433 100644
+--- a/services/scheduling/consumers.py
++++ b/services/scheduling/consumers.py
+@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
+ from libs.events import subscribe
+ from services.applications import public as applications
+ from services.scheduling import service
+-from services.scheduling.models import VenueLimit
+ 
+ 
+ @subscribe("application.ready_for_booking")
+@@ -33,8 +32,5 @@ async def on_closed_duplicate(session: AsyncSession, payload: dict[str, Any]) ->
+ 
+ @subscribe("venue.settings_changed")
+ async def on_venue_settings_changed(session: AsyncSession, payload: dict[str, Any]) -> None:
+-    limit = await session.get(VenueLimit, payload["venue_id"])
+-    if limit is None:
+-        session.add(VenueLimit(venue_id=payload["venue_id"], max_capacity=payload["max_capacity"]))
+-    else:
+-        limit.max_capacity = payload["max_capacity"]
++    # @rule R-SCHED-VENUE-LIMIT-01
++    await service.apply_venue_limit(session, payload["venue_id"], payload["max_capacity"])
+diff --git a/services/scheduling/models.py b/services/scheduling/models.py
+index b03e634..38b066c 100644
+--- a/services/scheduling/models.py
++++ b/services/scheduling/models.py
+@@ -27,6 +27,8 @@ class Slot(Base):
+     sphere_id: Mapped[int]
+     starts_at: Mapped[datetime]
+     capacity: Mapped[int]
++    # мест меньше максимума площадки по решению проверяющего оператора: за максимумом не следует
++    capacity_manual: Mapped[bool] = mapped_column(default=False)
+     removed: Mapped[bool] = mapped_column(default=False)
+ 
+ 
+diff --git a/services/scheduling/service.py b/services/scheduling/service.py
+index 7cb7b5e..cb6b6c1 100644
+--- a/services/scheduling/service.py
++++ b/services/scheduling/service.py
+@@ -32,12 +32,16 @@ async def create_slot(
+     await _require_site_checker(session, venue_id, site_checker_id)
+     if starts_at <= clock.now():
+         raise DomainError("нельзя создать окно на прошедшее время")
++    limit = await session.get(VenueLimit, venue_id)
+     if capacity is None:
+-        limit = await session.get(VenueLimit, venue_id)
+         if limit is None:
+             raise DomainError("для площадки не задан максимум мест")
+         capacity = limit.max_capacity
+-    slot = Slot(venue_id=venue_id, sphere_id=sphere_id, starts_at=starts_at, capacity=capacity)
++    # @rule R-SCHED-VENUE-LIMIT-02
++    manual = limit is not None and capacity < limit.max_capacity
++    slot = Slot(
++        venue_id=venue_id, sphere_id=sphere_id, starts_at=starts_at, capacity=capacity, capacity_manual=manual
++    )
+     session.add(slot)
+     await session.flush()
+     return slot
+@@ -59,10 +63,50 @@ async def reduce_capacity(session: AsyncSession, slot_id: int, site_checker_id:
+     if capacity < await _active_bookings(session, slot_id):
+         raise DomainError("в окне уже записано больше клиентов")
+     slot.capacity = capacity
++    # @rule R-SCHED-VENUE-LIMIT-02
++    slot.capacity_manual = True
+     await session.flush()
+     return slot
+ 
+ 
++async def apply_venue_limit(session: AsyncSession, venue_id: int, max_capacity: int) -> list[int]:
++    """Обновляет реплику максимума мест и подтягивает к нему будущие окна площадки.
++
++    Меняются только неудалённые окна, где число мест равнялось старому максимуму и не уменьшалось
++    проверяющим оператором. Возвращает id изменённых окон.
++    """
++    # @rule R-SCHED-VENUE-LIMIT-01
++    limit = await session.get(VenueLimit, venue_id, with_for_update=True)
++    if limit is None:
++        session.add(VenueLimit(venue_id=venue_id, max_capacity=max_capacity))
++        return []
++    old = limit.max_capacity
++    if old == max_capacity:
++        return []
++    limit.max_capacity = max_capacity
++    # лимит пишем раньше окон: триггер trg_slot_capacity_limit сверяет capacity с venue_limits
++    await session.flush()
++
++    # @rule R-SCHED-VENUE-LIMIT-02
++    slots = (
++        await session.scalars(
++            select(Slot)
++            .where(
++                Slot.venue_id == venue_id,
++                Slot.removed.is_(False),
++                Slot.starts_at > clock.now(),
++                Slot.capacity == old,
++                Slot.capacity_manual.is_(False),
++            )
++            .with_for_update()
++        )
++    ).all()
++    for slot in slots:
++        slot.capacity = max_capacity
++    await session.flush()
++    return [slot.id for slot in slots]
++
++
+ async def remove_slot(session: AsyncSession, slot_id: int, site_checker_id: int) -> None:
+     slot = await session.get(Slot, slot_id)
+     if slot is None:
+diff --git a/tests/test_scheduling.py b/tests/test_scheduling.py
+index b43958e..9569e65 100644
+--- a/tests/test_scheduling.py
++++ b/tests/test_scheduling.py
+@@ -3,7 +3,9 @@ from datetime import timedelta
+ import pytest
+ 
+ from libs.errors import DomainError
++from services.applications import admin
+ from services.scheduling import service as scheduling
++from services.scheduling.models import Slot
+ from tests.factories import (
+     CHECKER,
+     HISTORY,
+@@ -81,3 +83,43 @@ async def test_no_show_cancels_booking_and_allows_rebooking() -> None:
+     travel(T0 + timedelta(days=3, hours=2))
+     await act(scheduling.mark_no_show, booking_id, CHECKER[MSK])
+     await book(app_id, second)
++
++
++async def _capacity(slot_id: int) -> int:
++    async def get(s):
++        return (await s.get(Slot, slot_id)).capacity
++
++    return await read(get)
++
++
++async def test_venue_maximum_change_moves_future_slots_at_old_maximum() -> None:
++    follows = await slot(MSK, HISTORY, T0 + timedelta(days=5))
++    other_venue = await slot(KZN, HISTORY, T0 + timedelta(days=5))
++    await act(admin.set_venue_max_capacity, MSK, 5)
++    assert await _capacity(follows) == 5
++    assert await _capacity(other_venue) == 3
++    await act(admin.set_venue_max_capacity, MSK, 2)
++    assert await _capacity(follows) == 2
++
++
++async def test_venue_maximum_change_keeps_reduced_past_and_removed_slots() -> None:
++    reduced = await slot(MSK, HISTORY, T0 + timedelta(days=5))
++    await act(scheduling.reduce_capacity, reduced, CHECKER[MSK], 2)
++    created_reduced = await slot(MSK, HISTORY, T0 + timedelta(days=5), capacity=1)
++    past = await slot(MSK, HISTORY, T0 + timedelta(days=1))
++    removed = await slot(MSK, HISTORY, T0 + timedelta(days=6))
++    await act(scheduling.remove_slot, removed, CHECKER[MSK])
++    travel(T0 + timedelta(days=2))
++    await act(admin.set_venue_max_capacity, MSK, 5)
++    assert await _capacity(reduced) == 2
++    assert await _capacity(created_reduced) == 1
++    assert await _capacity(past) == 3
++    assert await _capacity(removed) == 3
++
++
++async def test_reduced_slot_ignores_maximum_even_when_it_matches_old_maximum() -> None:
++    reduced = await slot(MSK, HISTORY, T0 + timedelta(days=5))
++    await act(scheduling.reduce_capacity, reduced, CHECKER[MSK], 2)
++    await act(admin.set_venue_max_capacity, MSK, 2)
++    await act(admin.set_venue_max_capacity, MSK, 4)
++    assert await _capacity(reduced) == 2

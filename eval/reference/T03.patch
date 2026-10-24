@@ -1,0 +1,64 @@
+diff --git a/services/billing/guards.py b/services/billing/guards.py
+index f670542..827b142 100644
+--- a/services/billing/guards.py
++++ b/services/billing/guards.py
+@@ -4,12 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+ from libs.bpm import engine as bpm
+ from services.billing.public import active_books_invoice
++from services.billing.service import ISSUE_PAYMENT_SHARE
+ 
+ 
+ @bpm.guard("fully_paid")
+ async def fully_paid(session: AsyncSession, app: Any) -> bool:
+     invoice = await active_books_invoice(session, app.id)
+-    return invoice is not None and invoice.paid_amount >= invoice.amount
++    return invoice is not None and invoice.paid_amount >= invoice.amount * ISSUE_PAYMENT_SHARE
+ 
+ 
+ @bpm.guard("has_active_invoice")
+diff --git a/services/billing/service.py b/services/billing/service.py
+index 9f326e3..6db04b8 100644
+--- a/services/billing/service.py
++++ b/services/billing/service.py
+@@ -12,6 +12,8 @@ from services.billing.models import AccountantAssignment, Fine, FineRate, Invoic
+ from services.billing.public import paid_amount
+ 
+ CENT = Decimal("0.01")
++# Доля оплаты счёта за книги, после которой открывается выдача.
++ISSUE_PAYMENT_SHARE = Decimal("0.5")
+ 
+ 
+ async def take_application(session: AsyncSession, application_id: int, accountant_id: int) -> None:
+@@ -113,10 +115,11 @@ async def link_payment(session: AsyncSession, invoice_id: int, amount: Decimal,
+         "payment.linked",
+         {"application_id": invoice.application_id, "invoice_id": invoice.id, "amount": str(amount)},
+     )
+-    if before < invoice.amount <= after:
+-        if invoice.kind == "fine":
+-            fine = await session.get(Fine, invoice.fine_id)
+-            fine.status = "paid"
++    threshold = invoice.amount * ISSUE_PAYMENT_SHARE if invoice.kind == "books" else invoice.amount
++    if before < invoice.amount <= after and invoice.kind == "fine":
++        fine = await session.get(Fine, invoice.fine_id)
++        fine.status = "paid"
++    if before < threshold <= after:
+         events.publish(
+             session,
+             "payment.fully_paid",
+diff --git a/tests/test_paid_flow.py b/tests/test_paid_flow.py
+index 474bbc5..5d030a2 100644
+--- a/tests/test_paid_flow.py
++++ b/tests/test_paid_flow.py
+@@ -74,9 +74,9 @@ async def test_partial_payment_does_not_open_issue() -> None:
+     app_id = await new_application()
+     await pass_review(app_id)
+     inv = await invoice(app_id)
+-    await pay(inv, Decimal("50.00"))
++    await pay(inv, Decimal("50.00"))  # меньше половины
+     assert await stage(app_id) == "awaiting_payment"
+-    await pay(inv, Decimal("60.00"))
++    await pay(inv, Decimal("10.00"))
+     assert await stage(app_id) == "awaiting_issue"
+ 
+ 

@@ -1,0 +1,1672 @@
+diff --git a/migrations/noise/lectures.sql b/migrations/noise/lectures.sql
+new file mode 100644
+index 0000000..03b464a
+--- /dev/null
++++ b/migrations/noise/lectures.sql
+@@ -0,0 +1,143 @@
++-- Открытые лекции и мероприятия на площадках библиотеки.
++
++CREATE SCHEMA lectures;
++
++-- Реплика лимитов мест площадок. Пишется только подписчиком lectures.venue_limit_changed.
++CREATE TABLE lectures.venue_capacity_limits (
++    venue_id integer PRIMARY KEY,
++    max_capacity integer NOT NULL CHECK (max_capacity > 0),
++    updated_at timestamptz NOT NULL DEFAULT now()
++);
++
++CREATE TABLE lectures.events (
++    id serial PRIMARY KEY,
++    title text NOT NULL CHECK (length(btrim(title)) > 0),
++    venue_id integer NOT NULL,
++    organizer_id integer NOT NULL,
++    starts_at timestamptz NOT NULL,
++    capacity integer NOT NULL CHECK (capacity > 0),
++    capacity_manual boolean NOT NULL DEFAULT false,
++    status text NOT NULL DEFAULT 'scheduled'
++        CHECK (status IN ('scheduled', 'cancelled', 'finished')),
++    created_at timestamptz NOT NULL,
++    updated_at timestamptz NOT NULL
++);
++
++-- Одна площадка не может принимать два мероприятия одновременно.
++CREATE UNIQUE INDEX events_venue_slot_uq
++    ON lectures.events (venue_id, starts_at)
++    WHERE status = 'scheduled';
++
++CREATE INDEX events_upcoming_idx ON lectures.events (venue_id, starts_at) WHERE status = 'scheduled';
++
++CREATE TABLE lectures.registrations (
++    id serial PRIMARY KEY,
++    event_id integer NOT NULL REFERENCES lectures.events (id),
++    listener_id integer NOT NULL,
++    status text NOT NULL CHECK (status IN ('confirmed', 'attended', 'cancelled')),
++    source text NOT NULL DEFAULT 'direct' CHECK (source IN ('direct', 'waitlist')),
++    created_at timestamptz NOT NULL,
++    cancelled_at timestamptz,
++    cancel_reason text,
++    attended_at timestamptz,
++    CHECK ((status = 'cancelled') = (cancelled_at IS NOT NULL)),
++    CHECK ((status = 'attended') = (attended_at IS NOT NULL))
++);
++
++CREATE UNIQUE INDEX registrations_active_uq
++    ON lectures.registrations (event_id, listener_id)
++    WHERE status = 'confirmed';
++
++CREATE INDEX registrations_listener_idx ON lectures.registrations (listener_id) WHERE status = 'confirmed';
++
++CREATE TABLE lectures.waitlist (
++    id serial PRIMARY KEY,
++    event_id integer NOT NULL REFERENCES lectures.events (id),
++    listener_id integer NOT NULL,
++    status text NOT NULL DEFAULT 'waiting'
++        CHECK (status IN ('waiting', 'promoted', 'left', 'cancelled', 'expired')),
++    created_at timestamptz NOT NULL,
++    closed_at timestamptz,
++    CHECK ((status = 'waiting') = (closed_at IS NULL))
++);
++
++CREATE UNIQUE INDEX waitlist_waiting_uq
++    ON lectures.waitlist (event_id, listener_id)
++    WHERE status = 'waiting';
++
++CREATE INDEX waitlist_queue_idx ON lectures.waitlist (event_id, created_at, id) WHERE status = 'waiting';
++
++CREATE TABLE lectures.notifications (
++    id serial PRIMARY KEY,
++    listener_id integer NOT NULL,
++    event_id integer NOT NULL REFERENCES lectures.events (id),
++    kind text NOT NULL CHECK (kind IN (
++        'registered', 'registration_cancelled', 'event_moved', 'event_cancelled',
++        'waitlist_promoted', 'waitlist_expired', 'reminder'
++    )),
++    body text NOT NULL,
++    dedup_key text NOT NULL,
++    created_at timestamptz NOT NULL,
++    sent_at timestamptz,
++    UNIQUE (dedup_key)
++);
++
++CREATE INDEX notifications_listener_idx ON lectures.notifications (listener_id, created_at);
++
++CREATE FUNCTION lectures.check_capacity() RETURNS trigger AS $$
++DECLARE
++    venue_limit integer;
++BEGIN
++    SELECT max_capacity INTO venue_limit
++    FROM lectures.venue_capacity_limits
++    WHERE venue_id = NEW.venue_id;
++    IF venue_limit IS NULL THEN
++        RAISE EXCEPTION 'venue % has no capacity limit', NEW.venue_id;
++    END IF;
++    IF NEW.capacity > venue_limit THEN
++        RAISE EXCEPTION 'event capacity % exceeds venue % limit %', NEW.capacity, NEW.venue_id, venue_limit;
++    END IF;
++    RETURN NEW;
++END;
++$$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_lecture_capacity_limit
++    BEFORE INSERT OR UPDATE OF capacity, venue_id ON lectures.events
++    FOR EACH ROW EXECUTE FUNCTION lectures.check_capacity();
++
++CREATE FUNCTION lectures.check_seat_available() RETURNS trigger AS $$
++DECLARE
++    ev record;
++    taken integer;
++BEGIN
++    SELECT capacity, status INTO ev FROM lectures.events WHERE id = NEW.event_id FOR UPDATE;
++    IF ev.status <> 'scheduled' THEN
++        RAISE EXCEPTION 'event % is not open for registration', NEW.event_id;
++    END IF;
++    SELECT count(*) INTO taken
++    FROM lectures.registrations
++    WHERE event_id = NEW.event_id AND status = 'confirmed' AND id <> NEW.id;
++    IF taken >= ev.capacity THEN
++        RAISE EXCEPTION 'event % is full', NEW.event_id;
++    END IF;
++    RETURN NEW;
++END;
++$$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_registration_seat
++    BEFORE INSERT OR UPDATE OF status ON lectures.registrations
++    FOR EACH ROW WHEN (NEW.status = 'confirmed')
++    EXECUTE FUNCTION lectures.check_seat_available();
++
++CREATE FUNCTION lectures.touch_updated_at() RETURNS trigger AS $$
++BEGIN
++    IF NEW.updated_at IS NOT DISTINCT FROM OLD.updated_at THEN
++        NEW.updated_at := now();
++    END IF;
++    RETURN NEW;
++END;
++$$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_lecture_touch
++    BEFORE UPDATE ON lectures.events
++    FOR EACH ROW EXECUTE FUNCTION lectures.touch_updated_at();
+diff --git a/services/lectures/__init__.py b/services/lectures/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/services/lectures/api.py b/services/lectures/api.py
+new file mode 100644
+index 0000000..85833f1
+--- /dev/null
++++ b/services/lectures/api.py
+@@ -0,0 +1,130 @@
++from datetime import datetime
++from typing import Annotated
++
++from fastapi import APIRouter, Depends
++from pydantic import BaseModel, Field
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs.web import session
++from services.lectures import service
++
++router = APIRouter(tags=["lectures"])
++Session = Annotated[AsyncSession, Depends(session)]
++
++
++class VenueLimitIn(BaseModel):
++    max_capacity: int = Field(gt=0)
++
++
++class EventIn(BaseModel):
++    organizer_id: int
++    title: str
++    venue_id: int
++    starts_at: datetime
++    capacity: int | None = Field(default=None, gt=0)
++
++
++class EventOut(BaseModel):
++    id: int
++    title: str
++    venue_id: int
++    starts_at: datetime
++    capacity: int
++    free_seats: int
++
++
++class CapacityIn(BaseModel):
++    organizer_id: int
++    capacity: int = Field(gt=0)
++
++
++class MoveIn(BaseModel):
++    organizer_id: int
++    venue_id: int
++    capacity: int | None = Field(default=None, gt=0)
++
++
++class OrganizerIn(BaseModel):
++    organizer_id: int
++
++
++class ListenerIn(BaseModel):
++    listener_id: int
++
++
++class NotificationOut(BaseModel):
++    event_id: int
++    kind: str
++    body: str
++    created_at: datetime
++
++
++@router.put("/venues/{venue_id}/capacity-limit", status_code=202)
++async def set_limit(venue_id: int, body: VenueLimitIn, s: Session) -> None:
++    await service.set_venue_capacity_limit(s, venue_id, body.max_capacity)
++
++
++@router.post("/events", status_code=201)
++async def create_event(body: EventIn, s: Session) -> dict[str, int]:
++    lecture = await service.create_event(s, **body.model_dump())
++    return {"event_id": lecture.id}
++
++
++@router.get("/events")
++async def list_events(s: Session, venue_id: int | None = None) -> list[EventOut]:
++    return [
++        EventOut(
++            id=x.id,
++            title=x.title,
++            venue_id=x.venue_id,
++            starts_at=x.starts_at,
++            capacity=x.capacity,
++            free_seats=free,
++        )
++        for x, free in await service.upcoming(s, venue_id)
++    ]
++
++
++@router.put("/events/{event_id}/capacity")
++async def change_capacity(event_id: int, body: CapacityIn, s: Session) -> None:
++    await service.change_capacity(s, event_id, body.organizer_id, body.capacity)
++
++
++@router.post("/events/{event_id}/move")
++async def move_event(event_id: int, body: MoveIn, s: Session) -> None:
++    await service.move_event(s, event_id, body.organizer_id, venue_id=body.venue_id, capacity=body.capacity)
++
++
++@router.post("/events/{event_id}/cancel")
++async def cancel_event(event_id: int, body: OrganizerIn, s: Session) -> None:
++    await service.cancel_event(s, event_id, body.organizer_id)
++
++
++@router.post("/events/{event_id}/registrations", status_code=201)
++async def register(event_id: int, body: ListenerIn, s: Session) -> dict[str, int]:
++    r = await service.register(s, event_id, body.listener_id)
++    return {"registration_id": r.id}
++
++
++@router.delete("/registrations/{registration_id}")
++async def cancel_registration(registration_id: int, listener_id: int, s: Session) -> None:
++    await service.cancel_registration(s, registration_id, listener_id)
++
++
++@router.post("/events/{event_id}/waitlist", status_code=201)
++async def join_waitlist(event_id: int, body: ListenerIn, s: Session) -> dict[str, int]:
++    entry = await service.join_waitlist(s, event_id, body.listener_id)
++    return {"waitlist_id": entry.id, "position": await service.waitlist_position(s, entry.id)}
++
++
++@router.delete("/waitlist/{entry_id}")
++async def leave_waitlist(entry_id: int, listener_id: int, s: Session) -> None:
++    await service.leave_waitlist(s, entry_id, listener_id)
++
++
++@router.get("/listeners/{listener_id}/notifications")
++async def listener_notifications(listener_id: int, s: Session) -> list[NotificationOut]:
++    return [
++        NotificationOut(event_id=n.event_id, kind=n.kind, body=n.body, created_at=n.created_at)
++        for n in await service.notifications(s, listener_id)
++    ]
+diff --git a/services/lectures/app.py b/services/lectures/app.py
+new file mode 100644
+index 0000000..65b9430
+--- /dev/null
++++ b/services/lectures/app.py
+@@ -0,0 +1,10 @@
++from fastapi import FastAPI
++
++from libs.web import install_error_handlers
++from services import wiring
++from services.lectures.api import router
++
++wiring.load()
++app = FastAPI(title="lectures")
++app.include_router(router)
++install_error_handlers(app)
+diff --git a/services/lectures/consumers.py b/services/lectures/consumers.py
+new file mode 100644
+index 0000000..89b0262
+--- /dev/null
++++ b/services/lectures/consumers.py
+@@ -0,0 +1,122 @@
++from typing import Any
++
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs import events
++from libs.events import subscribe
++from services.lectures import service
++from services.lectures.models import Lecture
++
++
++def _when(lecture: Lecture) -> str:
++    return lecture.starts_at.strftime("%d.%m.%Y %H:%M")
++
++
++@subscribe("lectures.venue_limit_changed")
++async def on_venue_limit_changed(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.apply_venue_limit(session, payload["venue_id"], payload["max_capacity"])
++
++
++@subscribe("lectures.capacity_increased")
++async def on_capacity_increased(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.fill_from_waitlist(session, payload["event_id"])
++
++
++@subscribe("lectures.registration_created")
++async def on_registration_created(session: AsyncSession, payload: dict[str, Any]) -> None:
++    lecture = await session.get(Lecture, payload["event_id"])
++    await service.notify(
++        session,
++        listener_id=payload["listener_id"],
++        event_id=lecture.id,
++        kind="registered",
++        body=f"Вы зарегистрированы на «{lecture.title}», {_when(lecture)}",
++        dedup_key=f"registered:{payload['registration_id']}",
++    )
++
++
++@subscribe("lectures.registration_cancelled")
++async def on_registration_cancelled(session: AsyncSession, payload: dict[str, Any]) -> None:
++    lecture = await session.get(Lecture, payload["event_id"])
++    reason = payload["reason"]
++    if reason == "venue_changed":
++        kind, body = "event_moved", f"«{lecture.title}» перенесено на другую площадку, регистрация отменена"
++    elif reason == "event_cancelled":
++        kind, body = "event_cancelled", f"«{lecture.title}» отменено"
++    else:
++        kind, body = "registration_cancelled", f"Регистрация на «{lecture.title}» отменена"
++    await service.notify(
++        session,
++        listener_id=payload["listener_id"],
++        event_id=lecture.id,
++        kind=kind,
++        body=body,
++        dedup_key=f"cancelled:{payload['registration_id']}",
++    )
++    # Место освобождается только на том же мероприятии и той же площадке.
++    if (
++        reason in service.SEAT_RELEASING_REASONS
++        and lecture.status == "scheduled"
++        and lecture.venue_id == payload["venue_id"]
++    ):
++        events.publish(session, "lectures.seat_released", {"event_id": lecture.id})
++
++
++@subscribe("lectures.seat_released")
++async def on_seat_released(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.fill_from_waitlist(session, payload["event_id"])
++
++
++@subscribe("lectures.waitlist_promoted")
++async def on_waitlist_promoted(session: AsyncSession, payload: dict[str, Any]) -> None:
++    lecture = await session.get(Lecture, payload["event_id"])
++    await service.notify(
++        session,
++        listener_id=payload["listener_id"],
++        event_id=lecture.id,
++        kind="waitlist_promoted",
++        body=f"Освободилось место: вы зарегистрированы на «{lecture.title}», {_when(lecture)}",
++        dedup_key=f"promoted:{payload['registration_id']}",
++    )
++
++
++async def _notify_waitlisted(session: AsyncSession, payload: dict[str, Any], kind: str, body: str) -> None:
++    for listener_id in payload["waitlisted"]:
++        await service.notify(
++            session,
++            listener_id=listener_id,
++            event_id=payload["event_id"],
++            kind=kind,
++            body=body,
++            dedup_key=f"{kind}:waitlist:{payload['event_id']}:{listener_id}",
++        )
++
++
++@subscribe("lectures.event_moved")
++async def on_event_moved(session: AsyncSession, payload: dict[str, Any]) -> None:
++    lecture = await session.get(Lecture, payload["event_id"])
++    await _notify_waitlisted(
++        session,
++        payload,
++        "event_moved",
++        f"«{lecture.title}» перенесено на другую площадку, лист ожидания закрыт",
++    )
++
++
++@subscribe("lectures.event_cancelled")
++async def on_event_cancelled(session: AsyncSession, payload: dict[str, Any]) -> None:
++    lecture = await session.get(Lecture, payload["event_id"])
++    await _notify_waitlisted(session, payload, "event_cancelled", f"«{lecture.title}» отменено")
++
++
++@subscribe("lectures.waitlist_expired")
++async def on_waitlist_expired(session: AsyncSession, payload: dict[str, Any]) -> None:
++    lecture = await session.get(Lecture, payload["event_id"])
++    await service.notify(
++        session,
++        listener_id=payload["listener_id"],
++        event_id=lecture.id,
++        kind="waitlist_expired",
++        body=f"Место на «{lecture.title}» так и не освободилось",
++        dedup_key=f"expired:{payload['waitlist_id']}",
++    )
+diff --git a/services/lectures/jobs.py b/services/lectures/jobs.py
+new file mode 100644
+index 0000000..057fce0
+--- /dev/null
++++ b/services/lectures/jobs.py
+@@ -0,0 +1,73 @@
++from datetime import datetime
++
++from sqlalchemy import select
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs import events
++from services.lectures import service, settings
++from services.lectures.models import Lecture, Registration, WaitlistEntry
++
++
++async def close_waitlists(session: AsyncSession, now: datetime) -> list[int]:
++    """Когда регистрация закрылась, ждать места больше бессмысленно: лист ожидания истекает."""
++    entries = (
++        await session.scalars(
++            select(WaitlistEntry)
++            .join(Lecture, Lecture.id == WaitlistEntry.event_id)
++            .where(
++                WaitlistEntry.status == "waiting",
++                Lecture.starts_at <= now + settings.REGISTRATION_CLOSES_BEFORE,
++            )
++            .order_by(WaitlistEntry.id)
++            .with_for_update(of=WaitlistEntry, skip_locked=True)
++        )
++    ).all()
++    for entry in entries:
++        entry.status = "expired"
++        entry.closed_at = now
++        events.publish(
++            session,
++            "lectures.waitlist_expired",
++            {"waitlist_id": entry.id, "event_id": entry.event_id, "listener_id": entry.listener_id},
++        )
++    return [entry.id for entry in entries]
++
++
++async def send_reminders(session: AsyncSession, now: datetime) -> int:
++    rows = (
++        await session.execute(
++            select(Registration, Lecture)
++            .join(Lecture, Lecture.id == Registration.event_id)
++            .where(
++                Registration.status == "confirmed",
++                Lecture.status == "scheduled",
++                Lecture.starts_at > now,
++                Lecture.starts_at <= now + settings.REMINDER_AHEAD,
++            )
++            .order_by(Registration.id)
++        )
++    ).all()
++    for registration, lecture in rows:
++        await service.notify(
++            session,
++            listener_id=registration.listener_id,
++            event_id=lecture.id,
++            kind="reminder",
++            body=f"Напоминаем: «{lecture.title}» начнётся {lecture.starts_at:%d.%m.%Y в %H:%M}",
++            dedup_key=f"reminder:{registration.id}",
++        )
++    return len(rows)
++
++
++async def finish_past_events(session: AsyncSession, now: datetime) -> list[int]:
++    lectures = (
++        await session.scalars(
++            select(Lecture).where(
++                Lecture.status == "scheduled", Lecture.starts_at <= now - settings.FINISH_AFTER
++            )
++        )
++    ).all()
++    for lecture in lectures:
++        lecture.status = "finished"
++        lecture.updated_at = now
++    return [lecture.id for lecture in lectures]
+diff --git a/services/lectures/models.py b/services/lectures/models.py
+new file mode 100644
+index 0000000..d96d723
+--- /dev/null
++++ b/services/lectures/models.py
+@@ -0,0 +1,77 @@
++from datetime import datetime
++
++from sqlalchemy import ForeignKey
++from sqlalchemy.orm import Mapped, mapped_column
++
++from libs.db import Base
++
++SCHEMA = {"schema": "lectures"}
++
++
++class VenueCapacityLimit(Base):
++    """Реплика лимита мест площадки (обновляется событием lectures.venue_limit_changed)."""
++
++    __tablename__ = "venue_capacity_limits"
++    __table_args__ = SCHEMA
++
++    venue_id: Mapped[int] = mapped_column(primary_key=True)
++    max_capacity: Mapped[int]
++    updated_at: Mapped[datetime]
++
++
++class Lecture(Base):
++    __tablename__ = "events"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    title: Mapped[str]
++    venue_id: Mapped[int]
++    organizer_id: Mapped[int]
++    starts_at: Mapped[datetime]
++    capacity: Mapped[int]
++    # Организатор задал число мест сам, и оно меньше лимита площадки.
++    capacity_manual: Mapped[bool] = mapped_column(default=False)
++    status: Mapped[str] = mapped_column(default="scheduled")
++    created_at: Mapped[datetime]
++    updated_at: Mapped[datetime]
++
++
++class Registration(Base):
++    __tablename__ = "registrations"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    event_id: Mapped[int] = mapped_column(ForeignKey("lectures.events.id"))
++    listener_id: Mapped[int]
++    status: Mapped[str]
++    source: Mapped[str] = mapped_column(default="direct")
++    created_at: Mapped[datetime]
++    cancelled_at: Mapped[datetime | None]
++    cancel_reason: Mapped[str | None]
++    attended_at: Mapped[datetime | None]
++
++
++class WaitlistEntry(Base):
++    __tablename__ = "waitlist"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    event_id: Mapped[int] = mapped_column(ForeignKey("lectures.events.id"))
++    listener_id: Mapped[int]
++    status: Mapped[str] = mapped_column(default="waiting")
++    created_at: Mapped[datetime]
++    closed_at: Mapped[datetime | None]
++
++
++class Notification(Base):
++    __tablename__ = "notifications"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    listener_id: Mapped[int]
++    event_id: Mapped[int] = mapped_column(ForeignKey("lectures.events.id"))
++    kind: Mapped[str]
++    body: Mapped[str]
++    dedup_key: Mapped[str]
++    created_at: Mapped[datetime]
++    sent_at: Mapped[datetime | None]
+diff --git a/services/lectures/service.py b/services/lectures/service.py
+new file mode 100644
+index 0000000..25bb703
+--- /dev/null
++++ b/services/lectures/service.py
+@@ -0,0 +1,481 @@
++"""Открытые лекции на площадках: объявление, регистрация слушателей, лист ожидания."""
++
++from datetime import datetime
++
++from sqlalchemy import func, select
++from sqlalchemy.dialects.postgresql import insert
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs import clock, events
++from libs.errors import AccessDenied, DomainError, NotFound
++from services.lectures import settings
++from services.lectures.models import Lecture, Notification, Registration, VenueCapacityLimit, WaitlistEntry
++
++# Причины отмены, после которых место на том же мероприятии снова свободно.
++SEAT_RELEASING_REASONS = ("listener", "organizer")
++
++
++async def _lecture(session: AsyncSession, event_id: int, *, lock: bool = False) -> Lecture:
++    stmt = select(Lecture).where(Lecture.id == event_id)
++    if lock:
++        stmt = stmt.with_for_update()
++    lecture = await session.scalar(stmt)
++    if lecture is None:
++        raise NotFound(f"мероприятие {event_id}")
++    return lecture
++
++
++async def _own_lecture(session: AsyncSession, event_id: int, organizer_id: int) -> Lecture:
++    lecture = await _lecture(session, event_id, lock=True)
++    if lecture.organizer_id != organizer_id:
++        raise AccessDenied("мероприятием управляет только его организатор")
++    if lecture.status != "scheduled":
++        raise DomainError("мероприятие уже отменено или прошло")
++    return lecture
++
++
++async def _venue_limit(session: AsyncSession, venue_id: int) -> int:
++    limit = await session.get(VenueCapacityLimit, venue_id)
++    if limit is None:
++        raise DomainError("для площадки не задан лимит мест")
++    return limit.max_capacity
++
++
++async def confirmed_count(session: AsyncSession, event_id: int) -> int:
++    return await session.scalar(
++        select(func.count()).where(Registration.event_id == event_id, Registration.status == "confirmed")
++    )
++
++
++def _registration_open(lecture: Lecture, now: datetime) -> bool:
++    return lecture.status == "scheduled" and lecture.starts_at - now > settings.REGISTRATION_CLOSES_BEFORE
++
++
++async def notify(
++    session: AsyncSession, *, listener_id: int, event_id: int, kind: str, body: str, dedup_key: str
++) -> None:
++    """Ставит уведомление слушателю; повторная доставка события не создаёт дубль."""
++    await session.execute(
++        insert(Notification)
++        .values(
++            listener_id=listener_id,
++            event_id=event_id,
++            kind=kind,
++            body=body,
++            dedup_key=dedup_key,
++            created_at=clock.now(),
++        )
++        .on_conflict_do_nothing(index_elements=["dedup_key"])
++    )
++
++
++# --- площадки ---
++
++
++async def set_venue_capacity_limit(session: AsyncSession, venue_id: int, max_capacity: int) -> None:
++    if max_capacity <= 0:
++        raise DomainError("лимит мест площадки должен быть положительным")
++    events.publish(
++        session, "lectures.venue_limit_changed", {"venue_id": venue_id, "max_capacity": max_capacity}
++    )
++
++
++async def apply_venue_limit(session: AsyncSession, venue_id: int, max_capacity: int) -> list[int]:
++    """Обновляет реплику лимита и подтягивает к нему места будущих мероприятий.
++
++    Меняются только мероприятия, где число мест совпадало со старым лимитом и не задавалось
++    организатором вручную. Возвращает id изменённых мероприятий.
++    """
++    now = clock.now()
++    replica = await session.get(VenueCapacityLimit, venue_id, with_for_update=True)
++    if replica is None:
++        session.add(VenueCapacityLimit(venue_id=venue_id, max_capacity=max_capacity, updated_at=now))
++        return []
++    old = replica.max_capacity
++    if old == max_capacity:
++        return []
++    replica.max_capacity = max_capacity
++    replica.updated_at = now
++    await session.flush()
++
++    lectures = (
++        await session.scalars(
++            select(Lecture)
++            .where(
++                Lecture.venue_id == venue_id,
++                Lecture.status == "scheduled",
++                Lecture.starts_at > now,
++                Lecture.capacity == old,
++                Lecture.capacity_manual.is_(False),
++            )
++            .with_for_update()
++        )
++    ).all()
++    for lecture in lectures:
++        lecture.capacity = max_capacity
++        lecture.updated_at = now
++        if max_capacity > old:
++            events.publish(session, "lectures.capacity_increased", {"event_id": lecture.id})
++    await session.flush()
++    return [lecture.id for lecture in lectures]
++
++
++# --- мероприятия ---
++
++
++async def create_event(
++    session: AsyncSession,
++    *,
++    organizer_id: int,
++    title: str,
++    venue_id: int,
++    starts_at: datetime,
++    capacity: int | None = None,
++) -> Lecture:
++    now = clock.now()
++    if starts_at - now < settings.MIN_LEAD_TIME:
++        raise DomainError("мероприятие нужно объявить хотя бы за сутки до начала")
++    if not title.strip():
++        raise DomainError("укажите тему мероприятия")
++    limit = await _venue_limit(session, venue_id)
++    if capacity is None:
++        capacity = limit
++    busy = await session.scalar(
++        select(Lecture.id).where(
++            Lecture.venue_id == venue_id, Lecture.starts_at == starts_at, Lecture.status == "scheduled"
++        )
++    )
++    if busy is not None:
++        raise DomainError("площадка в это время уже занята другим мероприятием")
++    lecture = Lecture(
++        title=title.strip(),
++        venue_id=venue_id,
++        organizer_id=organizer_id,
++        starts_at=starts_at,
++        capacity=capacity,
++        capacity_manual=capacity < limit,
++        created_at=now,
++        updated_at=now,
++    )
++    session.add(lecture)
++    await session.flush()
++    return lecture
++
++
++async def change_capacity(session: AsyncSession, event_id: int, organizer_id: int, capacity: int) -> Lecture:
++    lecture = await _own_lecture(session, event_id, organizer_id)
++    if capacity < await confirmed_count(session, event_id):
++        raise DomainError("на мероприятие уже зарегистрировано больше слушателей")
++    limit = await _venue_limit(session, lecture.venue_id)
++    increased = capacity > lecture.capacity
++    lecture.capacity = capacity
++    lecture.capacity_manual = capacity < limit
++    lecture.updated_at = clock.now()
++    await session.flush()
++    if increased:
++        events.publish(session, "lectures.capacity_increased", {"event_id": lecture.id})
++    return lecture
++
++
++async def _drop_audience(session: AsyncSession, lecture: Lecture, reason: str) -> list[int]:
++    """Отменяет все регистрации и закрывает лист ожидания; возвращает слушателей из листа."""
++    now = clock.now()
++    registrations = (
++        await session.scalars(
++            select(Registration)
++            .where(Registration.event_id == lecture.id, Registration.status == "confirmed")
++            .order_by(Registration.id)
++        )
++    ).all()
++    for r in registrations:
++        _cancel(session, r, lecture, reason, now)
++    waiting = await _waiting(session, lecture.id)
++    for entry in waiting:
++        entry.status = "cancelled"
++        entry.closed_at = now
++    return [entry.listener_id for entry in waiting]
++
++
++async def move_event(
++    session: AsyncSession, event_id: int, organizer_id: int, *, venue_id: int, capacity: int | None = None
++) -> Lecture:
++    """Перенос на другую площадку: прежние регистрации и лист ожидания аннулируются."""
++    lecture = await _own_lecture(session, event_id, organizer_id)
++    if venue_id == lecture.venue_id:
++        raise DomainError("мероприятие уже проходит на этой площадке")
++    limit = await _venue_limit(session, venue_id)
++    busy = await session.scalar(
++        select(Lecture.id).where(
++            Lecture.venue_id == venue_id,
++            Lecture.starts_at == lecture.starts_at,
++            Lecture.status == "scheduled",
++        )
++    )
++    if busy is not None:
++        raise DomainError("новая площадка в это время уже занята другим мероприятием")
++
++    old_venue_id = lecture.venue_id
++    waitlisted = await _drop_audience(session, lecture, "venue_changed")
++    lecture.venue_id = venue_id
++    lecture.capacity = limit if capacity is None else capacity
++    lecture.capacity_manual = lecture.capacity < limit
++    lecture.updated_at = clock.now()
++    await session.flush()
++    events.publish(
++        session,
++        "lectures.event_moved",
++        {
++            "event_id": lecture.id,
++            "old_venue_id": old_venue_id,
++            "venue_id": venue_id,
++            "waitlisted": waitlisted,
++        },
++    )
++    return lecture
++
++
++async def cancel_event(session: AsyncSession, event_id: int, organizer_id: int) -> Lecture:
++    lecture = await _own_lecture(session, event_id, organizer_id)
++    waitlisted = await _drop_audience(session, lecture, "event_cancelled")
++    lecture.status = "cancelled"
++    lecture.updated_at = clock.now()
++    events.publish(session, "lectures.event_cancelled", {"event_id": lecture.id, "waitlisted": waitlisted})
++    return lecture
++
++
++async def upcoming(session: AsyncSession, venue_id: int | None = None) -> list[tuple[Lecture, int]]:
++    """Будущие мероприятия с числом свободных мест."""
++    taken = (
++        select(Registration.event_id, func.count().label("n"))
++        .where(Registration.status == "confirmed")
++        .group_by(Registration.event_id)
++        .subquery()
++    )
++    stmt = (
++        select(Lecture, Lecture.capacity - func.coalesce(taken.c.n, 0))
++        .outerjoin(taken, taken.c.event_id == Lecture.id)
++        .where(Lecture.status == "scheduled", Lecture.starts_at > clock.now())
++        .order_by(Lecture.starts_at, Lecture.id)
++    )
++    if venue_id is not None:
++        stmt = stmt.where(Lecture.venue_id == venue_id)
++    return [(lecture, max(free, 0)) for lecture, free in (await session.execute(stmt)).all()]
++
++
++# --- регистрации ---
++
++
++async def _active_registrations(session: AsyncSession, listener_id: int) -> int:
++    return await session.scalar(
++        select(func.count())
++        .select_from(Registration)
++        .join(Lecture, Lecture.id == Registration.event_id)
++        .where(
++            Registration.listener_id == listener_id,
++            Registration.status == "confirmed",
++            Lecture.status == "scheduled",
++            Lecture.starts_at > clock.now(),
++        )
++    )
++
++
++async def _registered(session: AsyncSession, event_id: int, listener_id: int) -> Registration | None:
++    return await session.scalar(
++        select(Registration).where(
++            Registration.event_id == event_id,
++            Registration.listener_id == listener_id,
++            Registration.status == "confirmed",
++        )
++    )
++
++
++async def register(session: AsyncSession, event_id: int, listener_id: int) -> Registration:
++    lecture = await _lecture(session, event_id, lock=True)
++    if not _registration_open(lecture, clock.now()):
++        raise DomainError("регистрация на мероприятие закрыта")
++    if await _registered(session, event_id, listener_id) is not None:
++        raise DomainError("слушатель уже зарегистрирован на это мероприятие")
++    if await _active_registrations(session, listener_id) >= settings.MAX_ACTIVE_REGISTRATIONS:
++        raise DomainError("у слушателя уже максимальное число регистраций на будущие мероприятия")
++    if await confirmed_count(session, event_id) >= lecture.capacity:
++        raise DomainError("свободных мест нет, можно встать в лист ожидания")
++
++    registration = Registration(
++        event_id=event_id, listener_id=listener_id, status="confirmed", created_at=clock.now()
++    )
++    session.add(registration)
++    entry = await _waiting_entry(session, event_id, listener_id)
++    if entry is not None:
++        entry.status = "left"
++        entry.closed_at = clock.now()
++    await session.flush()
++    events.publish(
++        session,
++        "lectures.registration_created",
++        {"registration_id": registration.id, "event_id": event_id, "listener_id": listener_id},
++    )
++    return registration
++
++
++def _cancel(session: AsyncSession, r: Registration, lecture: Lecture, reason: str, now: datetime) -> None:
++    r.status = "cancelled"
++    r.cancelled_at = now
++    r.cancel_reason = reason
++    events.publish(
++        session,
++        "lectures.registration_cancelled",
++        {
++            "registration_id": r.id,
++            "event_id": lecture.id,
++            "venue_id": lecture.venue_id,
++            "listener_id": r.listener_id,
++            "reason": reason,
++        },
++    )
++
++
++async def cancel_registration(session: AsyncSession, registration_id: int, listener_id: int) -> Registration:
++    r = await session.get(Registration, registration_id)
++    if r is None:
++        raise NotFound(f"регистрация {registration_id}")
++    if r.listener_id != listener_id:
++        raise AccessDenied("отменить регистрацию может только сам слушатель")
++    if r.status != "confirmed":
++        raise DomainError("регистрация уже отменена")
++    lecture = await _lecture(session, r.event_id)
++    now = clock.now()
++    if lecture.starts_at <= now:
++        raise DomainError("мероприятие уже началось")
++    _cancel(session, r, lecture, "listener", now)
++    return r
++
++
++async def remove_listener(session: AsyncSession, registration_id: int, organizer_id: int) -> Registration:
++    r = await session.get(Registration, registration_id)
++    if r is None or r.status != "confirmed":
++        raise DomainError("регистрация не действует")
++    lecture = await _own_lecture(session, r.event_id, organizer_id)
++    _cancel(session, r, lecture, "organizer", clock.now())
++    return r
++
++
++# --- лист ожидания ---
++
++
++async def _waiting(session: AsyncSession, event_id: int, limit: int | None = None) -> list[WaitlistEntry]:
++    stmt = (
++        select(WaitlistEntry)
++        .where(WaitlistEntry.event_id == event_id, WaitlistEntry.status == "waiting")
++        .order_by(WaitlistEntry.created_at, WaitlistEntry.id)
++        .with_for_update(skip_locked=True)
++    )
++    if limit is not None:
++        stmt = stmt.limit(limit)
++    return list((await session.scalars(stmt)).all())
++
++
++async def _waiting_entry(session: AsyncSession, event_id: int, listener_id: int) -> WaitlistEntry | None:
++    return await session.scalar(
++        select(WaitlistEntry).where(
++            WaitlistEntry.event_id == event_id,
++            WaitlistEntry.listener_id == listener_id,
++            WaitlistEntry.status == "waiting",
++        )
++    )
++
++
++async def join_waitlist(session: AsyncSession, event_id: int, listener_id: int) -> WaitlistEntry:
++    lecture = await _lecture(session, event_id, lock=True)
++    if not _registration_open(lecture, clock.now()):
++        raise DomainError("регистрация на мероприятие закрыта")
++    if await _registered(session, event_id, listener_id) is not None:
++        raise DomainError("слушатель уже зарегистрирован на это мероприятие")
++    if await confirmed_count(session, event_id) < lecture.capacity:
++        raise DomainError("на мероприятии есть свободные места, регистрируйтесь напрямую")
++    if await _waiting_entry(session, event_id, listener_id) is not None:
++        raise DomainError("слушатель уже в листе ожидания")
++    queued = await session.scalar(
++        select(func.count()).where(WaitlistEntry.event_id == event_id, WaitlistEntry.status == "waiting")
++    )
++    if queued >= settings.WAITLIST_MAX_SIZE:
++        raise DomainError("лист ожидания заполнен")
++    entry = WaitlistEntry(event_id=event_id, listener_id=listener_id, created_at=clock.now())
++    session.add(entry)
++    await session.flush()
++    return entry
++
++
++async def leave_waitlist(session: AsyncSession, entry_id: int, listener_id: int) -> WaitlistEntry:
++    entry = await session.get(WaitlistEntry, entry_id)
++    if entry is None:
++        raise NotFound(f"запись листа ожидания {entry_id}")
++    if entry.listener_id != listener_id:
++        raise AccessDenied("покинуть лист ожидания может только сам слушатель")
++    if entry.status != "waiting":
++        raise DomainError("запись в листе ожидания уже закрыта")
++    entry.status = "left"
++    entry.closed_at = clock.now()
++    return entry
++
++
++async def waitlist_position(session: AsyncSession, entry_id: int) -> int:
++    entry = await session.get(WaitlistEntry, entry_id)
++    if entry is None or entry.status != "waiting":
++        raise NotFound(f"запись листа ожидания {entry_id}")
++    ahead = await session.scalar(
++        select(func.count()).where(
++            WaitlistEntry.event_id == entry.event_id,
++            WaitlistEntry.status == "waiting",
++            (WaitlistEntry.created_at < entry.created_at)
++            | ((WaitlistEntry.created_at == entry.created_at) & (WaitlistEntry.id < entry.id)),
++        )
++    )
++    return ahead + 1
++
++
++async def fill_from_waitlist(session: AsyncSession, event_id: int) -> list[Registration]:
++    """Отдаёт свободные места первым из листа ожидания."""
++    lecture = await _lecture(session, event_id, lock=True)
++    now = clock.now()
++    if not _registration_open(lecture, now):
++        return []
++    free = lecture.capacity - await confirmed_count(session, event_id)
++    if free <= 0:
++        return []
++    promoted = []
++    for entry in await _waiting(session, event_id, limit=free):
++        entry.status = "promoted"
++        entry.closed_at = now
++        registration = Registration(
++            event_id=event_id,
++            listener_id=entry.listener_id,
++            status="confirmed",
++            source="waitlist",
++            created_at=now,
++        )
++        session.add(registration)
++        await session.flush()
++        events.publish(
++            session,
++            "lectures.waitlist_promoted",
++            {
++                "registration_id": registration.id,
++                "waitlist_id": entry.id,
++                "event_id": event_id,
++                "listener_id": entry.listener_id,
++            },
++        )
++        promoted.append(registration)
++    return promoted
++
++
++# --- уведомления ---
++
++
++async def notifications(session: AsyncSession, listener_id: int) -> list[Notification]:
++    rows = await session.scalars(
++        select(Notification)
++        .where(Notification.listener_id == listener_id)
++        .order_by(Notification.created_at, Notification.id)
++    )
++    return list(rows.all())
+diff --git a/services/lectures/settings.py b/services/lectures/settings.py
+new file mode 100644
+index 0000000..c11af67
+--- /dev/null
++++ b/services/lectures/settings.py
+@@ -0,0 +1,18 @@
++from datetime import timedelta
++
++# Мероприятие можно объявить не позднее чем за столько до начала.
++MIN_LEAD_TIME = timedelta(hours=24)
++# Регистрация и продвижение из листа ожидания закрываются за столько до начала.
++REGISTRATION_CLOSES_BEFORE = timedelta(hours=1)
++# Сколько действующих регистраций на будущие мероприятия может быть у одного слушателя.
++MAX_ACTIVE_REGISTRATIONS = 3
++# Длина листа ожидания одного мероприятия.
++WAITLIST_MAX_SIZE = 20
++# Напоминание слушателям рассылается за столько до начала.
++REMINDER_AHEAD = timedelta(hours=24)
++# Мероприятие считается прошедшим через столько после начала.
++FINISH_AFTER = timedelta(hours=3)
++# Отметка слушателей на входе открывается за столько до начала.
++CHECK_IN_OPENS_BEFORE = timedelta(minutes=30)
++# Сколько уведомлений отправляется за один проход рассылки.
++NOTIFICATION_BATCH = 100
+diff --git a/tests/lectures_factories.py b/tests/lectures_factories.py
+new file mode 100644
+index 0000000..a69862c
+--- /dev/null
++++ b/tests/lectures_factories.py
+@@ -0,0 +1,92 @@
++"""Площадки, мероприятия и слушатели для тестов сервиса лекций."""
++
++from datetime import timedelta
++
++from sqlalchemy import select
++
++from libs import db
++from services.lectures import service as lectures
++from services.lectures.models import Lecture, Notification, Registration, WaitlistEntry
++from tests.factories import T0, act, read
++
++HALL, ROOM, LOFT = 1, 2, 3
++LIMITS = {HALL: 5, ROOM: 3, LOFT: 10}
++
++ORGANIZER, ORGANIZER_2 = 701, 702
++LISTENERS = tuple(range(1001, 1021))
++ANNA, BORIS, VERA, GLEB, DINA, EGOR = LISTENERS[:6]
++
++EVENING = T0 + timedelta(days=3, hours=9)
++
++
++async def venues(limits: dict[int, int] | None = None) -> None:
++    for venue_id, cap in (limits or LIMITS).items():
++        await set_limit(venue_id, cap)
++
++
++async def set_limit(venue_id: int, max_capacity: int) -> None:
++    await act(lectures.set_venue_capacity_limit, venue_id, max_capacity)
++
++
++async def new_event(
++    *,
++    venue: int = HALL,
++    starts_at=EVENING,
++    capacity: int | None = None,
++    organizer: int = ORGANIZER,
++    title: str = "Книжная культура Серебряного века",
++) -> int:
++    lecture = await act(
++        lectures.create_event,
++        organizer_id=organizer,
++        title=title,
++        venue_id=venue,
++        starts_at=starts_at,
++        capacity=capacity,
++    )
++    return lecture.id
++
++
++async def register(event_id: int, listener: int) -> int:
++    return (await act(lectures.register, event_id, listener)).id
++
++
++async def fill(event_id: int, listeners: tuple[int, ...]) -> list[int]:
++    return [await register(event_id, listener) for listener in listeners]
++
++
++async def wait(event_id: int, listener: int) -> int:
++    return (await act(lectures.join_waitlist, event_id, listener)).id
++
++
++async def lecture(event_id: int) -> Lecture:
++    async with db.sessionmaker()() as s:
++        return await s.get(Lecture, event_id)
++
++
++async def registration(registration_id: int) -> Registration:
++    async with db.sessionmaker()() as s:
++        return await s.get(Registration, registration_id)
++
++
++async def waitlist_entry(entry_id: int) -> WaitlistEntry:
++    async with db.sessionmaker()() as s:
++        return await s.get(WaitlistEntry, entry_id)
++
++
++async def attendees(event_id: int) -> list[int]:
++    async with db.sessionmaker()() as s:
++        rows = await s.scalars(
++            select(Registration.listener_id)
++            .where(Registration.event_id == event_id, Registration.status == "confirmed")
++            .order_by(Registration.id)
++        )
++        return list(rows.all())
++
++
++async def notices(listener: int) -> list[Notification]:
++    return await read(lectures.notifications, listener)
++
++
++async def kinds(listener: int) -> list[str]:
++    return [n.kind for n in await notices(listener)]
+diff --git a/tests/test_lectures_events.py b/tests/test_lectures_events.py
+new file mode 100644
+index 0000000..56dbe14
+--- /dev/null
++++ b/tests/test_lectures_events.py
+@@ -0,0 +1,141 @@
++from datetime import timedelta
++
++import pytest
++from sqlalchemy.exc import DBAPIError
++
++from libs import db
++from libs.errors import AccessDenied, DomainError
++from services.lectures import service as lectures
++from services.lectures.models import VenueCapacityLimit
++from tests.factories import T0, act, travel
++from tests.lectures_factories import (
++    ANNA,
++    BORIS,
++    EVENING,
++    HALL,
++    LOFT,
++    ORGANIZER,
++    ORGANIZER_2,
++    ROOM,
++    VERA,
++    attendees,
++    fill,
++    kinds,
++    lecture,
++    new_event,
++    set_limit,
++    venues,
++    wait,
++)
++
++
++@pytest.fixture(autouse=True)
++async def _venues() -> None:
++    await venues()
++
++
++async def test_event_takes_venue_limit_by_default() -> None:
++    event_id = await new_event(venue=ROOM)
++    created = await lecture(event_id)
++    assert created.capacity == 3
++    assert created.capacity_manual is False
++    assert created.status == "scheduled"
++
++
++async def test_event_announced_at_least_a_day_ahead() -> None:
++    with pytest.raises(DomainError, match="за сутки"):
++        await new_event(starts_at=T0 + timedelta(hours=5))
++
++
++async def test_event_on_venue_without_limit_rejected() -> None:
++    with pytest.raises(DomainError, match="не задан лимит"):
++        await new_event(venue=99)
++
++
++async def test_capacity_above_venue_limit_rejected_by_db() -> None:
++    with pytest.raises(DBAPIError, match="exceeds venue"):
++        await new_event(venue=ROOM, capacity=4)
++
++
++async def test_venue_cannot_host_two_events_at_once() -> None:
++    await new_event()
++    with pytest.raises(DomainError, match="занята"):
++        await new_event(organizer=ORGANIZER_2, title="Другая лекция")
++    await new_event(starts_at=EVENING + timedelta(hours=2))
++
++
++async def test_only_organizer_changes_capacity() -> None:
++    event_id = await new_event()
++    with pytest.raises(AccessDenied):
++        await act(lectures.change_capacity, event_id, ORGANIZER_2, 2)
++
++
++async def test_capacity_cannot_drop_below_registered() -> None:
++    event_id = await new_event()
++    await fill(event_id, (ANNA, BORIS, VERA))
++    with pytest.raises(DomainError, match="больше слушателей"):
++        await act(lectures.change_capacity, event_id, ORGANIZER, 2)
++    await act(lectures.change_capacity, event_id, ORGANIZER, 3)
++    assert (await lecture(event_id)).capacity_manual is True
++
++
++async def test_limit_change_updates_replica_and_untouched_events() -> None:
++    default = await new_event()
++    reduced = await new_event(starts_at=EVENING + timedelta(days=1), capacity=4)
++    other_venue = await new_event(venue=LOFT)
++
++    await set_limit(HALL, 8)
++
++    async with db.sessionmaker()() as s:
++        assert (await s.get(VenueCapacityLimit, HALL)).max_capacity == 8
++    assert (await lecture(default)).capacity == 8
++    assert (await lecture(reduced)).capacity == 4
++    assert (await lecture(other_venue)).capacity == 10
++
++
++async def test_limit_change_skips_past_and_cancelled_events() -> None:
++    past = await new_event()
++    cancelled = await new_event(starts_at=EVENING + timedelta(days=2))
++    await act(lectures.cancel_event, cancelled, ORGANIZER)
++    travel(EVENING + timedelta(hours=1))
++
++    await set_limit(HALL, 7)
++
++    assert (await lecture(past)).capacity == 5
++    assert (await lecture(cancelled)).capacity == 5
++
++
++async def test_manual_capacity_kept_even_when_it_matches_old_limit() -> None:
++    tracking = await new_event()
++    manual = await new_event(starts_at=EVENING + timedelta(days=1))
++    await act(lectures.change_capacity, manual, ORGANIZER, 3)
++
++    await set_limit(HALL, 3)
++    assert (await lecture(tracking)).capacity == 3
++    assert (await lecture(manual)).capacity == 3
++
++    await set_limit(HALL, 6)
++    assert (await lecture(tracking)).capacity == 6
++    assert (await lecture(manual)).capacity == 3
++
++
++async def test_restoring_full_capacity_follows_limit_again() -> None:
++    event_id = await new_event()
++    await act(lectures.change_capacity, event_id, ORGANIZER, 2)
++    await act(lectures.change_capacity, event_id, ORGANIZER, 5)
++    assert (await lecture(event_id)).capacity_manual is False
++
++    await set_limit(HALL, 9)
++    assert (await lecture(event_id)).capacity == 9
++
++
++async def test_limit_increase_gives_new_seats_to_waitlist() -> None:
++    await set_limit(ROOM, 2)
++    event_id = await new_event(venue=ROOM)
++    await fill(event_id, (ANNA, BORIS))
++    await wait(event_id, VERA)
++
++    await set_limit(ROOM, 3)
++
++    assert await attendees(event_id) == [ANNA, BORIS, VERA]
++    assert await kinds(VERA) == ["waitlist_promoted"]
+diff --git a/tests/test_lectures_jobs.py b/tests/test_lectures_jobs.py
+new file mode 100644
+index 0000000..cd8b9e9
+--- /dev/null
++++ b/tests/test_lectures_jobs.py
+@@ -0,0 +1,111 @@
++from datetime import timedelta
++
++import httpx
++import pytest
++
++from libs import events
++from services.lectures import jobs
++from services.lectures.app import app
++from tests.factories import act
++from tests.lectures_factories import (
++    ANNA,
++    BORIS,
++    EVENING,
++    GLEB,
++    HALL,
++    ORGANIZER,
++    ROOM,
++    VERA,
++    fill,
++    kinds,
++    lecture,
++    new_event,
++    register,
++    venues,
++    wait,
++    waitlist_entry,
++)
++
++
++@pytest.fixture(autouse=True)
++async def _venues() -> None:
++    await venues()
++
++
++@pytest.fixture
++async def client():
++    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://lectures") as c:
++        yield c
++
++
++async def test_waitlist_expires_when_registration_closes() -> None:
++    event_id = await new_event(venue=ROOM)
++    await fill(event_id, (ANNA, BORIS, VERA))
++    entry = await wait(event_id, GLEB)
++
++    assert await act(jobs.close_waitlists, EVENING - timedelta(hours=2)) == []
++    assert await act(jobs.close_waitlists, EVENING - timedelta(minutes=30)) == [entry]
++
++    assert (await waitlist_entry(entry)).status == "expired"
++    assert await kinds(GLEB) == ["waitlist_expired"]
++
++
++async def test_reminder_sent_once_a_day_ahead() -> None:
++    soon = await new_event()
++    later = await new_event(starts_at=EVENING + timedelta(days=3))
++    await register(soon, ANNA)
++    await register(later, ANNA)
++
++    now = EVENING - timedelta(hours=20)
++    assert await act(jobs.send_reminders, now) == 1
++    await act(jobs.send_reminders, now + timedelta(hours=1))
++
++    assert await kinds(ANNA) == ["registered", "registered", "reminder"]
++    assert (await lecture(soon)).status == "scheduled"
++
++
++async def test_past_events_finished() -> None:
++    event_id = await new_event()
++    assert await act(jobs.finish_past_events, EVENING + timedelta(hours=1)) == []
++    assert await act(jobs.finish_past_events, EVENING + timedelta(hours=3)) == [event_id]
++    assert (await lecture(event_id)).status == "finished"
++
++
++async def test_api_flow(client: httpx.AsyncClient) -> None:
++    r = await client.post(
++        "/events",
++        json={
++            "organizer_id": ORGANIZER,
++            "title": "Открытая лекция",
++            "venue_id": HALL,
++            "starts_at": EVENING.isoformat(),
++            "capacity": 1,
++        },
++    )
++    assert r.status_code == 201
++    event_id = r.json()["event_id"]
++
++    r = await client.post(f"/events/{event_id}/registrations", json={"listener_id": ANNA})
++    assert r.status_code == 201
++    registration_id = r.json()["registration_id"]
++    r = await client.post(f"/events/{event_id}/registrations", json={"listener_id": BORIS})
++    assert r.status_code == 409
++    r = await client.post(f"/events/{event_id}/waitlist", json={"listener_id": BORIS})
++    assert r.json()["position"] == 1
++
++    r = await client.delete(f"/registrations/{registration_id}", params={"listener_id": BORIS})
++    assert r.status_code == 403
++    r = await client.delete(f"/registrations/{registration_id}", params={"listener_id": ANNA})
++    assert r.status_code == 200
++
++    r = await client.put(f"/venues/{HALL}/capacity-limit", json={"max_capacity": 2})
++    assert r.status_code == 202
++    await events.dispatch_pending()
++
++    r = await client.put(f"/events/{event_id}/capacity", json={"organizer_id": ORGANIZER, "capacity": 3})
++    assert r.status_code == 409
++    assert "exceeds venue" in r.json()["detail"]
++    r = await client.get("/events", params={"venue_id": HALL})
++    assert [(e["id"], e["capacity"], e["free_seats"]) for e in r.json()] == [(event_id, 1, 0)]
++    r = await client.get(f"/listeners/{BORIS}/notifications")
++    assert [n["kind"] for n in r.json()] == ["waitlist_promoted"]
+diff --git a/tests/test_lectures_registrations.py b/tests/test_lectures_registrations.py
+new file mode 100644
+index 0000000..11652e3
+--- /dev/null
++++ b/tests/test_lectures_registrations.py
+@@ -0,0 +1,199 @@
++from datetime import timedelta
++
++import pytest
++from sqlalchemy.exc import DBAPIError
++
++from libs import clock, db
++from libs.errors import AccessDenied, DomainError
++from services.lectures import consumers
++from services.lectures import service as lectures
++from services.lectures.models import Registration
++from tests.factories import act, read, travel
++from tests.lectures_factories import (
++    ANNA,
++    BORIS,
++    DINA,
++    EGOR,
++    EVENING,
++    GLEB,
++    LISTENERS,
++    LOFT,
++    ORGANIZER,
++    ORGANIZER_2,
++    ROOM,
++    VERA,
++    attendees,
++    fill,
++    kinds,
++    lecture,
++    new_event,
++    notices,
++    register,
++    registration,
++    venues,
++    wait,
++    waitlist_entry,
++)
++
++
++@pytest.fixture(autouse=True)
++async def _venues() -> None:
++    await venues()
++
++
++async def test_registration_confirmed_with_notice() -> None:
++    event_id = await new_event(title="Рукописи XVIII века")
++    reg_id = await register(event_id, ANNA)
++    assert (await registration(reg_id)).status == "confirmed"
++    [notice] = await notices(ANNA)
++    assert notice.kind == "registered"
++    assert "Рукописи XVIII века" in notice.body
++
++
++async def test_full_event_sends_to_waitlist() -> None:
++    event_id = await new_event(venue=ROOM)
++    with pytest.raises(DomainError, match="свободные места"):
++        await wait(event_id, GLEB)
++    await fill(event_id, (ANNA, BORIS, VERA))
++    with pytest.raises(DomainError, match="лист ожидания"):
++        await register(event_id, GLEB)
++    first = await wait(event_id, GLEB)
++    second = await wait(event_id, DINA)
++    assert await read(lectures.waitlist_position, first) == 1
++    assert await read(lectures.waitlist_position, second) == 2
++
++
++async def test_listener_limit_on_active_registrations() -> None:
++    ids = [await new_event(starts_at=EVENING + timedelta(days=d)) for d in range(4)]
++    for event_id in ids[:3]:
++        await register(event_id, ANNA)
++    with pytest.raises(DomainError, match="максимальное число"):
++        await register(ids[3], ANNA)
++
++
++async def test_registration_closes_an_hour_before_start() -> None:
++    event_id = await new_event()
++    travel(EVENING - timedelta(minutes=50))
++    with pytest.raises(DomainError, match="закрыта"):
++        await register(event_id, ANNA)
++
++
++async def test_cancellation_gives_seat_to_first_in_waitlist() -> None:
++    event_id = await new_event(venue=ROOM)
++    anna, _, _ = await fill(event_id, (ANNA, BORIS, VERA))
++    gleb = await wait(event_id, GLEB)
++    dina = await wait(event_id, DINA)
++
++    await act(lectures.cancel_registration, anna, ANNA)
++
++    assert await attendees(event_id) == [BORIS, VERA, GLEB]
++    assert (await waitlist_entry(gleb)).status == "promoted"
++    assert await read(lectures.waitlist_position, dina) == 1
++    assert await kinds(ANNA) == ["registered", "registration_cancelled"]
++    assert await kinds(GLEB) == ["waitlist_promoted"]
++    assert await kinds(DINA) == []
++
++
++async def test_left_waitlist_entry_is_skipped() -> None:
++    event_id = await new_event(venue=ROOM)
++    regs = await fill(event_id, (ANNA, BORIS, VERA))
++    gleb = await wait(event_id, GLEB)
++    await wait(event_id, DINA)
++    await act(lectures.leave_waitlist, gleb, GLEB)
++
++    await act(lectures.remove_listener, regs[1], ORGANIZER)
++
++    assert await attendees(event_id) == [ANNA, VERA, DINA]
++
++
++async def test_only_listener_cancels_own_registration() -> None:
++    event_id = await new_event()
++    reg_id = await register(event_id, ANNA)
++    with pytest.raises(AccessDenied):
++        await act(lectures.cancel_registration, reg_id, BORIS)
++    with pytest.raises(AccessDenied):
++        await act(lectures.remove_listener, reg_id, ORGANIZER_2)
++
++
++async def test_organizer_adds_seats_for_waitlist() -> None:
++    event_id = await new_event(capacity=2)
++    await fill(event_id, (ANNA, BORIS))
++    for listener in (VERA, GLEB, DINA):
++        await wait(event_id, listener)
++
++    await act(lectures.change_capacity, event_id, ORGANIZER, 4)
++
++    assert await attendees(event_id) == [ANNA, BORIS, VERA, GLEB]
++    assert await kinds(DINA) == []
++
++
++async def test_move_to_other_venue_cancels_registrations_and_notifies() -> None:
++    event_id = await new_event(venue=ROOM)
++    regs = await fill(event_id, (ANNA, BORIS, VERA))
++    gleb = await wait(event_id, GLEB)
++
++    await act(lectures.move_event, event_id, ORGANIZER, venue_id=LOFT)
++
++    moved = await lecture(event_id)
++    assert (moved.venue_id, moved.capacity) == (LOFT, 10)
++    assert await attendees(event_id) == []
++    for reg_id in regs:
++        assert (await registration(reg_id)).cancel_reason == "venue_changed"
++    for listener in (ANNA, BORIS, VERA):
++        assert await kinds(listener) == ["registered", "event_moved"]
++    # Лист ожидания относился к прежней площадке: никого не переводим, всех уведомляем.
++    assert (await waitlist_entry(gleb)).status == "cancelled"
++    assert await kinds(GLEB) == ["event_moved"]
++
++
++async def test_new_registrations_after_move_go_to_new_venue() -> None:
++    event_id = await new_event(venue=ROOM)
++    await fill(event_id, (ANNA, BORIS))
++    await act(lectures.move_event, event_id, ORGANIZER, venue_id=LOFT, capacity=4)
++    await register(event_id, EGOR)
++    await register(event_id, ANNA)
++    assert await attendees(event_id) == [EGOR, ANNA]
++    assert (await lecture(event_id)).capacity_manual is True
++
++
++async def test_move_capacity_above_new_limit_rejected() -> None:
++    event_id = await new_event(venue=LOFT)
++    reg_id = await register(event_id, ANNA)
++    with pytest.raises(DBAPIError, match="exceeds venue"):
++        await act(lectures.move_event, event_id, ORGANIZER, venue_id=ROOM, capacity=6)
++    assert (await registration(reg_id)).status == "confirmed"
++    assert (await lecture(event_id)).venue_id == LOFT
++
++
++async def test_cancel_event_notifies_registered_and_waitlisted() -> None:
++    event_id = await new_event(venue=ROOM)
++    await fill(event_id, (ANNA, BORIS, VERA))
++    await wait(event_id, GLEB)
++
++    await act(lectures.cancel_event, event_id, ORGANIZER)
++
++    assert (await lecture(event_id)).status == "cancelled"
++    assert await attendees(event_id) == []
++    assert (await kinds(ANNA))[-1] == "event_cancelled"
++    assert await kinds(GLEB) == ["event_cancelled"]
++    with pytest.raises(DomainError, match="закрыта"):
++        await register(event_id, DINA)
++
++
++async def test_redelivered_event_does_not_duplicate_notice() -> None:
++    event_id = await new_event()
++    reg_id = await register(event_id, ANNA)
++    payload = {"registration_id": reg_id, "event_id": event_id, "listener_id": ANNA}
++    async with db.sessionmaker().begin() as s:
++        await consumers.on_registration_created(s, payload)
++    assert await kinds(ANNA) == ["registered"]
++
++
++async def test_database_refuses_overbooking() -> None:
++    event_id = await new_event(venue=ROOM)
++    await fill(event_id, LISTENERS[:3])
++    with pytest.raises(DBAPIError, match="is full"):
++        async with db.sessionmaker().begin() as s:
++            s.add(
++                Registration(event_id=event_id, listener_id=EGOR, status="confirmed", created_at=clock.now())
++            )

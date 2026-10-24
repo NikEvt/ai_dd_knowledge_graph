@@ -1,0 +1,39 @@
+{
+  "task": "T07",
+  "recall": 1.0,
+  "hidden_recall": 1.0,
+  "hit": [
+    "scheduling.check_slot_capacity",
+    "scheduling.venue_limits",
+    "services/applications/admin.py::set_venue_max_capacity",
+    "services/scheduling/consumers.py::on_venue_settings_changed",
+    "services/scheduling/models.py::Slot",
+    "services/scheduling/service.py::reduce_capacity",
+    "trg_slot_capacity_limit",
+    "venue.settings_changed"
+  ],
+  "missed": [],
+  "extra": [
+    "booking.cancelled",
+    "libs/clock.py::now",
+    "libs/events/outbox.py::dispatch_pending",
+    "libs/events/relay.py::consume_forever",
+    "scheduling.slots",
+    "services/applications/models.py::Venue",
+    "services/applications/public.py::get_venue",
+    "services/chat/consumers.py::EVENT_TEXT",
+    "services/scheduling/api.py::slots",
+    "services/scheduling/models.py::VenueLimit",
+    "services/scheduling/service.py::_active_bookings",
+    "services/scheduling/service.py::apply_venue_max_capacity",
+    "services/scheduling/service.py::book",
+    "services/scheduling/service.py::create_slot",
+    "services/scheduling/service.py::free_slots",
+    "services/wiring.py::MODULES",
+    "tests/factories.py::seed",
+    "tests/test_scheduling.py",
+    "tests/test_scheduling.py::test_slot_capacity_cannot_exceed_venue_maximum"
+  ],
+  "cost_usd": 0.9482421,
+  "input_tokens": 574162
+}

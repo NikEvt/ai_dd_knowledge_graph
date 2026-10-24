@@ -1,0 +1,3967 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 8cffa20..1cb6953 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -99,7 +99,7 @@ args = ["run", "--quiet", "python", "mcp/knowledge_server.py"]
+ 
+ Сущности: `applications.application_books`, `applications.applications`, `applications.attempts`, `applications.books`, `applications.clients`, `applications.prices`, `applications.representatives`, `applications.spheres`, `applications.venue_spheres`, `applications.venues`, `billing.accountant_assignments`, `billing.fine_rates`, `billing.fines`, `billing.invoices`, `billing.payments`, `chat.messages`, `events.outbox`, `halls.hall_booking_history`, `halls.hall_bookings`, `halls.hall_emails`, `halls.hall_invoices`, `halls.hall_managers`, `halls.hall_payments`, `halls.hall_templates`, `halls.halls`, `inventory.copies`, `inventory.custodians`, `inventory.ill_loans`, `inventory.ill_penalties`, `inventory.partner_libraries`, `inventory.stock_levels`, `inventory.transfers`, `inventory.write_offs`, `lectures.events`, `lectures.notifications`, `lectures.registrations`, `lectures.venue_capacity_limits`, `lectures.waitlist`, `marketing.audience_members`, `marketing.audiences`, `marketing.campaign_templates`, `marketing.campaigns`, `marketing.managers`, `marketing.sent_messages`, `marketing.unsubscriptions`, `notifications.emails`, `notifications.templates`, `partners.commissions`, `partners.contract_history`, `partners.contracts`, `partners.deals`, `partners.onboarding_requests`, `partners.partners`, `partners.payouts`, `reports.export_schedules`, `reports.metric_snapshots`, `reports.report_definitions`, `reports.report_runs`, `reports.run_notifications`, `scheduling.booking_links`, `scheduling.bookings`, `scheduling.holds`, `scheduling.loans`, `scheduling.slots`, `scheduling.venue_limits`, `staff.alerts`, `staff.assignments`, `staff.briefings`, `staff.clearance_kinds`, `staff.clearances`, `staff.employees`, `staff.shift_members`, `staff.shifts`, `staff.sites`, `subscriptions.invoices`, `subscriptions.notices`, `subscriptions.payments`, `subscriptions.plans`, `subscriptions.refunds`, `subscriptions.status_history`, `subscriptions.subscriptions`.
+ 
+-События: `application.archived`, `application.closed_duplicate`, `application.ready_for_booking`, `application.review_passed`, `application.stage_changed`, `application.unarchived`, `application.venue_changed`, `booking.cancelled`, `booking.created`, `books.issued`, `client.updated`, `halls.booking_cancelled`, `halls.booking_confirmed`, `halls.booking_created`, `halls.booking_held`, `halls.booking_prepaid`, `halls.invoice_issued`, `halls.payment_received`, `halls.venue_changed`, `inventory.copy_damaged`, `inventory.copy_lost`, `inventory.copy_registered`, `inventory.copy_relocated`, `inventory.copy_written_off`, `inventory.ill_issued`, `inventory.ill_overdue`, `inventory.ill_penalty_accrued`, `inventory.ill_returned`, `inventory.partner_resumed`, `inventory.partner_suspended`, `inventory.transfer_cancelled`, `inventory.transfer_received`, `inventory.transfer_shipped`, `invoice.cancelled`, `invoice.issued`, `lectures.capacity_increased`, `lectures.event_cancelled`, `lectures.event_moved`, `lectures.registration_cancelled`, `lectures.registration_created`, `lectures.seat_released`, `lectures.venue_limit_changed`, `lectures.waitlist_expired`, `lectures.waitlist_promoted`, `loan.damaged`, `loan.lost`, `loan.overdue`, `marketing.campaign_finished`, `marketing.campaign_launched`, `marketing.campaign_prepared`, `marketing.message_bounced`, `marketing.unsubscribed`, `partners.commission_accrued`, `partners.contract_activated`, `partners.contract_expired`, `partners.contract_rate_changed`, `partners.contract_resumed`, `partners.contract_suspended`, `partners.contract_terminated`, `partners.credit_overdue`, `partners.deal_cancelled`, `partners.deal_closed`, `partners.deal_created`, `partners.deal_paid`, `partners.partner_onboarded`, `partners.payout_closed`, `partners.request_approved`, `partners.request_closed_duplicate`, `partners.request_rejected`, `partners.request_submitted`, `payment.fully_paid`, `payment.linked`, `payment.refunded`, `reports.definition_deactivated`, `reports.run_cancelled`, `reports.run_completed`, `reports.run_failed`, `reports.run_requested`, `staff.clearance_expired`, `staff.clearance_granted`, `staff.clearance_revoked`, `staff.employee_dismissed`, `staff.employee_hired`, `staff.employee_transferred`, `staff.employee_updated`, `staff.shift_member_removed`, `staff.shift_understaffed`, `subscriptions.activated`, `subscriptions.closed_duplicate`, `subscriptions.created`, `subscriptions.expired`, `subscriptions.grace_started`, `subscriptions.holder_rejected`, `subscriptions.holder_updated`, `subscriptions.invoice_issued`, `subscriptions.payment_completed`, `subscriptions.refund_required`, `subscriptions.renewed`, `venue.settings_changed`.
++События: `application.archived`, `application.closed_duplicate`, `application.ready_for_booking`, `application.review_passed`, `application.stage_changed`, `application.unarchived`, `application.venue_changed`, `booking.cancelled`, `booking.created`, `books.issued`, `client.updated`, `halls.booking_cancelled`, `halls.booking_confirmed`, `halls.booking_created`, `halls.booking_held`, `halls.booking_prepaid`, `halls.invoice_issued`, `halls.payment_received`, `halls.venue_changed`, `inventory.copy_damaged`, `inventory.copy_lost`, `inventory.copy_registered`, `inventory.copy_relocated`, `inventory.copy_written_off`, `inventory.ill_issued`, `inventory.ill_overdue`, `inventory.ill_penalty_accrued`, `inventory.ill_returned`, `inventory.partner_resumed`, `inventory.partner_suspended`, `inventory.transfer_cancelled`, `inventory.transfer_received`, `inventory.transfer_shipped`, `invoice.cancelled`, `invoice.issued`, `lectures.capacity_increased`, `lectures.event_cancelled`, `lectures.event_moved`, `lectures.registration_cancelled`, `lectures.registration_created`, `lectures.seat_released`, `lectures.venue_limit_changed`, `lectures.waitlist_expired`, `lectures.waitlist_promoted`, `loan.damaged`, `loan.lost`, `loan.overdue`, `marketing.campaign_finished`, `marketing.campaign_launched`, `marketing.campaign_prepared`, `marketing.message_bounced`, `marketing.unsubscribed`, `partners.commission_accrued`, `partners.contract_activated`, `partners.contract_expired`, `partners.contract_rate_changed`, `partners.contract_resumed`, `partners.contract_suspended`, `partners.contract_terminated`, `partners.credit_overdue`, `partners.deal_cancelled`, `partners.deal_closed`, `partners.deal_created`, `partners.deal_paid`, `partners.partner_onboarded`, `partners.payout_closed`, `partners.request_approved`, `partners.request_closed_duplicate`, `partners.request_rejected`, `partners.request_submitted`, `payment.fully_paid`, `payment.issue_unlocked`, `payment.linked`, `payment.refunded`, `reports.definition_deactivated`, `reports.run_cancelled`, `reports.run_completed`, `reports.run_failed`, `reports.run_requested`, `staff.clearance_expired`, `staff.clearance_granted`, `staff.clearance_revoked`, `staff.employee_dismissed`, `staff.employee_hired`, `staff.employee_transferred`, `staff.employee_updated`, `staff.shift_member_removed`, `staff.shift_understaffed`, `subscriptions.activated`, `subscriptions.closed_duplicate`, `subscriptions.created`, `subscriptions.expired`, `subscriptions.grace_started`, `subscriptions.holder_rejected`, `subscriptions.holder_updated`, `subscriptions.invoice_issued`, `subscriptions.payment_completed`, `subscriptions.refund_required`, `subscriptions.renewed`, `venue.settings_changed`.
+ 
+-Правил в модели: 478 (draft: 456, verified: 22).
++Правил в модели: 478 (draft: 448, suspect: 10, verified: 20).
+ <!-- END L0 -->
+diff --git a/bpm/application_process.yaml b/bpm/application_process.yaml
+index 1fda775..e2bee7b 100644
+--- a/bpm/application_process.yaml
++++ b/bpm/application_process.yaml
+@@ -26,7 +26,8 @@ transitions:
+ 
+   - {from: awaiting_invoice, to: awaiting_payment, actor: accountant, kinds: [paid]}
+   - {from: awaiting_payment, to: awaiting_invoice, actor: system, kinds: [paid]}
+-  - {from: awaiting_payment, to: awaiting_issue, actor: system, kinds: [paid], guard: fully_paid}
++  # К записи на выдачу ведёт оплата доли счёта за книги (settings.BOOKS_ISSUE_PAID_SHARE), а не полная.
++  - {from: awaiting_payment, to: awaiting_issue, actor: system, kinds: [paid], guard: issue_paid}
+ 
+   # Обновление данных клиента возвращает на проверку заявки, не дошедшие до записи.
+   - {from: [awaiting_invoice, awaiting_payment], to: on_review, actor: system}
+diff --git a/docs/README.md b/docs/README.md
+index dc1a666..f45c080 100644
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -23,17 +23,17 @@
+ | bpm_guard | 3 |
+ | bpm_process | 1 |
+ | bpm_transition | 27 |
+-| config | 121 |
++| config | 122 |
+ | db_constraint | 313 |
+ | effect | 3 |
+-| event | 99 |
++| event | 100 |
+ | job | 24 |
+ | role | 6 |
+ | rule | 478 |
+ | service | 5 |
+ | status | 10 |
+-| symbol | 732 |
++| symbol | 734 |
+ | table | 81 |
+-| test | 284 |
++| test | 287 |
+ 
+-Правила по статусу: draft — 456, verified — 22
++Правила по статусу: draft — 448, suspect — 10, verified — 20
+diff --git a/docs/config.md b/docs/config.md
+index a583dd7..43a05b0 100644
+--- a/docs/config.md
++++ b/docs/config.md
+@@ -8,13 +8,14 @@
+ |---|---|---|---|
+ | [`engine.py::PROCESS_FILE`](../libs/bpm/engine.py#L13) | `Path(__file__).resolve().parents[2] / 'bpm' / 'application_process.yaml'` |  | [`engine.py::process`](../libs/bpm/engine.py#L33) |
+ | [`relay.py::STREAM_PREFIX`](../libs/events/relay.py#L13) | `events:` |  | [`relay.py::consume_forever`](../libs/events/relay.py#L39)<br>[`relay.py::relay_forever`](../libs/events/relay.py#L16) |
+-| [`settings.py::CLIENT_RESCHEDULE_MIN_DAYS`](../libs/settings.py#L14) | `2` | Клиент может перенести или отменить визит не позднее чем за столько дней. | [`service.py::cancel_booking`](../services/scheduling/service.py#L193) |
+-| [`settings.py::DATABASE_URL`](../libs/settings.py#L4) | `os.environ.get('DATABASE_URL', f'postgresql+asyncpg://erp:erp@localhost:{DB_POR…` |  | [`db.py::engine`](../libs/db.py#L27) |
+-| [`settings.py::DB_PORT`](../libs/settings.py#L3) | `os.environ.get('DB_PORT', '55432')` |  | — |
+-| [`settings.py::LOAN_PERIOD_DAYS`](../libs/settings.py#L8) | `30` | Срок пользования книгами с даты выдачи. | [`service.py::issue_books`](../services/scheduling/service.py#L223) |
+-| [`settings.py::PAYMENT_ARCHIVE_DAYS`](../libs/settings.py#L12) | `30` | Платная заявка уходит в архив, если счёт не оплачен за столько дней. | [`jobs.py::archive_stale`](../services/applications/jobs.py#L14) |
+-| [`settings.py::REDIS_URL`](../libs/settings.py#L5) | `os.environ.get('REDIS_URL', f"redis://localhost:{os.environ.get('REDIS_PORT', '…` |  | [`relay.py::consume_forever`](../libs/events/relay.py#L39)<br>[`relay.py::relay_forever`](../libs/events/relay.py#L16) |
+-| [`settings.py::REVIEW_ARCHIVE_DAYS`](../libs/settings.py#L10) | `30` | Заявка уходит в архив, если с начала проверки прошло столько дней, а данные не получены. | [`jobs.py::archive_stale`](../services/applications/jobs.py#L14) |
++| [`settings.py::BOOKS_ISSUE_PAID_SHARE`](../libs/settings.py#L18) | `Decimal('0.5')` | Доля счёта за книги, после оплаты которой платная заявка переходит к записи на выдачу. Счёт на штраф гасится только полной оплатой. | [`public.py::issue_threshold`](../services/billing/public.py#L32) |
++| [`settings.py::CLIENT_RESCHEDULE_MIN_DAYS`](../libs/settings.py#L15) | `2` | Клиент может перенести или отменить визит не позднее чем за столько дней. | [`service.py::cancel_booking`](../services/scheduling/service.py#L193) |
++| [`settings.py::DATABASE_URL`](../libs/settings.py#L5) | `os.environ.get('DATABASE_URL', f'postgresql+asyncpg://erp:erp@localhost:{DB_POR…` |  | [`db.py::engine`](../libs/db.py#L27) |
++| [`settings.py::DB_PORT`](../libs/settings.py#L4) | `os.environ.get('DB_PORT', '55432')` |  | — |
++| [`settings.py::LOAN_PERIOD_DAYS`](../libs/settings.py#L9) | `30` | Срок пользования книгами с даты выдачи. | [`service.py::issue_books`](../services/scheduling/service.py#L223) |
++| [`settings.py::PAYMENT_ARCHIVE_DAYS`](../libs/settings.py#L13) | `30` | Платная заявка уходит в архив, если счёт не оплачен за столько дней. | [`jobs.py::archive_stale`](../services/applications/jobs.py#L14) |
++| [`settings.py::REDIS_URL`](../libs/settings.py#L6) | `os.environ.get('REDIS_URL', f"redis://localhost:{os.environ.get('REDIS_PORT', '…` |  | [`relay.py::consume_forever`](../libs/events/relay.py#L39)<br>[`relay.py::relay_forever`](../libs/events/relay.py#L16) |
++| [`settings.py::REVIEW_ARCHIVE_DAYS`](../libs/settings.py#L11) | `30` | Заявка уходит в архив, если с начала проверки прошло столько дней, а данные не получены. | [`jobs.py::archive_stale`](../services/applications/jobs.py#L14) |
+ | [`dedup.py::OPEN_STAGES`](../services/applications/dedup.py#L10) | `['draft', 'on_review', 'needs_rework', 'awaiting_invoice', 'awaiting_payment', …` |  | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+ | [`listeners.py::TRACKED_FIELDS`](../services/applications/listeners.py#L9) | `['full_name', 'passport', 'birth_date']` |  | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) |
+ | [`review.py::REQUIRED_CLIENT_FIELDS`](../services/applications/review.py#L3) | `['full_name', 'passport', 'birth_date']` |  | [`review.py::missing_client_fields`](../services/applications/review.py#L6) |
+@@ -134,7 +135,7 @@
+ 
+ - без описания
+ - настройки: `libs/settings.py::PAYMENT_ARCHIVE_DAYS`, `libs/settings.py::REVIEW_ARCHIVE_DAYS`
+-- события: —; вызывает: service.py::archive, public.py::active_books_invoice
++- события: —; вызывает: service.py::archive, public.py::active_books_invoice, public.py::issue_unlocked
+ 
+ ### [`services/halls/jobs.py::cancel_unpaid`](../services/halls/jobs.py#L10)
+ 
+diff --git a/docs/coverage.md b/docs/coverage.md
+index 3732683..87d6efb 100644
+--- a/docs/coverage.md
++++ b/docs/coverage.md
+@@ -2,16 +2,25 @@
+ 
+ # Покрытие модели
+ 
+-- Правил: 478; verified: 22
++- Правил: 478; verified: 20
+ - Без реализации (implemented_by / enforced_by_db): 8
+-- Без тестов (tested_by): 129
+-- suspect: 0
++- Без тестов (tested_by): 128
++- suspect: 10
+ - Ограничения БД без правил: 9
+ - Проверки в коде без правил: 1
+ 
+-## suspect (0)
++## suspect (10)
+ 
+-- нет
++- R-APP-PAY-03 (с 2026-10-23) Оплата не менее половины счёта за книги открывает выдачу
++- R-APP-ARCHIVE-01 (с 2026-10-23) Заявка, застрявшая на проверке или доработке дольше REVIEW_ARCHIVE_DAYS, уходит в архив
++- R-APP-ARCHIVE-02 (с 2026-10-23) Платная заявка без оплаты половины счёта дольше PAYMENT_ARCHIVE_DAYS уходит в архив
++- R-APP-DEDUP-01 (с 2026-10-23) Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
++- R-BILL-PAYMENT-01 (с 2026-10-23) Платёж нельзя привязать к аннулированному счёту
++- R-BILL-PAYMENT-03 (с 2026-10-23) Привязка платежа фиксирует, кто привязал; переплата помечается флагом
++- R-BILL-PAYMENT-04 (с 2026-10-23) Доля оплаты счёта за книги и полная оплата публикуются по одному разу — когда сумма впервые достигает порога
++- R-BILL-PROCESS-01 (с 2026-10-23) Оплата половины счёта за книги открывает выдачу и закрывает дубли
++- R-BILL-PROCESS-02 (с 2026-10-23) Guard issue_paid: действующий счёт за книги оплачен не меньше чем наполовину
++- R-BILL-FINE-PAY-01 (с 2026-10-23) Полная оплата счёта на штраф гасит штраф
+ 
+ ## Правила без реализации (8)
+ 
+@@ -24,7 +33,7 @@
+ - R-SCHEMA-ROLE-01 Один сотрудник — одна роль
+ - R-SUBSCRIPTIONS-REMIND-01 Напоминание перед концом льготного периода не реализовано
+ 
+-## Правила без тестов (129)
++## Правила без тестов (128)
+ 
+ - R-APP-CREATE-03 В заявке есть книги, и все они из сферы заявки и прайса площадки
+ - R-APP-CORE-01 Сферу и представителя заявки сменить нельзя
+@@ -34,7 +43,6 @@
+ - R-APP-PAY-04 Возврат платежа по оплаченной заявке отправляет её в архив с отметкой «возврат»
+ - R-APP-UNARCHIVE-02 При возврате из архива площадку и книги меняют, только если заявка не доходила до записи
+ - R-APP-UNARCHIVE-03 После возврата из архива счёт аннулируется при изменении суммы, иначе срок оплаты отсчитывается заново
+-- R-APP-DEDUP-01 Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
+ - R-APP-DEDUP-02 Закрытие дубля аннулирует его неоплаченные счета и сбрасывает записи
+ - R-APP-ADMIN-01 Администратор задаёт надбавку и разрешение работать в долг для представителя
+ - R-APP-ADMIN-03 Максимум мест в окне площадки положителен и передаётся в scheduling событием
+diff --git a/docs/entities/applications.applications.md b/docs/entities/applications.applications.md
+index 72629cd..a7a2c32 100644
+--- a/docs/entities/applications.applications.md
++++ b/docs/entities/applications.applications.md
+@@ -46,9 +46,9 @@
+ ## Пишут (код)
+ - services/applications/consumers.py::on_books_issued [stage]
+ - services/applications/consumers.py::on_client_updated [stage]
+-- services/applications/consumers.py::on_fully_paid [stage]
+ - services/applications/consumers.py::on_invoice_cancelled [stage]
+ - services/applications/consumers.py::on_invoice_issued [stage]
++- services/applications/consumers.py::on_issue_unlocked [stage]
+ - services/applications/dedup.py::close_duplicates [stage]
+ - services/applications/service.py::approve [stage]
+ - services/applications/service.py::archive [stage]
+@@ -74,11 +74,11 @@
+ - R-APP-CREATE-01 [draft] Вид заявки определяется при создании по флагу «социальная» и признаку долга представителя
+ - R-APP-CREATE-02 [draft] Сфера заявки должна быть активна на площадке
+ - R-APP-CREATE-04 [draft] При создании заявки закрепляется проверяющий оператор площадки и открывается первая попытка
+-- R-APP-DEDUP-01 [draft] Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
++- R-APP-DEDUP-01 [suspect] Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
+ - R-APP-ISSUE-01 [draft] Выдача книг переводит заявку в «Книги у клиента»
+ - R-APP-PAY-01 [draft] Выставление счёта за книги переводит заявку в ожидание оплаты
+ - R-APP-PAY-02 [draft] Аннулирование счёта за книги возвращает заявку в ожидание счёта
+-- R-APP-PAY-03 [draft] Только полная оплата счёта за книги открывает выдачу
++- R-APP-PAY-03 [suspect] Оплата не менее половины счёта за книги открывает выдачу
+ - R-APP-REVIEW-01 [draft] Отправка на проверку фиксирует начало проверки один раз
+ - R-APP-REVIEW-02 [draft] Проверяющего назначают только до прохождения проверки
+ - R-APP-REVIEW-03 [draft] Подтверждает или возвращает заявку только назначенный проверяющий
+@@ -93,6 +93,6 @@
+ - R-APP-VENUE-CHANGE-03 [draft] Смена площадки переназначает проверяющего оператора и запускает реакции billing, scheduling и chat
+ - R-BILL-CANCEL-03 [draft] Аннулирование счёта за книги возвращает заявку в «Ожидает счёта»
+ - R-BILL-INVOICE-08 [verified] Выставление счёта за книги переводит заявку в «Ожидает оплаты»
+-- R-BILL-PROCESS-01 [draft] Полная оплата счёта за книги открывает выдачу и закрывает дубли
++- R-BILL-PROCESS-01 [suspect] Оплата половины счёта за книги открывает выдачу и закрывает дубли
+ - R-SCHED-ISSUE-03 [draft] После выдачи — запись выполнена, книги откреплены, ссылка на сдачу, этап «Книги у клиента»
+ - R-SCHEMA-APP-01 [draft] Оператора заявки переназначить нельзя
+diff --git a/docs/entities/applications.attempts.md b/docs/entities/applications.attempts.md
+index b77801d..c9d48eb 100644
+--- a/docs/entities/applications.attempts.md
++++ b/docs/entities/applications.attempts.md
+@@ -29,13 +29,13 @@
+ 
+ ## Правила
+ - R-APP-ACCESS-01 [draft] Оператор работает только со своими заявками
+-- R-APP-ARCHIVE-01 [draft] Заявка, застрявшая на проверке или доработке дольше REVIEW_ARCHIVE_DAYS, уходит в архив
+-- R-APP-ARCHIVE-02 [draft] Платная заявка без полной оплаты дольше PAYMENT_ARCHIVE_DAYS уходит в архив
++- R-APP-ARCHIVE-01 [suspect] Заявка, застрявшая на проверке или доработке дольше REVIEW_ARCHIVE_DAYS, уходит в архив
++- R-APP-ARCHIVE-02 [suspect] Платная заявка без оплаты половины счёта дольше PAYMENT_ARCHIVE_DAYS уходит в архив
+ - R-APP-ARCHIVE-03 [draft] Ручной архив и его последствия — закрытие попытки, сброс записей, сообщение в чат
+ - R-APP-CREATE-01 [draft] Вид заявки определяется при создании по флагу «социальная» и признаку долга представителя
+ - R-APP-CREATE-02 [draft] Сфера заявки должна быть активна на площадке
+ - R-APP-CREATE-04 [draft] При создании заявки закрепляется проверяющий оператор площадки и открывается первая попытка
+-- R-APP-DEDUP-01 [draft] Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
++- R-APP-DEDUP-01 [suspect] Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
+ - R-APP-PAY-04 [verified] Возврат платежа по оплаченной заявке отправляет её в архив с отметкой «возврат»
+ - R-APP-UNARCHIVE-01 [draft] Возврат из архива начинает новую попытку и новую проверку
+ - R-APP-UNARCHIVE-02 [draft] При возврате из архива площадку и книги меняют, только если заявка не доходила до записи
+diff --git a/docs/entities/billing.fines.md b/docs/entities/billing.fines.md
+index 0face38..d68d769 100644
+--- a/docs/entities/billing.fines.md
++++ b/docs/entities/billing.fines.md
+@@ -34,7 +34,7 @@
+ - R-BILL-FINE-02 [draft] Размер штрафа берётся из ставки по представителю, площадке и виду
+ - R-BILL-FINE-03 [draft] Штраф бывает только «открыт» или «оплачен»
+ - R-BILL-FINE-OUTSIDE-01 [verified] Штраф по заявке в долг гасит закреплённый оператор вне системы
+-- R-BILL-FINE-PAY-01 [draft] Полная оплата счёта на штраф гасит штраф
+-- R-BILL-PAYMENT-01 [draft] Платёж нельзя привязать к аннулированному счёту
+-- R-BILL-PAYMENT-03 [verified] Привязка платежа фиксирует, кто привязал; переплата помечается флагом
+-- R-BILL-PAYMENT-04 [draft] Полная оплата публикуется один раз — когда сумма впервые достигает суммы счёта
++- R-BILL-FINE-PAY-01 [suspect] Полная оплата счёта на штраф гасит штраф
++- R-BILL-PAYMENT-01 [suspect] Платёж нельзя привязать к аннулированному счёту
++- R-BILL-PAYMENT-03 [suspect] Привязка платежа фиксирует, кто привязал; переплата помечается флагом
++- R-BILL-PAYMENT-04 [suspect] Доля оплаты счёта за книги и полная оплата публикуются по одному разу — когда сумма впервые достигает порога
+diff --git a/docs/entities/billing.payments.md b/docs/entities/billing.payments.md
+index d55fc01..f83577e 100644
+--- a/docs/entities/billing.payments.md
++++ b/docs/entities/billing.payments.md
+@@ -32,9 +32,10 @@
+ - services/billing/service.py::unlink_payment [unlink_reason, unlinked_at]
+ 
+ ## Правила
+-- R-BILL-FINE-PAY-01 [draft] Полная оплата счёта на штраф гасит штраф
+-- R-BILL-PAYMENT-01 [draft] Платёж нельзя привязать к аннулированному счёту
+-- R-BILL-PAYMENT-03 [verified] Привязка платежа фиксирует, кто привязал; переплата помечается флагом
+-- R-BILL-PAYMENT-04 [draft] Полная оплата публикуется один раз — когда сумма впервые достигает суммы счёта
++- R-BILL-FINE-PAY-01 [suspect] Полная оплата счёта на штраф гасит штраф
++- R-BILL-PAYMENT-01 [suspect] Платёж нельзя привязать к аннулированному счёту
++- R-BILL-PAYMENT-03 [suspect] Привязка платежа фиксирует, кто привязал; переплата помечается флагом
++- R-BILL-PAYMENT-04 [suspect] Доля оплаты счёта за книги и полная оплата публикуются по одному разу — когда сумма впервые достигает порога
++
+ - R-BILL-REFUND-01 [verified] Возврат платежа требует причины и исключает платёж из оплаченной суммы
+ - R-BILL-UNLINK-01 [draft] Отвязка платежа требует причины
+diff --git a/docs/events.md b/docs/events.md
+index c9993e8..2e8aa3b 100644
+--- a/docs/events.md
++++ b/docs/events.md
+@@ -126,7 +126,9 @@ flowchart LR
+     partners_request_submitted([partners.request_submitted])
+     payment_fully_paid([payment.fully_paid])
+     service_billing --> payment_fully_paid
+-    payment_fully_paid --> service_applications
++    payment_issue_unlocked([payment.issue_unlocked])
++    service_billing --> payment_issue_unlocked
++    payment_issue_unlocked --> service_applications
+     payment_linked([payment.linked])
+     service_billing --> payment_linked
+     payment_linked --> service_chat
+@@ -168,14 +170,14 @@ flowchart LR
+ | `application.archived` | [`service.py::archive`](../services/applications/service.py#L246) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_archived`](../services/scheduling/consumers.py#L25) | application_id, outcome | effect:chat.event_log |
+ | `application.closed_duplicate` | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) | [`consumers.py::on_closed_duplicate`](../services/billing/consumers.py#L20)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_closed_duplicate`](../services/scheduling/consumers.py#L30) | application_id, winner_id | effect:chat.event_log |
+ | `application.ready_for_booking` | [`service.py::mark_ready_for_booking`](../services/applications/service.py#L157) | [`consumers.py::on_ready_for_booking`](../services/scheduling/consumers.py#L12) | application_id, sphere_id, venue_id | — |
+-| `application.review_passed` | [`service.py::approve`](../services/applications/service.py#L167) | [`consumers.py::on_review_passed`](../services/applications/consumers.py#L43) | application_id, kind | — |
++| `application.review_passed` | [`service.py::approve`](../services/applications/service.py#L167) | [`consumers.py::on_review_passed`](../services/applications/consumers.py#L44) | application_id, kind | — |
+ | `application.stage_changed` | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) | [`consumers.py::_handler`](../services/chat/consumers.py#L23) | application_id, from, to | effect:chat.event_log |
+ | `application.unarchived` | [`service.py::unarchive`](../services/applications/service.py#L265) | [`consumers.py::on_unarchived`](../services/billing/consumers.py#L27)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23) | amount_changed, application_id | effect:chat.event_log |
+ | `application.venue_changed` | [`service.py::change_venue`](../services/applications/service.py#L199) | [`consumers.py::on_venue_changed`](../services/billing/consumers.py#L13)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_venue_changed`](../services/scheduling/consumers.py#L17) | application_id, kind, new_venue_id, old_venue_id, stage | effect:chat.event_log |
+ | `booking.cancelled` | [`service.py::_cancel`](../services/scheduling/service.py#L178) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_booking_cancelled`](../services/notifications/consumers.py#L21) | application_id, booking_id, reason, starts_at, venue_id | effect:chat.event_log, effect:email.cancel |
+ | `booking.created` | [`service.py::book`](../services/scheduling/service.py#L126) | [`consumers.py::_handler`](../services/chat/consumers.py#L23)<br>[`consumers.py::on_booking_created`](../services/notifications/consumers.py#L10) | application_id, booking_id, purpose, starts_at, venue_id | effect:chat.event_log, effect:email.booking |
+-| `books.issued` | [`service.py::issue_books`](../services/scheduling/service.py#L223) | [`consumers.py::on_books_issued`](../services/applications/consumers.py#L67) | application_id | — |
+-| `client.updated` | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L51) | client_id, fields, source_application_id | — |
++| `books.issued` | [`service.py::issue_books`](../services/scheduling/service.py#L223) | [`consumers.py::on_books_issued`](../services/applications/consumers.py#L68) | application_id | — |
++| `client.updated` | [`listeners.py::_domain_events`](../services/applications/listeners.py#L13) | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L52) | client_id, fields, source_application_id | — |
+ | `halls.booking_cancelled` | [`service.py::_cancel`](../services/halls/service.py#L217) | [`consumers.py::on_booking_cancelled`](../services/halls/consumers.py#L35) | booking_id, reason, starts_at, venue_id | — |
+ | `halls.booking_confirmed` | [`service.py::apply_payments`](../services/halls/service.py#L372) | [`consumers.py::on_booking_confirmed`](../services/halls/consumers.py#L25) |  | — |
+ | `halls.booking_created` | [`service.py::create_booking`](../services/halls/service.py#L142) | — | booking_id, hall_id, starts_at, venue_id | — |
+@@ -199,7 +201,7 @@ flowchart LR
+ | `inventory.transfer_received` | — | [`consumers.py::on_stock_changed`](../services/inventory/consumers.py#L18) |  | — |
+ | `inventory.transfer_shipped` | — | [`consumers.py::on_stock_changed`](../services/inventory/consumers.py#L18) |  | — |
+ | `invoice.cancelled` | [`service.py::cancel_invoice`](../services/billing/service.py#L75) | [`consumers.py::on_invoice_cancelled`](../services/applications/consumers.py#L22)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23) | application_id, invoice_id, invoice_kind, reason | effect:chat.event_log |
+-| `invoice.issued` | [`service.py::issue_books_invoice`](../services/billing/service.py#L35)<br>[`service.py::issue_fine_invoice`](../services/billing/service.py#L177) | [`consumers.py::on_invoice_issued`](../services/applications/consumers.py#L13)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23) | amount, application_id, invoice_id, invoice_kind | effect:chat.event_log |
++| `invoice.issued` | [`service.py::issue_books_invoice`](../services/billing/service.py#L35)<br>[`service.py::issue_fine_invoice`](../services/billing/service.py#L189) | [`consumers.py::on_invoice_issued`](../services/applications/consumers.py#L13)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23) | amount, application_id, invoice_id, invoice_kind | effect:chat.event_log |
+ | `lectures.capacity_increased` | [`service.py::apply_venue_limit`](../services/lectures/service.py#L83)<br>[`service.py::change_capacity`](../services/lectures/service.py#L165) | [`consumers.py::on_capacity_increased`](../services/lectures/consumers.py#L21) | event_id | — |
+ | `lectures.event_cancelled` | [`service.py::cancel_event`](../services/lectures/service.py#L237) | [`consumers.py::on_event_cancelled`](../services/lectures/consumers.py#L107) | event_id, waitlisted | — |
+ | `lectures.event_moved` | [`service.py::move_event`](../services/lectures/service.py#L199) | [`consumers.py::on_event_moved`](../services/lectures/consumers.py#L96) | event_id, old_venue_id, venue_id, waitlisted | — |
+@@ -235,9 +237,10 @@ flowchart LR
+ | `partners.request_closed_duplicate` | [`service.py::close_duplicates`](../services/partners/service.py#L57) | — | inn, request_id, superseded_by | — |
+ | `partners.request_rejected` | [`service.py::reject_request`](../services/partners/service.py#L130) | — | reason, request_id | — |
+ | `partners.request_submitted` | [`service.py::submit_request`](../services/partners/service.py#L76) | — | inn, request_id | — |
+-| `payment.fully_paid` | [`service.py::link_payment`](../services/billing/service.py#L98) | [`consumers.py::on_fully_paid`](../services/applications/consumers.py#L31) | application_id, invoice_id, invoice_kind | — |
+-| `payment.linked` | [`service.py::link_payment`](../services/billing/service.py#L98) | [`consumers.py::_handler`](../services/chat/consumers.py#L23) | amount, application_id, invoice_id | effect:chat.event_log |
+-| `payment.refunded` | [`service.py::refund_payment`](../services/billing/service.py#L143) | [`consumers.py::on_payment_refunded`](../services/applications/consumers.py#L73) | application_id, invoice_id, invoice_kind, reason | — |
++| `payment.fully_paid` | [`service.py::link_payment`](../services/billing/service.py#L99) | — | application_id, invoice_id, invoice_kind | — |
++| `payment.issue_unlocked` | [`service.py::link_payment`](../services/billing/service.py#L99) | [`consumers.py::on_issue_unlocked`](../services/applications/consumers.py#L32) | application_id, invoice_id, invoice_kind | — |
++| `payment.linked` | [`service.py::link_payment`](../services/billing/service.py#L99) | [`consumers.py::_handler`](../services/chat/consumers.py#L23) | amount, application_id, invoice_id | effect:chat.event_log |
++| `payment.refunded` | [`service.py::refund_payment`](../services/billing/service.py#L155) | [`consumers.py::on_payment_refunded`](../services/applications/consumers.py#L74) | application_id, invoice_id, invoice_kind, reason | — |
+ | `reports.definition_deactivated` | [`service.py::deactivate_definition`](../services/reports/service.py#L166) | [`consumers.py::on_definition_deactivated`](../services/reports/consumers.py#L44) | code, definition_id | — |
+ | `reports.run_cancelled` | [`service.py::_publish_cancelled`](../services/reports/service.py#L270) | [`consumers.py::on_run_cancelled`](../services/reports/consumers.py#L37) | definition_id, reason, run_id | — |
+ | `reports.run_completed` | [`service.py::build_run`](../services/reports/service.py#L278) | [`consumers.py::count_completed_run`](../services/reports/consumers.py#L21)<br>[`consumers.py::on_run_completed`](../services/reports/consumers.py#L16) | code, definition_id, finished_on, run_id, schedule_id | — |
+diff --git a/docs/process.md b/docs/process.md
+index 78ab9c1..be6b3a1 100644
+--- a/docs/process.md
++++ b/docs/process.md
+@@ -40,7 +40,7 @@ stateDiagram-v2
+     awaiting_issue --> closed_duplicate: system
+     awaiting_payment --> archived: system [paid]; operator
+     awaiting_payment --> awaiting_invoice: system [paid]
+-    awaiting_payment --> awaiting_issue: system [paid] guard fully_paid
++    awaiting_payment --> awaiting_issue: system [paid] guard issue_paid
+     awaiting_payment --> closed_duplicate: system
+     awaiting_payment --> on_review: system
+     books_out --> closed: site_checker guard settled
+@@ -62,36 +62,36 @@ stateDiagram-v2
+ 
+ | Переход | Исполнитель (виды, условие) | Код |
+ |---|---|---|
+-| [`archived->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+-| [`archived->on_review`](../bpm/application_process.yaml#L41) | operator | [`service.py::submit_for_review`](../services/applications/service.py#L113), [`service.py::unarchive`](../services/applications/service.py#L265) |
+-| [`awaiting_invoice->archived`](../bpm/application_process.yaml#L39) | operator | [`service.py::archive`](../services/applications/service.py#L246) |
++| [`archived->closed_duplicate`](../bpm/application_process.yaml#L44) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
++| [`archived->on_review`](../bpm/application_process.yaml#L42) | operator | [`service.py::submit_for_review`](../services/applications/service.py#L113), [`service.py::unarchive`](../services/applications/service.py#L265) |
++| [`awaiting_invoice->archived`](../bpm/application_process.yaml#L40) | operator | [`service.py::archive`](../services/applications/service.py#L246) |
+ | [`awaiting_invoice->awaiting_payment`](../bpm/application_process.yaml#L27) | accountant [paid] | [`consumers.py::on_invoice_issued`](../services/applications/consumers.py#L13) |
+-| [`awaiting_invoice->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+-| [`awaiting_invoice->on_review`](../bpm/application_process.yaml#L32) | system | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L51) |
+-| [`awaiting_issue->archived`](../bpm/application_process.yaml#L40) | chief_accountant [paid] | [`service.py::archive`](../services/applications/service.py#L246) |
+-| [`awaiting_issue->books_out`](../bpm/application_process.yaml#L34) | site_checker | [`consumers.py::on_books_issued`](../services/applications/consumers.py#L67) |
+-| [`awaiting_issue->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+-| [`awaiting_payment->archived`](../bpm/application_process.yaml#L38) | system [paid]; operator | [`service.py::archive`](../services/applications/service.py#L246) |
++| [`awaiting_invoice->closed_duplicate`](../bpm/application_process.yaml#L44) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
++| [`awaiting_invoice->on_review`](../bpm/application_process.yaml#L33) | system | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L52) |
++| [`awaiting_issue->archived`](../bpm/application_process.yaml#L41) | chief_accountant [paid] | [`service.py::archive`](../services/applications/service.py#L246) |
++| [`awaiting_issue->books_out`](../bpm/application_process.yaml#L35) | site_checker | [`consumers.py::on_books_issued`](../services/applications/consumers.py#L68) |
++| [`awaiting_issue->closed_duplicate`](../bpm/application_process.yaml#L44) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
++| [`awaiting_payment->archived`](../bpm/application_process.yaml#L39) | system [paid]; operator | [`service.py::archive`](../services/applications/service.py#L246) |
+ | [`awaiting_payment->awaiting_invoice`](../bpm/application_process.yaml#L28) | system [paid] | [`consumers.py::on_invoice_cancelled`](../services/applications/consumers.py#L22) |
+-| [`awaiting_payment->awaiting_issue`](../bpm/application_process.yaml#L29) | system [paid] guard fully_paid | [`consumers.py::on_fully_paid`](../services/applications/consumers.py#L31) |
+-| [`awaiting_payment->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+-| [`awaiting_payment->on_review`](../bpm/application_process.yaml#L32) | system | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L51) |
+-| [`books_out->closed`](../bpm/application_process.yaml#L35) | site_checker guard settled | [`service.py::close`](../services/applications/service.py#L307) |
+-| [`draft->archived`](../bpm/application_process.yaml#L39) | operator | [`service.py::archive`](../services/applications/service.py#L246) |
+-| [`draft->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
++| [`awaiting_payment->awaiting_issue`](../bpm/application_process.yaml#L30) | system [paid] guard issue_paid | [`consumers.py::on_issue_unlocked`](../services/applications/consumers.py#L32) |
++| [`awaiting_payment->closed_duplicate`](../bpm/application_process.yaml#L44) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
++| [`awaiting_payment->on_review`](../bpm/application_process.yaml#L33) | system | [`consumers.py::on_client_updated`](../services/applications/consumers.py#L52) |
++| [`books_out->closed`](../bpm/application_process.yaml#L36) | site_checker guard settled | [`service.py::close`](../services/applications/service.py#L307) |
++| [`draft->archived`](../bpm/application_process.yaml#L40) | operator | [`service.py::archive`](../services/applications/service.py#L246) |
++| [`draft->closed_duplicate`](../bpm/application_process.yaml#L44) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+ | [`draft->on_review`](../bpm/application_process.yaml#L20) | operator | [`service.py::submit_for_review`](../services/applications/service.py#L113), [`service.py::unarchive`](../services/applications/service.py#L265) |
+-| [`needs_rework->archived`](../bpm/application_process.yaml#L37) | system; operator | [`service.py::archive`](../services/applications/service.py#L246) |
+-| [`needs_rework->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
++| [`needs_rework->archived`](../bpm/application_process.yaml#L38) | system; operator | [`service.py::archive`](../services/applications/service.py#L246) |
++| [`needs_rework->closed_duplicate`](../bpm/application_process.yaml#L44) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+ | [`needs_rework->on_review`](../bpm/application_process.yaml#L20) | operator | [`service.py::submit_for_review`](../services/applications/service.py#L113), [`service.py::unarchive`](../services/applications/service.py#L265) |
+-| [`on_review->archived`](../bpm/application_process.yaml#L37) | system; operator | [`service.py::archive`](../services/applications/service.py#L246) |
++| [`on_review->archived`](../bpm/application_process.yaml#L38) | system; operator | [`service.py::archive`](../services/applications/service.py#L246) |
+ | [`on_review->awaiting_invoice`](../bpm/application_process.yaml#L23) | reviewer [paid] | [`service.py::approve`](../services/applications/service.py#L167) |
+ | [`on_review->awaiting_issue`](../bpm/application_process.yaml#L25) | reviewer [debt,social] | [`service.py::approve`](../services/applications/service.py#L167) |
+ | [`on_review->awaiting_payment`](../bpm/application_process.yaml#L24) | reviewer [paid] guard has_active_invoice | [`service.py::approve`](../services/applications/service.py#L167) |
+-| [`on_review->closed_duplicate`](../bpm/application_process.yaml#L43) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
++| [`on_review->closed_duplicate`](../bpm/application_process.yaml#L44) | system | [`dedup.py::close_duplicates`](../services/applications/dedup.py#L25) |
+ | [`on_review->needs_rework`](../bpm/application_process.yaml#L21) | reviewer | [`service.py::return_for_rework`](../services/applications/service.py#L189) |
+ 
+ ## Условия переходов (guard)
+ 
+-- `guard:fully_paid` → [`services/billing/guards.py::fully_paid`](../services/billing/guards.py#L10)
+-- `guard:has_active_invoice` → [`services/billing/guards.py::has_active_invoice`](../services/billing/guards.py#L16)
++- `guard:has_active_invoice` → [`services/billing/guards.py::has_active_invoice`](../services/billing/guards.py#L17)
++- `guard:issue_paid` → [`services/billing/guards.py::issue_paid`](../services/billing/guards.py#L11)
+ - `guard:settled` → [`services/applications/guards.py::settled`](../services/applications/guards.py#L10) — Все книги возвращены или списаны, штрафы погашены.
+diff --git a/docs/reconciliation.md b/docs/reconciliation.md
+index 2cd6fe9..cb8bbc4 100644
+--- a/docs/reconciliation.md
++++ b/docs/reconciliation.md
+@@ -69,7 +69,7 @@
+ - services/subscriptions/jobs.py::issue_renewal_invoices:82: литерал 1 совпадает с 
+ - services/subscriptions/service.py::period_for:34: литерал 1 совпадает с 
+ 
+-### События без подписчиков или публикаторов (28)
++### События без подписчиков или публикаторов (29)
+ 
+ - halls.booking_created: нет подписчиков
+ - halls.booking_held: нет подписчиков
+@@ -97,6 +97,7 @@
+ - partners.request_closed_duplicate: нет подписчиков
+ - partners.request_rejected: нет подписчиков
+ - partners.request_submitted: нет подписчиков
++- payment.fully_paid: нет подписчиков
+ - staff.clearance_granted: нет подписчиков
+ - staff.employee_hired: нет подписчиков
+ 
+@@ -156,7 +157,7 @@
+ ### Правила с расхождением со схемой (62)
+ 
+ - R-APP-ARCHIVE-01: Схема: месяц. Код: фиксированные 30 дней из настройки. Схема §9 (платная): уходит в архив, если за месяц не получены данные для счёта — заявки на awaiting_invoice (без выставленного счёта) задача не архивирует никогда.
+-- R-APP-ARCHIVE-02: Код архивирует и частично оплаченные заявки (paid_amount < amount) как unpaid; возврат поступившей части платежа при этом не инициируется — схема этот случай не описывает.
++- R-APP-ARCHIVE-02: Код архивирует и частично оплаченные заявки (оплачено меньше половины счёта) как unpaid; возврат поступившей части платежа при этом не инициируется — схема этот случай не описывает.
+ - R-APP-BOOKS-01: Схема (§4): если после выставления счёта до оплаты меняются книги, счёт аннулируется и выставляется заново. Код: после проверки книги меняются только через архив и возврат из него (R-APP-UNARCHIVE-02); других путей смены книг нет.
+ - R-APP-CLIENT-01: Схема: данные клиента обновляет только проверяющий. Код: при вызове без source_application_id роль и закрепление не проверяются — обновить данные может кто угодно.
+ - R-APP-CLIENT-03: Схема: перепроверка не должна приводить к потере заявки. Код: review_started_at остаётся от первой проверки, поэтому возвращённая на проверку заявка, у которой проверка началась больше REVIEW_ARCHIVE_DAYS назад, при ближайшем запуске archive_stale уходит в архив с outcome=no_data.
+diff --git a/docs/roles.md b/docs/roles.md
+index 0f69d8d..7dbabb6 100644
+--- a/docs/roles.md
++++ b/docs/roles.md
+@@ -97,13 +97,13 @@
+ 
+ - R-APP-PAY-04 [verified] Возврат платежа по оплаченной заявке отправляет её в архив с отметкой «возврат»
+ - R-APP-ARCHIVE-03 [draft] Ручной архив и его последствия — закрытие попытки, сброс записей, сообщение в чат
+-- R-BILL-PAYMENT-01 [draft] Платёж нельзя привязать к аннулированному счёту
+-- R-BILL-PAYMENT-03 [verified] Привязка платежа фиксирует, кто привязал; переплата помечается флагом
+-- R-BILL-PAYMENT-04 [draft] Полная оплата публикуется один раз — когда сумма впервые достигает суммы счёта
+-- R-BILL-PROCESS-01 [draft] Полная оплата счёта за книги открывает выдачу и закрывает дубли
++- R-BILL-PAYMENT-01 [suspect] Платёж нельзя привязать к аннулированному счёту
++- R-BILL-PAYMENT-03 [suspect] Привязка платежа фиксирует, кто привязал; переплата помечается флагом
++- R-BILL-PAYMENT-04 [suspect] Доля оплаты счёта за книги и полная оплата публикуются по одному разу — когда сумма впервые достигает порога
++- R-BILL-PROCESS-01 [suspect] Оплата половины счёта за книги открывает выдачу и закрывает дубли
+ - R-BILL-REFUND-01 [verified] Возврат платежа требует причины и исключает платёж из оплаченной суммы
+ - R-BILL-UNLINK-01 [draft] Отвязка платежа требует причины
+-- R-BILL-FINE-PAY-01 [draft] Полная оплата счёта на штраф гасит штраф
++- R-BILL-FINE-PAY-01 [suspect] Полная оплата счёта на штраф гасит штраф
+ - R-CHAT-READ-01 [draft] Главный бухгалтер и руководитель проверяющих не видят чат
+ - R-CHAT-CONFIG-01 [draft] Список ролей без доступа к чату задан константой NO_CHAT_ROLES
+ 
+@@ -218,11 +218,11 @@
+ - R-APP-CLIENT-02 [draft] Изменение ФИО, паспорта или даты рождения клиента публикует client.updated (слушатель ORM)
+ - R-APP-CLIENT-03 [draft] Обновление клиента возвращает его заявки из ожидания счёта или оплаты на проверку
+ - R-APP-PAY-02 [draft] Аннулирование счёта за книги возвращает заявку в ожидание счёта
+-- R-APP-PAY-03 [draft] Только полная оплата счёта за книги открывает выдачу
+-- R-APP-ARCHIVE-01 [draft] Заявка, застрявшая на проверке или доработке дольше REVIEW_ARCHIVE_DAYS, уходит в архив
+-- R-APP-ARCHIVE-02 [draft] Платная заявка без полной оплаты дольше PAYMENT_ARCHIVE_DAYS уходит в архив
++- R-APP-PAY-03 [suspect] Оплата не менее половины счёта за книги открывает выдачу
++- R-APP-ARCHIVE-01 [suspect] Заявка, застрявшая на проверке или доработке дольше REVIEW_ARCHIVE_DAYS, уходит в архив
++- R-APP-ARCHIVE-02 [suspect] Платная заявка без оплаты половины счёта дольше PAYMENT_ARCHIVE_DAYS уходит в архив
+ - R-APP-ARCHIVE-03 [draft] Ручной архив и его последствия — закрытие попытки, сброс записей, сообщение в чат
+-- R-APP-DEDUP-01 [draft] Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
++- R-APP-DEDUP-01 [suspect] Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
+ - R-APP-DEDUP-02 [draft] Закрытие дубля аннулирует его неоплаченные счета и сбрасывает записи
+ - R-APP-CHAT-01 [draft] Каждая смена этапа заявки пишется в чат (слушатель ORM)
+ - R-BILL-INVOICE-06 [draft] У заявки не больше одного действующего счёта за книги
+@@ -233,7 +233,7 @@
+ - R-BILL-DUPLICATE-01 [draft] Закрытие заявки как дубля аннулирует все её неоплаченные счета
+ - R-BILL-ARCHIVE-01 [draft] Неоплаченная платная заявка уходит в архив через PAYMENT_ARCHIVE_DAYS от начала отсчёта оплаты
+ - R-BILL-PAYMENT-02 [draft] Оплаченная сумма — сумма действующих платежей без отвязанных и возвращённых
+-- R-BILL-PROCESS-02 [verified] Guard fully_paid: действующий счёт за книги оплачен полностью
++- R-BILL-PROCESS-02 [suspect] Guard issue_paid: действующий счёт за книги оплачен не меньше чем наполовину
+ - R-BILL-FINE-01 [draft] Просрочка, утеря и порча книги автоматически создают штраф
+ - R-BILL-FINE-02 [draft] Размер штрафа берётся из ставки по представителю, площадке и виду
+ - R-BILL-FINE-03 [draft] Штраф бывает только «открыт» или «оплачен»
+@@ -404,9 +404,9 @@
+ | [`service.py::update_client`](../services/applications/service.py#L131) | Проверяющий | обновляет данные клиента только проверяющий заявки |
+ | [`service.py::_require_accountant`](../services/billing/service.py#L29) | Бухгалтер | заявка закреплена за другим бухгалтером |
+ | [`service.py::issue_books_invoice`](../services/billing/service.py#L35) | Бухгалтер | — |
+-| [`service.py::issue_fine_invoice`](../services/billing/service.py#L177) | Бухгалтер | — |
+-| [`service.py::link_payment`](../services/billing/service.py#L98) | Главный бухгалтер | — |
+-| [`service.py::mark_fine_paid_outside`](../services/billing/service.py#L215) | Оператор | заявка закреплена за другим оператором |
++| [`service.py::issue_fine_invoice`](../services/billing/service.py#L189) | Бухгалтер | — |
++| [`service.py::link_payment`](../services/billing/service.py#L99) | Главный бухгалтер | — |
++| [`service.py::mark_fine_paid_outside`](../services/billing/service.py#L227) | Оператор | заявка закреплена за другим оператором |
+ | [`service.py::take_application`](../services/billing/service.py#L17) | Бухгалтер | — |
+ | [`service.py::list_messages`](../services/chat/service.py#L48) | — | эта роль не видит чат заявки<br>чат видят только закреплённые сотрудники и администратор |
+ | [`service.py::post_message`](../services/chat/service.py#L25) | — | писать в чат могут только закреплённые за заявкой сотрудники |
+diff --git a/docs/rules/README.md b/docs/rules/README.md
+index 2073b20..ae36752 100644
+--- a/docs/rules/README.md
++++ b/docs/rules/README.md
+@@ -4,8 +4,8 @@
+ 
+ | Модуль | Правил | verified | draft | suspect |
+ |---|---|---|---|---|
+-| [applications](applications.md) | 40 | 5 | 35 | 0 |
+-| [billing](billing.md) | 36 | 6 | 30 | 0 |
++| [applications](applications.md) | 40 | 5 | 31 | 4 |
++| [billing](billing.md) | 36 | 4 | 26 | 6 |
+ | [chat](chat.md) | 22 | 5 | 17 | 0 |
+ | [halls](halls.md) | 35 | 0 | 35 | 0 |
+ | [inventory](inventory.md) | 39 | 0 | 39 | 0 |
+diff --git a/docs/rules/applications.md b/docs/rules/applications.md
+index 50fc264..0dcaa7d 100644
+--- a/docs/rules/applications.md
++++ b/docs/rules/applications.md
+@@ -141,7 +141,7 @@
+ 
+ `draft` · effect · §4 Порядок прохождения заявки
+ 
+-При переходе в awaiting_issue (после проверки debt/social или после полной оплаты paid) заполняется booking_reached_at (один раз) и публикуется application.ready_for_booking; scheduling по нему формирует публичную ссылку на запись (issue_link).
++При переходе в awaiting_issue (после проверки debt/social или после оплаты половины счёта paid) заполняется booking_reached_at (один раз) и публикуется application.ready_for_booking; scheduling по нему формирует публичную ссылку на запись (issue_link).
+ 
+ - Реализация: [`services/applications/service.py::mark_ready_for_booking:158-164`](../../services/applications/service.py#L158), [`services/scheduling/consumers.py::on_ready_for_booking:13-13`](../../services/scheduling/consumers.py#L13)
+ - Тесты: `tests/test_kinds.py::test_debt_application_skips_invoice`, `tests/test_paid_flow.py::test_paid_application_full_path`
+@@ -178,7 +178,7 @@
+ 
+ По client.updated все заявки клиента на этапах awaiting_invoice и awaiting_payment, кроме заявки-источника, переводятся системой в on_review. Заявки на awaiting_issue и дальше не перепроверяются; review_started_at при этом не сбрасывается.
+ 
+-- Реализация: [`services/applications/consumers.py::on_client_updated:52-63`](../../services/applications/consumers.py#L52), [`awaiting_invoice->on_review`](../../bpm/application_process.yaml#L32), [`awaiting_payment->on_review`](../../bpm/application_process.yaml#L32)
++- Реализация: [`services/applications/consumers.py::on_client_updated:53-64`](../../services/applications/consumers.py#L53), [`awaiting_invoice->on_review`](../../bpm/application_process.yaml#L33), [`awaiting_payment->on_review`](../../bpm/application_process.yaml#L33)
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-APP-CLIENT-02, R-APP-ARCHIVE-01
+ - ⚠ Расхождение со схемой: Схема: перепроверка не должна приводить к потере заявки. Код: review_started_at остаётся от первой проверки, поэтому возвращённая на проверку заявка, у которой проверка началась больше REVIEW_ARCHIVE_DAYS назад, при ближайшем запуске archive_stale уходит в архив с outcome=no_data.
+@@ -205,14 +205,15 @@
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-APP-PAY-01, R-APP-VENUE-CHANGE-03
+ 
+-## R-APP-PAY-03 — Только полная оплата счёта за книги открывает выдачу
++## R-APP-PAY-03 — Оплата не менее половины счёта за книги открывает выдачу
+ 
+-`draft` · effect · §9 Виды заявок — Платная
++`suspect` · effect · §9 Виды заявок — Платная
+ 
+-По payment.fully_paid (invoice_kind=books) заявка в awaiting_payment переводится в awaiting_issue при выполнении guard fully_paid, отмечается готовой к записи и закрывает дубли клиента по сфере. Частичная оплата этап не меняет.
++По payment.issue_unlocked (invoice_kind=books; привязанные платежи впервые покрыли долю BOOKS_ISSUE_PAID_SHARE = 50% счёта) заявка в awaiting_payment переводится в awaiting_issue при выполнении guard issue_paid, отмечается готовой к записи и закрывает дубли клиента по сфере. Оплата меньше половины этап не меняет; доплата остатка (и payment.fully_paid) на этап тоже не влияет.
+ 
+-- Реализация: [`services/applications/consumers.py::on_fully_paid:32-39`](../../services/applications/consumers.py#L32), [`awaiting_payment->awaiting_issue`](../../bpm/application_process.yaml#L29), [`guard:fully_paid`](../../bpm/application_process.yaml)
+-- Тесты: `tests/test_paid_flow.py::test_partial_payment_does_not_open_issue`, `tests/test_paid_flow.py::test_paid_application_full_path`
++- Реализация: [`services/applications/consumers.py::on_issue_unlocked:33-40`](../../services/applications/consumers.py#L33), [`awaiting_payment->awaiting_issue`](../../bpm/application_process.yaml#L30), [`guard:issue_paid`](../../bpm/application_process.yaml)
++- Настройки: `libs/settings.py::BOOKS_ISSUE_PAID_SHARE`
++- Тесты: `tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue`, `tests/test_paid_flow.py::test_half_payment_opens_issue_and_rest_changes_nothing`, `tests/test_paid_flow.py::test_half_payment_closes_duplicates`, `tests/test_paid_flow.py::test_paid_application_full_path`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-APP-BOOKING-01, R-APP-DEDUP-01
+ 
+@@ -222,7 +223,7 @@
+ 
+ По payment.refunded (invoice_kind=books) заявка на этапе awaiting_issue архивируется от имени главного бухгалтера с outcome=refund. Возврат на других этапах этап заявки не меняет.
+ 
+-- Реализация: [`services/applications/consumers.py::on_payment_refunded:74-78`](../../services/applications/consumers.py#L74), [`awaiting_issue->archived`](../../bpm/application_process.yaml#L40)
++- Реализация: [`services/applications/consumers.py::on_payment_refunded:75-79`](../../services/applications/consumers.py#L75), [`awaiting_issue->archived`](../../bpm/application_process.yaml#L41)
+ - БД: [`attempts_outcome_check`](../../migrations/versions/0001_initial.py#L108)
+ - Роли: Главный бухгалтер
+ - Связанные: R-APP-ARCHIVE-03, R-APP-VENUE-CHANGE-02
+@@ -233,7 +234,7 @@
+ 
+ По books.issued (scheduling.issue_books) заявка переводится awaiting_issue -> books_out от имени проверяющего оператора площадки.
+ 
+-- Реализация: [`services/applications/consumers.py::on_books_issued:68-69`](../../services/applications/consumers.py#L68), [`awaiting_issue->books_out`](../../bpm/application_process.yaml#L34)
++- Реализация: [`services/applications/consumers.py::on_books_issued:69-70`](../../services/applications/consumers.py#L69), [`awaiting_issue->books_out`](../../bpm/application_process.yaml#L35)
+ - Тесты: `tests/test_kinds.py::test_social_application_skips_invoice`, `tests/test_paid_flow.py::test_paid_application_full_path`
+ - Роли: Проверяющий оператор
+ - Связанные: R-APP-CLOSE-01
+@@ -244,7 +245,7 @@
+ 
+ Переход books_out -> closed выполняет только site_checker заявки (AccessDenied иначе) и только при guard settled: нет открытых выдач (scheduling.open_loans_count) и непогашенных штрафов (billing.open_fines_count).
+ 
+-- Реализация: [`services/applications/service.py::close:309-311`](../../services/applications/service.py#L309), [`services/applications/guards.py::settled:12-14`](../../services/applications/guards.py#L12), [`books_out->closed`](../../bpm/application_process.yaml#L35), [`guard:settled`](../../bpm/application_process.yaml)
++- Реализация: [`services/applications/service.py::close:309-311`](../../services/applications/service.py#L309), [`services/applications/guards.py::settled:12-14`](../../services/applications/guards.py#L12), [`books_out->closed`](../../bpm/application_process.yaml#L36), [`guard:settled`](../../bpm/application_process.yaml)
+ - Тесты: `tests/test_paid_flow.py::test_cannot_close_with_books_out`, `tests/test_paid_flow.py::test_paid_application_full_path`
+ - Роли: Проверяющий оператор
+ - Связанные: R-APP-ISSUE-01
+@@ -290,11 +291,11 @@
+ 
+ ## R-APP-ARCHIVE-01 — Заявка, застрявшая на проверке или доработке дольше REVIEW_ARCHIVE_DAYS, уходит в архив
+ 
+-`draft` · timer · §5 Архив и попытки
++`suspect` · timer · §5 Архив и попытки
+ 
+ Фоновая задача archive_stale (по docstring — раз в час) архивирует заявки любого вида на этапах on_review и needs_rework, у которых review_started_at старше REVIEW_ARCHIVE_DAYS (30 дней), с outcome=no_data от имени system. Draft-заявки автоматически не архивируются.
+ 
+-- Реализация: [`services/applications/jobs.py::archive_stale:17-27`](../../services/applications/jobs.py#L17), [`on_review->archived`](../../bpm/application_process.yaml#L37), [`needs_rework->archived`](../../bpm/application_process.yaml#L37)
++- Реализация: [`services/applications/jobs.py::archive_stale:17-27`](../../services/applications/jobs.py#L17), [`on_review->archived`](../../bpm/application_process.yaml#L38), [`needs_rework->archived`](../../bpm/application_process.yaml#L38)
+ - БД: [`attempts_outcome_check`](../../migrations/versions/0001_initial.py#L108)
+ - Настройки: `libs/settings.py::REVIEW_ARCHIVE_DAYS`
+ - Тесты: `tests/test_archive.py::test_stuck_review_goes_to_archive_after_month`
+@@ -302,19 +303,19 @@
+ - Связанные: R-APP-REVIEW-01, R-APP-ARCHIVE-03, R-APP-CLIENT-03
+ - ⚠ Расхождение со схемой: Схема: месяц. Код: фиксированные 30 дней из настройки. Схема §9 (платная): уходит в архив, если за месяц не получены данные для счёта — заявки на awaiting_invoice (без выставленного счёта) задача не архивирует никогда.
+ 
+-## R-APP-ARCHIVE-02 — Платная заявка без полной оплаты дольше PAYMENT_ARCHIVE_DAYS уходит в архив
++## R-APP-ARCHIVE-02 — Платная заявка без оплаты половины счёта дольше PAYMENT_ARCHIVE_DAYS уходит в архив
+ 
+-`draft` · timer · §5 Архив и попытки
++`suspect` · timer · §5 Архив и попытки
+ 
+-archive_stale архивирует платные заявки на awaiting_payment, если действующий счёт за книги оплачен не полностью и payment_clock_started_at старше PAYMENT_ARCHIVE_DAYS (30 дней); outcome=unpaid, actor system. Отсчёт идёт от выставления счёта или от возврата из архива.
++archive_stale архивирует платные заявки на awaiting_payment, если по действующему счёту за книги оплачено меньше доли BOOKS_ISSUE_PAID_SHARE (50%) и payment_clock_started_at старше PAYMENT_ARCHIVE_DAYS (30 дней); outcome=unpaid, actor system. Отсчёт идёт от выставления счёта или от возврата из архива.
+ 
+-- Реализация: [`services/applications/jobs.py::archive_stale:29-40`](../../services/applications/jobs.py#L29), [`awaiting_payment->archived`](../../bpm/application_process.yaml#L38)
++- Реализация: [`services/applications/jobs.py::archive_stale:29-40`](../../services/applications/jobs.py#L29), [`awaiting_payment->archived`](../../bpm/application_process.yaml#L39)
+ - БД: [`attempts_outcome_check`](../../migrations/versions/0001_initial.py#L108)
+-- Настройки: `libs/settings.py::PAYMENT_ARCHIVE_DAYS`
++- Настройки: `libs/settings.py::PAYMENT_ARCHIVE_DAYS`, `libs/settings.py::BOOKS_ISSUE_PAID_SHARE`
+ - Тесты: `tests/test_archive.py::test_unpaid_invoice_goes_to_archive_after_month`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-APP-ARCHIVE-03, R-APP-UNARCHIVE-03
+-- ⚠ Расхождение со схемой: Код архивирует и частично оплаченные заявки (paid_amount < amount) как unpaid; возврат поступившей части платежа при этом не инициируется — схема этот случай не описывает.
++- ⚠ Расхождение со схемой: Код архивирует и частично оплаченные заявки (оплачено меньше половины счёта) как unpaid; возврат поступившей части платежа при этом не инициируется — схема этот случай не описывает.
+ 
+ ## R-APP-ARCHIVE-03 — Ручной архив и его последствия — закрытие попытки, сброс записей, сообщение в чат
+ 
+@@ -322,7 +323,7 @@ archive_stale архивирует платные заявки на awaiting_pay
+ 
+ Оператор заявки отправляет в архив заявку на этапах draft, on_review, needs_rework, awaiting_invoice или awaiting_payment (любой вид); из awaiting_issue в архив уводит только chief_accountant (возврат платежа); после books_out архив невозможен. Архив закрывает текущую попытку (ended_at, outcome) и публикует application.archived — scheduling сбрасывает записи, чат фиксирует событие.
+ 
+-- Реализация: [`services/applications/service.py::archive:255-261`](../../services/applications/service.py#L255), [`services/scheduling/consumers.py::on_archived:26-26`](../../services/scheduling/consumers.py#L26), [`draft->archived`](../../bpm/application_process.yaml#L39), [`on_review->archived`](../../bpm/application_process.yaml#L37), [`needs_rework->archived`](../../bpm/application_process.yaml#L37), [`awaiting_invoice->archived`](../../bpm/application_process.yaml#L39), [`awaiting_payment->archived`](../../bpm/application_process.yaml#L38), [`awaiting_issue->archived`](../../bpm/application_process.yaml#L40)
++- Реализация: [`services/applications/service.py::archive:255-261`](../../services/applications/service.py#L255), [`services/scheduling/consumers.py::on_archived:26-26`](../../services/scheduling/consumers.py#L26), [`draft->archived`](../../bpm/application_process.yaml#L40), [`on_review->archived`](../../bpm/application_process.yaml#L38), [`needs_rework->archived`](../../bpm/application_process.yaml#L38), [`awaiting_invoice->archived`](../../bpm/application_process.yaml#L40), [`awaiting_payment->archived`](../../bpm/application_process.yaml#L39), [`awaiting_issue->archived`](../../bpm/application_process.yaml#L41)
+ - БД: [`attempts_outcome_check`](../../migrations/versions/0001_initial.py#L108)
+ - Тесты: `tests/test_archive.py::test_paid_application_cannot_be_archived_by_operator_after_payment`, `tests/test_archive.py::test_unarchive_starts_new_attempt_and_review`
+ - Роли: Оператор, Главный бухгалтер, Система (события и фоновые задачи)
+@@ -334,7 +335,7 @@ archive_stale архивирует платные заявки на awaiting_pay
+ 
+ Только оператор заявки и только из этапа archived (иначе DomainError «заявка не в архиве») возвращает заявку: добавляется попытка с номером N+1, review_started_at сбрасывается на текущий момент, заявка переходит в on_review. Число попыток не ограничено.
+ 
+-- Реализация: [`services/applications/service.py::unarchive:274-303`](../../services/applications/service.py#L274), [`archived->on_review`](../../bpm/application_process.yaml#L41)
++- Реализация: [`services/applications/service.py::unarchive:274-303`](../../services/applications/service.py#L274), [`archived->on_review`](../../bpm/application_process.yaml#L42)
+ - БД: [`attempts_application_id_no_key`](../../migrations/versions/0001_initial.py#L109)
+ - Тесты: `tests/test_archive.py::test_unarchive_starts_new_attempt_and_review`
+ - Роли: Оператор
+@@ -364,13 +365,14 @@ unarchive сравнивает стоимость книг по прайсу п
+ 
+ ## R-APP-DEDUP-01 — Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
+ 
+-`draft` · effect · §6 Клиент и проверка данных
++`suspect` · effect · §6 Клиент и проверка данных
+ 
+-close_duplicates вызывается при полной оплате платной заявки и при прохождении проверки заявки в долг (подписчик application.review_passed с kind=debt). Все другие заявки клиента по той же сфере на этапах OPEN_STAGES (включая awaiting_issue и archived) того же трека (не-social с не-social) переводятся в closed_duplicate; незакрытая попытка закрывается с outcome=duplicate.
++close_duplicates вызывается при оплате половины счёта платной заявки (payment.issue_unlocked) и при прохождении проверки заявки в долг (подписчик application.review_passed с kind=debt). Все другие заявки клиента по той же сфере на этапах OPEN_STAGES (включая awaiting_issue и archived) того же трека (не-social с не-social) переводятся в closed_duplicate; незакрытая попытка закрывается с outcome=duplicate.
+ 
+-- Реализация: [`services/applications/dedup.py::close_duplicates:26-50`](../../services/applications/dedup.py#L26), [`services/applications/dedup.py::_same_track:22-22`](../../services/applications/dedup.py#L22), [`services/applications/consumers.py::on_review_passed:44-47`](../../services/applications/consumers.py#L44), [`services/applications/consumers.py::on_fully_paid:39-39`](../../services/applications/consumers.py#L39), [`awaiting_issue->closed_duplicate`](../../bpm/application_process.yaml#L43)
++- Реализация: [`services/applications/dedup.py::close_duplicates:26-50`](../../services/applications/dedup.py#L26), [`services/applications/dedup.py::_same_track:22-22`](../../services/applications/dedup.py#L22), [`services/applications/consumers.py::on_review_passed:45-48`](../../services/applications/consumers.py#L45), [`services/applications/consumers.py::on_issue_unlocked:40-40`](../../services/applications/consumers.py#L40), [`awaiting_issue->closed_duplicate`](../../bpm/application_process.yaml#L44)
+ - БД: [`ix_applications_client_sphere`](../../migrations/versions/0001_initial.py#L94), [`attempts_outcome_check`](../../migrations/versions/0001_initial.py#L108)
+ - Настройки: `services/applications/dedup.py::OPEN_STAGES`
++- Тесты: `tests/test_paid_flow.py::test_half_payment_closes_duplicates`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-APP-PAY-03, R-APP-REVIEW-05, R-APP-DEDUP-02
+ - ⚠ Расхождение со схемой: Схема: остаётся та заявка, что первой дошла до записи. Код: OPEN_STAGES включает awaiting_issue, поэтому более поздний «победитель» (например, заявка в долг, прошедшая проверку после оплаты платной) закрывает уже дошедшую до записи и оплаченную заявку. Для социальных заявок дедупликация не запускается вообще.
+@@ -435,7 +437,7 @@ set_representative_terms меняет markup_pct и debt_allowed предста
+ 
+ set_venue_requisites записывает реквизиты организации площадки. billing читает их через get_venue и отказывает в выставлении счёта, если реквизиты не заполнены: и счёта за книги (issue_books_invoice), и счёта на штраф (issue_fine_invoice).
+ 
+-- Реализация: [`services/applications/admin.py::set_venue_requisites:28-28`](../../services/applications/admin.py#L28), [`services/applications/public.py::get_venue:58-61`](../../services/applications/public.py#L58), [`services/billing/service.py::issue_books_invoice:42-44`](../../services/billing/service.py#L42), [`services/billing/service.py::issue_fine_invoice:185-187`](../../services/billing/service.py#L185)
++- Реализация: [`services/applications/admin.py::set_venue_requisites:28-28`](../../services/applications/admin.py#L28), [`services/applications/public.py::get_venue:58-61`](../../services/applications/public.py#L58), [`services/billing/service.py::issue_books_invoice:42-44`](../../services/billing/service.py#L42), [`services/billing/service.py::issue_fine_invoice:197-199`](../../services/billing/service.py#L197)
+ - Тесты: `tests/test_paid_flow.py::test_invoice_requires_venue_requisites`
+ - Роли: Администратор
+ 
+diff --git a/docs/rules/billing.md b/docs/rules/billing.md
+index f8af2c4..86159a2 100644
+--- a/docs/rules/billing.md
++++ b/docs/rules/billing.md
+@@ -33,7 +33,7 @@ take_application отклоняет закрепление бухгалтера
+ 
+ Перед выставлением счёта за книги или за штраф _require_accountant проверяет, что за заявкой закреплён именно этот бухгалтер. Иначе AccessDenied «заявка закреплена за другим бухгалтером». Если бухгалтер не закреплён совсем, ошибка та же.
+ 
+-- Реализация: [`services/billing/service.py::_require_accountant:29-32`](../../services/billing/service.py#L29), [`services/billing/service.py::issue_books_invoice:36-36`](../../services/billing/service.py#L36), [`services/billing/service.py::issue_fine_invoice:184-184`](../../services/billing/service.py#L184)
++- Реализация: [`services/billing/service.py::_require_accountant:29-32`](../../services/billing/service.py#L29), [`services/billing/service.py::issue_books_invoice:36-36`](../../services/billing/service.py#L36), [`services/billing/service.py::issue_fine_invoice:196-196`](../../services/billing/service.py#L196)
+ - Тесты: `tests/test_paid_flow.py::test_invoice_requires_assigned_accountant`
+ - Роли: Бухгалтер
+ - Связанные: R-BILL-ASSIGN-01, R-BILL-INVOICE-01, R-BILL-FINE-INVOICE-01
+@@ -44,7 +44,7 @@ take_application отклоняет закрепление бухгалтера
+ 
+ public.accountant_of возвращает бухгалтера, закреплённого за заявкой. Через него чат (services/chat/service.py::participants) включает бухгалтера в участники. Когда заявку забирает другой бухгалтер, в чат попадает новый.
+ 
+-- Реализация: [`services/billing/public.py::accountant_of:48-50`](../../services/billing/public.py#L48)
++- Реализация: [`services/billing/public.py::accountant_of:58-60`](../../services/billing/public.py#L58)
+ - Роли: Бухгалтер
+ - Связанные: R-BILL-ASSIGN-01
+ 
+@@ -76,7 +76,7 @@ issue_books_invoice требует этап awaiting_invoice. Иначе оши
+ 
+ Счёт за книги и счёт на штраф выставляются, только если у площадки заявки заполнены реквизиты. Иначе ошибка «у площадки не заполнены реквизиты организации».
+ 
+-- Реализация: [`services/billing/service.py::issue_books_invoice:42-44`](../../services/billing/service.py#L42), [`services/billing/service.py::issue_fine_invoice:185-187`](../../services/billing/service.py#L185)
++- Реализация: [`services/billing/service.py::issue_books_invoice:42-44`](../../services/billing/service.py#L42), [`services/billing/service.py::issue_fine_invoice:197-199`](../../services/billing/service.py#L197)
+ - Тесты: `tests/test_paid_flow.py::test_invoice_requires_venue_requisites`
+ - Роли: Бухгалтер
+ - Связанные: R-BILL-INVOICE-05
+@@ -100,7 +100,7 @@ issue_books_invoice требует этап awaiting_invoice. Иначе оши
+ 
+ При выставлении счёта (за книги или штраф) в нём сохраняются venue_id и копия реквизитов площадки на этот момент (jsonb). Если реквизиты площадки потом изменятся, выставленный счёт останется прежним. При выставлении issued_at и payment_clock_started_at равны текущему времени.
+ 
+-- Реализация: [`services/billing/service.py::issue_books_invoice:49-60`](../../services/billing/service.py#L49), [`services/billing/service.py::issue_fine_invoice:188-200`](../../services/billing/service.py#L188)
++- Реализация: [`services/billing/service.py::issue_books_invoice:49-60`](../../services/billing/service.py#L49), [`services/billing/service.py::issue_fine_invoice:200-212`](../../services/billing/service.py#L200)
+ - Роли: Бухгалтер
+ - Связанные: R-BILL-INVOICE-03, R-BILL-ARCHIVE-01
+ 
+@@ -110,7 +110,7 @@ issue_books_invoice требует этап awaiting_invoice. Иначе оши
+ 
+ Частичный уникальный индекс uq_invoices_one_active_books разрешает только один счёт kind='books' со status='active' на заявку. Число счетов на штрафы не ограничено. В коде отдельной проверки нет: её косвенно заменяет требование этапа awaiting_invoice.
+ 
+-- Реализация: [`services/billing/public.py::active_books_invoice:31-45`](../../services/billing/public.py#L31)
++- Реализация: [`services/billing/public.py::active_books_invoice:41-55`](../../services/billing/public.py#L41)
+ - БД: [`uq_invoices_one_active_books`](../../migrations/versions/0001_initial.py#L177)
+ - Тесты: `tests/test_venue_change.py::test_venue_change_before_payment_reissues_invoice`
+ - Роли: Система (события и фоновые задачи)
+@@ -189,7 +189,7 @@ cancel_invoice публикует invoice.cancelled. Подписчик applicat
+ 
+ На событие application.closed_duplicate подписчик on_closed_duplicate проходит по всем действующим счетам заявки — за книги и на штрафы — и аннулирует с причиной duplicate те, по которым оплачено 0. Счета с частичной оплатой остаются действующими.
+ 
+-- Реализация: [`services/billing/consumers.py::on_closed_duplicate:20-23`](../../services/billing/consumers.py#L20), [`services/billing/service.py::active_invoices:230-237`](../../services/billing/service.py#L230)
++- Реализация: [`services/billing/consumers.py::on_closed_duplicate:20-23`](../../services/billing/consumers.py#L20), [`services/billing/service.py::active_invoices:242-249`](../../services/billing/service.py#L242)
+ - БД: [`trg_invoices_cancel_guard`](../../migrations/versions/0001_initial.py#L212)
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-BILL-CANCEL-01, R-BILL-PAYMENT-04
+@@ -211,21 +211,21 @@ cancel_invoice публикует invoice.cancelled. Подписчик applicat
+ 
+ `draft` · timer · §5 Архив и попытки
+ 
+-Фоновая задача applications archive_stale берёт через active_books_invoice счёт заявки в awaiting_payment. Если счёт оплачен не полностью и payment_clock_started_at старше PAYMENT_ARCHIVE_DAYS (30 дней), заявка уходит в архив с отметкой unpaid. Отсчёт идёт от выставления счёта или от возврата из архива. Срок задан настройкой, а не литералом.
++Фоновая задача applications archive_stale берёт через active_books_invoice счёт заявки в awaiting_payment. Если по счёту оплачено меньше доли BOOKS_ISSUE_PAID_SHARE (50%, issue_unlocked) и payment_clock_started_at старше PAYMENT_ARCHIVE_DAYS (30 дней), заявка уходит в архив с отметкой unpaid. Отсчёт идёт от выставления счёта или от возврата из архива. Срок задан настройкой, а не литералом.
+ 
+-- Реализация: [`services/billing/public.py::active_books_invoice:31-45`](../../services/billing/public.py#L31), [`awaiting_payment->archived`](../../bpm/application_process.yaml#L38)
+-- Настройки: `libs/settings.py::PAYMENT_ARCHIVE_DAYS`
++- Реализация: [`services/billing/public.py::active_books_invoice:41-55`](../../services/billing/public.py#L41), [`awaiting_payment->archived`](../../bpm/application_process.yaml#L39)
++- Настройки: `libs/settings.py::PAYMENT_ARCHIVE_DAYS`, `libs/settings.py::BOOKS_ISSUE_PAID_SHARE`
+ - Тесты: `tests/test_archive.py::test_unpaid_invoice_goes_to_archive_after_month`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-BILL-UNARCHIVE-01, R-BILL-INVOICE-05
+ 
+ ## R-BILL-PAYMENT-01 — Платёж нельзя привязать к аннулированному счёту
+ 
+-`draft` · guard · §11 Счета и платежи
++`suspect` · guard · §11 Счета и платежи
+ 
+ link_payment отклоняет привязку к счёту со статусом не active: «платёж нельзя привязать к аннулированному счёту». То же условие дублирует триггер trg_payments_active_invoice (функция forbid_payment_to_cancelled) на INSERT в billing.payments.
+ 
+-- Реализация: [`services/billing/service.py::link_payment:102-103`](../../services/billing/service.py#L102)
++- Реализация: [`services/billing/service.py::link_payment:103-104`](../../services/billing/service.py#L103)
+ - БД: [`trg_payments_active_invoice`](../../migrations/versions/0001_initial.py#L224), [`forbid_payment_to_cancelled`](../../migrations/versions/0001_initial.py#L216)
+ - Роли: Главный бухгалтер
+ - Связанные: R-BILL-PAYMENT-03
+@@ -234,57 +234,60 @@ link_payment отклоняет привязку к счёту со статус
+ 
+ `draft` · calculation · §11 Счета и платежи
+ 
+-paid_amount суммирует платежи счёта, у которых unlinked_at IS NULL и refunded = false. Эта сумма используется в guard'ах fully_paid, при аннулировании счёта, в архивации по сроку и в подписчиках billing. Триггер forbid_cancel_paid_invoice использует то же определение.
++paid_amount суммирует платежи счёта, у которых unlinked_at IS NULL и refunded = false. Эта сумма используется в guard'е issue_paid, при публикации payment.issue_unlocked и payment.fully_paid, при аннулировании счёта, в архивации по сроку и в подписчиках billing. Триггер forbid_cancel_paid_invoice использует то же определение.
+ 
+ - Реализация: [`services/billing/public.py::paid_amount:22-28`](../../services/billing/public.py#L22)
+ - БД: [`forbid_cancel_paid_invoice`](../../migrations/versions/0001_initial.py#L201)
+-- Тесты: `tests/test_paid_flow.py::test_partial_payment_does_not_open_issue`
++- Тесты: `tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-BILL-CANCEL-01, R-BILL-PROCESS-01
+ 
+ ## R-BILL-PAYMENT-03 — Привязка платежа фиксирует, кто привязал; переплата помечается флагом
+ 
+-`verified` · effect · §11 Счета и платежи
++`suspect` · effect · §11 Счета и платежи
+ 
+ link_payment сохраняет платёж с linked_at и linked_by (chief_id) и публикует payment.linked. Если вместе с прошлыми платежами сумма превышает сумму счёта, у платежа ставится overpayment=true. Привязка при этом не блокируется, а автоматического решения по переплате нет. Сумма платежа строго положительна (payments_amount_check).
+ 
+-- Реализация: [`services/billing/service.py::link_payment:104-115`](../../services/billing/service.py#L104)
++- Реализация: [`services/billing/service.py::link_payment:105-116`](../../services/billing/service.py#L105)
+ - БД: [`payments_amount_check`](../../migrations/versions/0001_initial.py#L183)
+ - Тесты: `tests/test_paid_flow.py::test_paid_application_full_path`
+ - Роли: Главный бухгалтер
+ - Связанные: R-BILL-PAYMENT-04
+ - ⚠ Расхождение со схемой: Схема: привязывает платежи только главный бухгалтер. Код не проверяет роль: chief_id приходит в теле запроса POST /invoices/{invoice_id}/payments и только записывается в linked_by.
+ 
+-## R-BILL-PAYMENT-04 — Полная оплата публикуется один раз — когда сумма впервые достигает суммы счёта
++## R-BILL-PAYMENT-04 — Доля оплаты счёта за книги и полная оплата публикуются по одному разу — когда сумма впервые достигает порога
+ 
+-`draft` · effect · §9 Виды заявок / Платная
++`suspect` · effect · §9 Виды заявок / Платная
+ 
+-link_payment публикует payment.fully_paid, только если до платежа оплачено меньше суммы счёта, а после — не меньше (before < amount <= after). Частичная оплата событие не порождает. Повторные платежи после полной оплаты тоже не порождают.
++Для счёта за книги link_payment публикует payment.issue_unlocked, только если до платежа оплачено меньше доли BOOKS_ISSUE_PAID_SHARE (50%) суммы счёта, а после — не меньше (before < threshold <= after). Для счёта любого вида payment.fully_paid публикуется, только если до платежа оплачено меньше суммы счёта, а после — не меньше (before < amount <= after). Платёж, сразу покрывающий весь счёт за книги, порождает оба события. Повторные платежи после достижения порога событие не порождают.
+ 
+-- Реализация: [`services/billing/service.py::link_payment:116-128`](../../services/billing/service.py#L116)
+-- Тесты: `tests/test_paid_flow.py::test_partial_payment_does_not_open_issue`
++- Реализация: [`services/billing/service.py::link_payment:117-140`](../../services/billing/service.py#L117)
++- Настройки: `libs/settings.py::BOOKS_ISSUE_PAID_SHARE`
++- Тесты: `tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue`, `tests/test_paid_flow.py::test_half_payment_opens_issue_and_rest_changes_nothing`, `tests/test_paid_flow.py::test_fine_invoice_is_settled_only_by_full_payment`
+ - Роли: Главный бухгалтер
+ - Связанные: R-BILL-PROCESS-01, R-BILL-FINE-PAY-01
+ 
+-## R-BILL-PROCESS-01 — Полная оплата счёта за книги открывает выдачу и закрывает дубли
++## R-BILL-PROCESS-01 — Оплата половины счёта за книги открывает выдачу и закрывает дубли
+ 
+-`draft` · effect · §6 Клиент и проверка данных
++`suspect` · effect · §6 Клиент и проверка данных
+ 
+-Подписчик applications on_fully_paid для счёта books переводит заявку из awaiting_payment в awaiting_issue (actor system), формирует ссылку на запись (mark_ready_for_booking) и закрывает заявки-дубли клиента по той же сфере (dedup.close_duplicates). Переход awaiting_payment->awaiting_issue защищён guard'ом fully_paid.
++Подписчик applications on_issue_unlocked (payment.issue_unlocked, счёт books оплачен не меньше чем на BOOKS_ISSUE_PAID_SHARE = 50%) переводит заявку из awaiting_payment в awaiting_issue (actor system), формирует ссылку на запись (mark_ready_for_booking) и закрывает заявки-дубли клиента по той же сфере (dedup.close_duplicates). Переход awaiting_payment->awaiting_issue защищён guard'ом issue_paid. Доплата остатка этап не меняет.
+ 
+-- Реализация: [`services/applications/consumers.py::on_fully_paid:31-39`](../../services/applications/consumers.py#L31), [`awaiting_payment->awaiting_issue`](../../bpm/application_process.yaml#L29), [`guard:fully_paid`](../../bpm/application_process.yaml)
+-- Тесты: `tests/test_paid_flow.py::test_paid_application_full_path`, `tests/test_paid_flow.py::test_partial_payment_does_not_open_issue`
++- Реализация: [`services/applications/consumers.py::on_issue_unlocked:32-40`](../../services/applications/consumers.py#L32), [`awaiting_payment->awaiting_issue`](../../bpm/application_process.yaml#L30), [`guard:issue_paid`](../../bpm/application_process.yaml)
++- Настройки: `libs/settings.py::BOOKS_ISSUE_PAID_SHARE`
++- Тесты: `tests/test_paid_flow.py::test_paid_application_full_path`, `tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue`, `tests/test_paid_flow.py::test_half_payment_opens_issue_and_rest_changes_nothing`, `tests/test_paid_flow.py::test_half_payment_closes_duplicates`
+ - Роли: Главный бухгалтер
+ - Связанные: R-BILL-PAYMENT-04, R-BILL-PROCESS-02, R-BILL-DUPLICATE-01
+ 
+-## R-BILL-PROCESS-02 — Guard fully_paid: действующий счёт за книги оплачен полностью
++## R-BILL-PROCESS-02 — Guard issue_paid: действующий счёт за книги оплачен не меньше чем наполовину
+ 
+-`verified` · guard · §9 Виды заявок / Платная
++`suspect` · guard · §9 Виды заявок / Платная
+ 
+-Guard fully_paid истинен, если у заявки есть действующий счёт за книги и paid_amount не меньше его суммы. Им защищён переход awaiting_payment->awaiting_issue.
++Guard issue_paid истинен, если у заявки есть действующий счёт за книги и paid_amount не меньше доли BOOKS_ISSUE_PAID_SHARE (50%) его суммы (billing.public.issue_unlocked). Им защищён переход awaiting_payment->awaiting_issue.
+ 
+-- Реализация: [`services/billing/guards.py::fully_paid:10-12`](../../services/billing/guards.py#L10), [`guard:fully_paid`](../../bpm/application_process.yaml), [`awaiting_payment->awaiting_issue`](../../bpm/application_process.yaml#L29)
+-- Тесты: `tests/test_paid_flow.py::test_partial_payment_does_not_open_issue`
++- Реализация: [`services/billing/guards.py::issue_paid:11-13`](../../services/billing/guards.py#L11), [`services/billing/public.py::issue_unlocked:36-37`](../../services/billing/public.py#L36), [`guard:issue_paid`](../../bpm/application_process.yaml), [`awaiting_payment->awaiting_issue`](../../bpm/application_process.yaml#L30)
++- Настройки: `libs/settings.py::BOOKS_ISSUE_PAID_SHARE`
++- Тесты: `tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-BILL-PROCESS-01, R-BILL-PAYMENT-02
+ 
+@@ -294,7 +297,7 @@ Guard fully_paid истинен, если у заявки есть действ
+ 
+ Guard has_active_invoice истинен, если у заявки есть действующий счёт за книги. Им защищён переход on_review->awaiting_payment. Approve в applications через active_books_invoice выбирает awaiting_payment, если такой счёт есть, иначе awaiting_invoice. Так прежний счёт переживает возврат на проверку и возврат из архива.
+ 
+-- Реализация: [`services/billing/guards.py::has_active_invoice:16-17`](../../services/billing/guards.py#L16), [`guard:has_active_invoice`](../../bpm/application_process.yaml), [`on_review->awaiting_payment`](../../bpm/application_process.yaml#L24)
++- Реализация: [`services/billing/guards.py::has_active_invoice:17-18`](../../services/billing/guards.py#L17), [`guard:has_active_invoice`](../../bpm/application_process.yaml), [`on_review->awaiting_payment`](../../bpm/application_process.yaml#L24)
+ - Роли: Проверяющий
+ - Связанные: R-BILL-UNARCHIVE-01
+ 
+@@ -304,7 +307,7 @@ Guard has_active_invoice истинен, если у заявки есть де
+ 
+ refund_payment без причины отклоняется («возврат платежа требует причины»). При возврате ставится refunded=true, и платёж перестаёт входить в paid_amount. Счёт остаётся действующим. Публикуется payment.refunded.
+ 
+-- Реализация: [`services/billing/service.py::refund_payment:144-160`](../../services/billing/service.py#L144)
++- Реализация: [`services/billing/service.py::refund_payment:156-172`](../../services/billing/service.py#L156)
+ - Роли: Главный бухгалтер
+ - Связанные: R-APP-PAY-04, R-BILL-PAYMENT-02
+ - ⚠ Расхождение со схемой: Схема: возврат оформляет только главный бухгалтер. Код не проверяет роль, повторный возврат и возврат отвязанного платежа. Статус штрафа (paid) при возврате платежа по счёту на штраф обратно не меняется.
+@@ -315,7 +318,7 @@ refund_payment без причины отклоняется («возврат п
+ 
+ unlink_payment без причины отклоняется («отвязка платежа требует причины»). При отвязке сохраняются unlinked_at и unlink_reason, и платёж перестаёт входить в paid_amount. CHECK payments_check требует unlink_reason у каждого отвязанного платежа.
+ 
+-- Реализация: [`services/billing/service.py::unlink_payment:133-139`](../../services/billing/service.py#L133)
++- Реализация: [`services/billing/service.py::unlink_payment:145-151`](../../services/billing/service.py#L145)
+ - БД: [`payments_check`](../../migrations/versions/0001_initial.py#L190)
+ - Роли: Главный бухгалтер
+ - Связанные: R-BILL-PAYMENT-02, R-BILL-CANCEL-01
+@@ -338,7 +341,7 @@ unlink_payment без причины отклоняется («отвязка п
+ 
+ create_fine ищет ставку в billing.fine_rates по ключу (representative_id, venue_id, kind) заявки и копирует её amount в штраф. Если ставки нет — ошибка «размер штрафа … не настроен для представителя и площадки». Ставка неотрицательна, вид ставки — overdue, lost или damaged.
+ 
+-- Реализация: [`services/billing/service.py::create_fine:165-173`](../../services/billing/service.py#L165)
++- Реализация: [`services/billing/service.py::create_fine:177-185`](../../services/billing/service.py#L177)
+ - БД: [`fine_rates_amount_check`](../../migrations/versions/0001_initial.py#L197), [`fine_rates_kind_check`](../../migrations/versions/0001_initial.py#L196), [`fines_amount_check`](../../migrations/versions/0001_initial.py#L157)
+ - Роли: Администратор, Система (события и фоновые задачи)
+ - Связанные: R-BILL-FINE-01, R-BILL-INVOICE-07
+@@ -360,7 +363,7 @@ CHECK fines_status_check разрешает статусы open и paid, fines_k
+ 
+ issue_fine_invoice создаёт счёт kind='fine' на сумму штрафа с fine_id, площадкой и снимком реквизитов и публикует invoice.issued (invoice_kind=fine). Нужны закреплённый бухгалтер и заполненные реквизиты площадки. Этап заявки не меняется.
+ 
+-- Реализация: [`services/billing/service.py::issue_fine_invoice:184-211`](../../services/billing/service.py#L184)
++- Реализация: [`services/billing/service.py::issue_fine_invoice:196-223`](../../services/billing/service.py#L196)
+ - БД: [`invoices_check`](../../migrations/versions/0001_initial.py#L175)
+ - Роли: Бухгалтер
+ - Связанные: R-BILL-ASSIGN-03, R-BILL-INVOICE-03, R-BILL-FINE-INVOICE-02
+@@ -372,17 +375,17 @@ issue_fine_invoice создаёт счёт kind='fine' на сумму штра
+ 
+ issue_fine_invoice отклоняет штрафы заявок вида debt: «по заявке в долг штраф оплачивается вне системы». Проверка идёт до проверки закрепления бухгалтера.
+ 
+-- Реализация: [`services/billing/service.py::issue_fine_invoice:181-183`](../../services/billing/service.py#L181)
++- Реализация: [`services/billing/service.py::issue_fine_invoice:193-195`](../../services/billing/service.py#L193)
+ - Роли: Бухгалтер
+ - Связанные: R-BILL-FINE-OUTSIDE-01, R-BILL-ASSIGN-02
+ 
+ ## R-BILL-FINE-PAY-01 — Полная оплата счёта на штраф гасит штраф
+ 
+-`draft` · effect · §14 Выдача, возврат и штрафы
++`suspect` · effect · §14 Выдача, возврат и штрафы
+ 
+ Когда link_payment впервые доводит оплату счёта kind='fine' до его суммы, штраф получает status='paid'. Публикуется payment.fully_paid с invoice_kind=fine. Подписчик applications такие события пропускает, этап не меняется.
+ 
+-- Реализация: [`services/billing/service.py::link_payment:116-119`](../../services/billing/service.py#L116)
++- Реализация: [`services/billing/service.py::link_payment:128-131`](../../services/billing/service.py#L128)
+ - Роли: Главный бухгалтер
+ - Связанные: R-BILL-PAYMENT-04, R-BILL-FINE-SETTLED-01
+ 
+@@ -392,7 +395,7 @@ issue_fine_invoice отклоняет штрафы заявок вида debt: 
+ 
+ mark_fine_paid_outside ставит штрафу status='paid' и paid_outside=true. Это разрешено только для заявок вида debt («вне системы гасятся только штрафы по заявкам в долг») и только оператору этой заявки (AccessDenied «заявка закреплена за другим оператором»).
+ 
+-- Реализация: [`services/billing/service.py::mark_fine_paid_outside:220-226`](../../services/billing/service.py#L220)
++- Реализация: [`services/billing/service.py::mark_fine_paid_outside:232-238`](../../services/billing/service.py#L232)
+ - Роли: Оператор
+ - Связанные: R-BILL-FINE-INVOICE-02, R-BILL-FINE-SETTLED-01
+ 
+@@ -402,6 +405,6 @@ mark_fine_paid_outside ставит штрафу status='paid' и paid_outside=t
+ 
+ public.open_fines_count считает штрафы заявки со status='open'. Guard settled в applications использует его на переходе books_out->closed: при открытых штрафах заявка не закрывается.
+ 
+-- Реализация: [`services/billing/public.py::open_fines_count:53-56`](../../services/billing/public.py#L53), [`guard:settled`](../../bpm/application_process.yaml), [`books_out->closed`](../../bpm/application_process.yaml#L35)
++- Реализация: [`services/billing/public.py::open_fines_count:63-66`](../../services/billing/public.py#L63), [`guard:settled`](../../bpm/application_process.yaml), [`books_out->closed`](../../bpm/application_process.yaml#L36)
+ - Роли: Проверяющий оператор
+ - Связанные: R-BILL-FINE-PAY-01, R-BILL-FINE-OUTSIDE-01
+diff --git a/docs/rules/chat.md b/docs/rules/chat.md
+index 87b77ab..227ba8c 100644
+--- a/docs/rules/chat.md
++++ b/docs/rules/chat.md
+@@ -227,7 +227,7 @@ log_event, в отличие от post_message, не проверяет этап
+ 
+ `draft` · effect · §15 Чат заявки
+ 
+-Топиков payment.fully_paid, payment.refunded, books.issued, loan.damaged, loan.lost, application.review_passed и application.ready_for_booking нет в EVENT_TEXT, поэтому в чат они не пишутся. Выдача книг видна только через смену этапа. Отвязка платежа (unlink_payment) и назначение проверяющего или бухгалтера событий не публикуют и в чате тоже не отражаются.
++Топиков payment.issue_unlocked, payment.fully_paid, payment.refunded, books.issued, loan.damaged, loan.lost, application.review_passed и application.ready_for_booking нет в EVENT_TEXT, поэтому в чат они не пишутся. Выдача книг видна только через смену этапа. Отвязка платежа (unlink_payment) и назначение проверяющего или бухгалтера событий не публикуют и в чате тоже не отражаются.
+ 
+ - Реализация: [`services/chat/consumers.py::EVENT_TEXT:8-20`](../../services/chat/consumers.py#L8)
+ - Настройки: `services/chat/consumers.py::EVENT_TEXT`
+diff --git a/docs/rules/scheduling.md b/docs/rules/scheduling.md
+index 5697d25..2a510f3 100644
+--- a/docs/rules/scheduling.md
++++ b/docs/rules/scheduling.md
+@@ -282,7 +282,7 @@ issue_books требует действующую запись с purpose=issue
+ 
+ После выдачи запись получает статус done, все holds заявки удаляются и выпускается новая ссылка с purpose=return (прежняя гаснет). Публикуется books.issued: подписчик applications переводит заявку awaiting_issue->books_out от имени site_checker.
+ 
+-- Реализация: [`services/scheduling/service.py::issue_books:248-251`](../../services/scheduling/service.py#L248), [`services/applications/consumers.py::on_books_issued:67-69`](../../services/applications/consumers.py#L67), [`awaiting_issue->books_out`](../../bpm/application_process.yaml#L34)
++- Реализация: [`services/scheduling/service.py::issue_books:248-251`](../../services/scheduling/service.py#L248), [`services/applications/consumers.py::on_books_issued:68-70`](../../services/applications/consumers.py#L68), [`awaiting_issue->books_out`](../../bpm/application_process.yaml#L35)
+ - Тесты: `tests/test_paid_flow.py::test_paid_application_full_path`, `tests/test_kinds.py::test_social_application_skips_invoice`
+ - Роли: Проверяющий оператор
+ - Связанные: R-SCHED-ISSUE-01, R-SCHED-HOLD-02, R-SCHED-LINK-02
+@@ -351,7 +351,7 @@ flag_overdue выбирает выдачи со статусом out без фл
+ 
+ Guard settled перехода books_out->closed берёт число выдач со статусом out через scheduling.public.open_loans_count. Закрытие возможно только при нуле открытых выдач и нуле непогашенных штрафов. Возвращённые (returned) и утерянные (lost) книги не мешают закрытию.
+ 
+-- Реализация: [`services/scheduling/public.py::open_loans_count:7-10`](../../services/scheduling/public.py#L7), [`services/applications/guards.py::settled:10-14`](../../services/applications/guards.py#L10), [`books_out->closed`](../../bpm/application_process.yaml#L35), [`guard:settled`](../../bpm/application_process.yaml)
++- Реализация: [`services/scheduling/public.py::open_loans_count:7-10`](../../services/scheduling/public.py#L7), [`services/applications/guards.py::settled:10-14`](../../services/applications/guards.py#L10), [`books_out->closed`](../../bpm/application_process.yaml#L36), [`guard:settled`](../../bpm/application_process.yaml)
+ - Тесты: `tests/test_paid_flow.py::test_cannot_close_with_books_out`, `tests/test_paid_flow.py::test_paid_application_full_path`
+ - Роли: Проверяющий оператор
+ - Связанные: R-SCHED-RETURN-01, R-SCHED-FINE-01
+diff --git a/knowledge/model/bpm.json b/knowledge/model/bpm.json
+index a7b3be4..0c7cec1 100644
+--- a/knowledge/model/bpm.json
++++ b/knowledge/model/bpm.json
+@@ -294,7 +294,7 @@
+    "type": "from_stage"
+   },
+   {
+-   "dst": "guard:fully_paid",
++   "dst": "guard:issue_paid",
+    "src": "awaiting_payment->awaiting_issue",
+    "type": "guarded_by"
+   },
+@@ -309,19 +309,19 @@
+    "type": "guarded_by"
+   },
+   {
+-   "dst": "services/billing/guards.py::fully_paid",
++   "dst": "services/billing/guards.py::has_active_invoice",
+    "lines": [
+-    10
++    17
+    ],
+-   "src": "guard:fully_paid",
++   "src": "guard:has_active_invoice",
+    "type": "implemented_by"
+   },
+   {
+-   "dst": "services/billing/guards.py::has_active_invoice",
++   "dst": "services/billing/guards.py::issue_paid",
+    "lines": [
+-    16
++    11
+    ],
+-   "src": "guard:has_active_invoice",
++   "src": "guard:issue_paid",
+    "type": "implemented_by"
+   },
+   {
+@@ -471,7 +471,7 @@
+    "actor": "site_checker",
+    "dst": "awaiting_issue->books_out",
+    "lines": [
+-    69
++    70
+    ],
+    "src": "services/applications/consumers.py::on_books_issued",
+    "type": "transitions_to"
+@@ -480,7 +480,7 @@
+    "actor": "system",
+    "dst": "awaiting_invoice->on_review",
+    "lines": [
+-    63
++    64
+    ],
+    "src": "services/applications/consumers.py::on_client_updated",
+    "type": "transitions_to"
+@@ -489,20 +489,11 @@
+    "actor": "system",
+    "dst": "awaiting_payment->on_review",
+    "lines": [
+-    63
++    64
+    ],
+    "src": "services/applications/consumers.py::on_client_updated",
+    "type": "transitions_to"
+   },
+-  {
+-   "actor": "system",
+-   "dst": "awaiting_payment->awaiting_issue",
+-   "lines": [
+-    37
+-   ],
+-   "src": "services/applications/consumers.py::on_fully_paid",
+-   "type": "transitions_to"
+-  },
+   {
+    "actor": "system",
+    "condition": "app.stage == 'awaiting_payment'",
+@@ -523,6 +514,15 @@
+    "src": "services/applications/consumers.py::on_invoice_issued",
+    "type": "transitions_to"
+   },
++  {
++   "actor": "system",
++   "dst": "awaiting_payment->awaiting_issue",
++   "lines": [
++    38
++   ],
++   "src": "services/applications/consumers.py::on_issue_unlocked",
++   "type": "transitions_to"
++  },
+   {
+    "actor": "system",
+    "dst": "archived->closed_duplicate",
+@@ -745,7 +745,7 @@
+    ],
+    "dst": "applications.applications",
+    "lines": [
+-    69
++    70
+    ],
+    "src": "services/applications/consumers.py::on_books_issued",
+    "type": "writes",
+@@ -757,7 +757,7 @@
+    ],
+    "dst": "applications.applications",
+    "lines": [
+-    63
++    64
+    ],
+    "src": "services/applications/consumers.py::on_client_updated",
+    "type": "writes",
+@@ -769,9 +769,9 @@
+    ],
+    "dst": "applications.applications",
+    "lines": [
+-    37
++    27
+    ],
+-   "src": "services/applications/consumers.py::on_fully_paid",
++   "src": "services/applications/consumers.py::on_invoice_cancelled",
+    "type": "writes",
+    "via": "libs/bpm/engine.py"
+   },
+@@ -781,9 +781,9 @@
+    ],
+    "dst": "applications.applications",
+    "lines": [
+-    27
++    18
+    ],
+-   "src": "services/applications/consumers.py::on_invoice_cancelled",
++   "src": "services/applications/consumers.py::on_invoice_issued",
+    "type": "writes",
+    "via": "libs/bpm/engine.py"
+   },
+@@ -793,9 +793,9 @@
+    ],
+    "dst": "applications.applications",
+    "lines": [
+-    18
++    38
+    ],
+-   "src": "services/applications/consumers.py::on_invoice_issued",
++   "src": "services/applications/consumers.py::on_issue_unlocked",
+    "type": "writes",
+    "via": "libs/bpm/engine.py"
+   },
+@@ -887,16 +887,16 @@
+  "generated_by": "tools/knowledge/extract_bpm.py",
+  "nodes": [
+   {
+-   "id": "guard:fully_paid",
+-   "implemented_by": "services/billing/guards.py::fully_paid",
+-   "name": "fully_paid",
++   "id": "guard:has_active_invoice",
++   "implemented_by": "services/billing/guards.py::has_active_invoice",
++   "name": "has_active_invoice",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_guard"
+   },
+   {
+-   "id": "guard:has_active_invoice",
+-   "implemented_by": "services/billing/guards.py::has_active_invoice",
+-   "name": "has_active_invoice",
++   "id": "guard:issue_paid",
++   "implemented_by": "services/billing/guards.py::issue_paid",
++   "name": "issue_paid",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_guard"
+   },
+@@ -943,7 +943,7 @@
+   {
+    "hash": "bb5857d29271",
+    "id": "archived->closed_duplicate",
+-   "line": 43,
++   "line": 44,
+    "name": "archived->closed_duplicate",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_transition",
+@@ -952,14 +952,14 @@
+      "actor": [
+       "system"
+      ],
+-     "line": 43
++     "line": 44
+     }
+    ]
+   },
+   {
+    "hash": "6080e315f1cc",
+    "id": "archived->on_review",
+-   "line": 41,
++   "line": 42,
+    "name": "archived->on_review",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_transition",
+@@ -968,14 +968,14 @@
+      "actor": [
+       "operator"
+      ],
+-     "line": 41
++     "line": 42
+     }
+    ]
+   },
+   {
+    "hash": "6080e315f1cc",
+    "id": "awaiting_invoice->archived",
+-   "line": 39,
++   "line": 40,
+    "name": "awaiting_invoice->archived",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_transition",
+@@ -984,7 +984,7 @@
+      "actor": [
+       "operator"
+      ],
+-     "line": 39
++     "line": 40
+     }
+    ]
+   },
+@@ -1010,7 +1010,7 @@
+   {
+    "hash": "bb5857d29271",
+    "id": "awaiting_invoice->closed_duplicate",
+-   "line": 43,
++   "line": 44,
+    "name": "awaiting_invoice->closed_duplicate",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_transition",
+@@ -1019,14 +1019,14 @@
+      "actor": [
+       "system"
+      ],
+-     "line": 43
++     "line": 44
+     }
+    ]
+   },
+   {
+    "hash": "bb5857d29271",
+    "id": "awaiting_invoice->on_review",
+-   "line": 32,
++   "line": 33,
+    "name": "awaiting_invoice->on_review",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_transition",
+@@ -1035,14 +1035,14 @@
+      "actor": [
+       "system"
+      ],
+-     "line": 32
++     "line": 33
+     }
+    ]
+   },
+   {
+    "hash": "191f005d1e70",
+    "id": "awaiting_issue->archived",
+-   "line": 40,
++   "line": 41,
+    "name": "awaiting_issue->archived",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_transition",
+@@ -1054,14 +1054,14 @@
+      "kinds": [
+       "paid"
+      ],
+-     "line": 40
++     "line": 41
+     }
+    ]
+   },
+   {
+    "hash": "771af805e9ca",
+    "id": "awaiting_issue->books_out",
+-   "line": 34,
++   "line": 35,
+    "name": "awaiting_issue->books_out",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_transition",
+@@ -1070,14 +1070,14 @@
+      "actor": [
+       "site_checker"
+      ],
+-     "line": 34
++     "line": 35
+     }
+    ]
+   },
+   {
+    "hash": "bb5857d29271",
+    "id": "awaiting_issue->closed_duplicate",
+-   "line": 43,
++   "line": 44,
+    "name": "awaiting_issue->closed_duplicate",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_transition",
+@@ -1086,14 +1086,14 @@
+      "actor": [
+       "system"
+      ],
+-     "line": 43
++     "line": 44
+     }
+    ]
+   },
+   {
+    "hash": "6d4d7f1696d6",
+    "id": "awaiting_payment->archived",
+-   "line": 38,
++   "line": 39,
+    "name": "awaiting_payment->archived",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_transition",
+@@ -1105,13 +1105,13 @@
+      "kinds": [
+       "paid"
+      ],
+-     "line": 38
++     "line": 39
+     },
+     {
+      "actor": [
+       "operator"
+      ],
+-     "line": 39
++     "line": 40
+     }
+    ]
+   },
+@@ -1135,9 +1135,9 @@
+    ]
+   },
+   {
+-   "hash": "6fe11e269daf",
++   "hash": "f7973e35fa90",
+    "id": "awaiting_payment->awaiting_issue",
+-   "line": 29,
++   "line": 30,
+    "name": "awaiting_payment->awaiting_issue",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_transition",
+@@ -1146,18 +1146,18 @@
+      "actor": [
+       "system"
+      ],
+-     "guard": "fully_paid",
++     "guard": "issue_paid",
+      "kinds": [
+       "paid"
+      ],
+-     "line": 29
++     "line": 30
+     }
+    ]
+   },
+   {
+    "hash": "bb5857d29271",
+    "id": "awaiting_payment->closed_duplicate",
+-   "line": 43,
++   "line": 44,
+    "name": "awaiting_payment->closed_duplicate",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_transition",
+@@ -1166,14 +1166,14 @@
+      "actor": [
+       "system"
+      ],
+-     "line": 43
++     "line": 44
+     }
+    ]
+   },
+   {
+    "hash": "bb5857d29271",
+    "id": "awaiting_payment->on_review",
+-   "line": 32,
++   "line": 33,
+    "name": "awaiting_payment->on_review",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_transition",
+@@ -1182,14 +1182,14 @@
+      "actor": [
+       "system"
+      ],
+-     "line": 32
++     "line": 33
+     }
+    ]
+   },
+   {
+    "hash": "39283bcffd77",
+    "id": "books_out->closed",
+-   "line": 35,
++   "line": 36,
+    "name": "books_out->closed",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_transition",
+@@ -1199,14 +1199,14 @@
+       "site_checker"
+      ],
+      "guard": "settled",
+-     "line": 35
++     "line": 36
+     }
+    ]
+   },
+   {
+    "hash": "6080e315f1cc",
+    "id": "draft->archived",
+-   "line": 39,
++   "line": 40,
+    "name": "draft->archived",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_transition",
+@@ -1215,14 +1215,14 @@
+      "actor": [
+       "operator"
+      ],
+-     "line": 39
++     "line": 40
+     }
+    ]
+   },
+   {
+    "hash": "bb5857d29271",
+    "id": "draft->closed_duplicate",
+-   "line": 43,
++   "line": 44,
+    "name": "draft->closed_duplicate",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_transition",
+@@ -1231,7 +1231,7 @@
+      "actor": [
+       "system"
+      ],
+-     "line": 43
++     "line": 44
+     }
+    ]
+   },
+@@ -1254,7 +1254,7 @@
+   {
+    "hash": "9f1416124f1e",
+    "id": "needs_rework->archived",
+-   "line": 37,
++   "line": 38,
+    "name": "needs_rework->archived",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_transition",
+@@ -1263,20 +1263,20 @@
+      "actor": [
+       "system"
+      ],
+-     "line": 37
++     "line": 38
+     },
+     {
+      "actor": [
+       "operator"
+      ],
+-     "line": 39
++     "line": 40
+     }
+    ]
+   },
+   {
+    "hash": "bb5857d29271",
+    "id": "needs_rework->closed_duplicate",
+-   "line": 43,
++   "line": 44,
+    "name": "needs_rework->closed_duplicate",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_transition",
+@@ -1285,7 +1285,7 @@
+      "actor": [
+       "system"
+      ],
+-     "line": 43
++     "line": 44
+     }
+    ]
+   },
+@@ -1308,7 +1308,7 @@
+   {
+    "hash": "9f1416124f1e",
+    "id": "on_review->archived",
+-   "line": 37,
++   "line": 38,
+    "name": "on_review->archived",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_transition",
+@@ -1317,13 +1317,13 @@
+      "actor": [
+       "system"
+      ],
+-     "line": 37
++     "line": 38
+     },
+     {
+      "actor": [
+       "operator"
+      ],
+-     "line": 39
++     "line": 40
+     }
+    ]
+   },
+@@ -1389,7 +1389,7 @@
+   {
+    "hash": "bb5857d29271",
+    "id": "on_review->closed_duplicate",
+-   "line": 43,
++   "line": 44,
+    "name": "on_review->closed_duplicate",
+    "path": "bpm/application_process.yaml",
+    "type": "bpm_transition",
+@@ -1398,7 +1398,7 @@
+      "actor": [
+       "system"
+      ],
+-     "line": 43
++     "line": 44
+     }
+    ]
+   },
+diff --git a/knowledge/model/code.json b/knowledge/model/code.json
+index f46dac8..198fd28 100644
+--- a/knowledge/model/code.json
++++ b/knowledge/model/code.json
+@@ -230,55 +230,55 @@
+   {
+    "dst": "services/applications/service.py::load",
+    "lines": [
+-    68
++    69
+    ],
+    "src": "services/applications/consumers.py::on_books_issued",
+    "type": "calls"
+   },
+   {
+-   "dst": "services/applications/dedup.py::close_duplicates",
++   "dst": "services/applications/service.py::load",
+    "lines": [
+-    39
++    25
+    ],
+-   "src": "services/applications/consumers.py::on_fully_paid",
++   "src": "services/applications/consumers.py::on_invoice_cancelled",
+    "type": "calls"
+   },
+   {
+    "dst": "services/applications/service.py::load",
+    "lines": [
+-    34
++    16
+    ],
+-   "src": "services/applications/consumers.py::on_fully_paid",
++   "src": "services/applications/consumers.py::on_invoice_issued",
+    "type": "calls"
+   },
+   {
+-   "dst": "services/applications/service.py::mark_ready_for_booking",
++   "dst": "services/applications/dedup.py::close_duplicates",
+    "lines": [
+-    38
++    40
+    ],
+-   "src": "services/applications/consumers.py::on_fully_paid",
++   "src": "services/applications/consumers.py::on_issue_unlocked",
+    "type": "calls"
+   },
+   {
+    "dst": "services/applications/service.py::load",
+    "lines": [
+-    25
++    35
+    ],
+-   "src": "services/applications/consumers.py::on_invoice_cancelled",
++   "src": "services/applications/consumers.py::on_issue_unlocked",
+    "type": "calls"
+   },
+   {
+-   "dst": "services/applications/service.py::load",
++   "dst": "services/applications/service.py::mark_ready_for_booking",
+    "lines": [
+-    16
++    39
+    ],
+-   "src": "services/applications/consumers.py::on_invoice_issued",
++   "src": "services/applications/consumers.py::on_issue_unlocked",
+    "type": "calls"
+   },
+   {
+    "dst": "services/applications/service.py::archive",
+    "lines": [
+-    78
++    79
+    ],
+    "src": "services/applications/consumers.py::on_payment_refunded",
+    "type": "calls"
+@@ -286,7 +286,7 @@
+   {
+    "dst": "services/applications/service.py::load",
+    "lines": [
+-    76
++    77
+    ],
+    "src": "services/applications/consumers.py::on_payment_refunded",
+    "type": "calls"
+@@ -294,7 +294,7 @@
+   {
+    "dst": "services/applications/dedup.py::close_duplicates",
+    "lines": [
+-    47
++    48
+    ],
+    "src": "services/applications/consumers.py::on_review_passed",
+    "type": "calls"
+@@ -302,7 +302,7 @@
+   {
+    "dst": "services/applications/service.py::load",
+    "lines": [
+-    46
++    47
+    ],
+    "src": "services/applications/consumers.py::on_review_passed",
+    "type": "calls"
+@@ -348,6 +348,14 @@
+    "src": "services/applications/jobs.py::archive_stale",
+    "type": "calls"
+   },
++  {
++   "dst": "services/billing/public.py::issue_unlocked",
++   "lines": [
++    36
++   ],
++   "src": "services/applications/jobs.py::archive_stale",
++   "type": "calls"
++  },
+   {
+    "dst": "services/applications/review.py::missing_client_fields",
+    "lines": [
+@@ -688,27 +696,43 @@
+   {
+    "dst": "services/billing/public.py::active_books_invoice",
+    "lines": [
+-    11
++    18
+    ],
+-   "src": "services/billing/guards.py::fully_paid",
++   "src": "services/billing/guards.py::has_active_invoice",
+    "type": "calls"
+   },
+   {
+    "dst": "services/billing/public.py::active_books_invoice",
+    "lines": [
+-    17
++    12
+    ],
+-   "src": "services/billing/guards.py::has_active_invoice",
++   "src": "services/billing/guards.py::issue_paid",
++   "type": "calls"
++  },
++  {
++   "dst": "services/billing/public.py::issue_unlocked",
++   "lines": [
++    13
++   ],
++   "src": "services/billing/guards.py::issue_paid",
+    "type": "calls"
+   },
+   {
+    "dst": "services/billing/public.py::paid_amount",
+    "lines": [
+-    42
++    52
+    ],
+    "src": "services/billing/public.py::active_books_invoice",
+    "type": "calls"
+   },
++  {
++   "dst": "services/billing/public.py::issue_threshold",
++   "lines": [
++    38
++   ],
++   "src": "services/billing/public.py::issue_unlocked",
++   "type": "calls"
++  },
+   {
+    "dst": "services/billing/public.py::paid_amount",
+    "lines": [
+@@ -720,7 +744,7 @@
+   {
+    "dst": "services/applications/public.py::get_brief",
+    "lines": [
+-    165
++    177
+    ],
+    "src": "services/billing/service.py::create_fine",
+    "type": "calls"
+@@ -768,7 +792,7 @@
+   {
+    "dst": "services/applications/public.py::get_brief",
+    "lines": [
+-    181
++    193
+    ],
+    "src": "services/billing/service.py::issue_fine_invoice",
+    "type": "calls"
+@@ -776,7 +800,7 @@
+   {
+    "dst": "services/applications/public.py::get_venue",
+    "lines": [
+-    185
++    197
+    ],
+    "src": "services/billing/service.py::issue_fine_invoice",
+    "type": "calls"
+@@ -784,15 +808,23 @@
+   {
+    "dst": "services/billing/service.py::_require_accountant",
+    "lines": [
+-    184
++    196
+    ],
+    "src": "services/billing/service.py::issue_fine_invoice",
+    "type": "calls"
+   },
++  {
++   "dst": "services/billing/public.py::issue_threshold",
++   "lines": [
++    118
++   ],
++   "src": "services/billing/service.py::link_payment",
++   "type": "calls"
++  },
+   {
+    "dst": "services/billing/public.py::paid_amount",
+    "lines": [
+-    104
++    105
+    ],
+    "src": "services/billing/service.py::link_payment",
+    "type": "calls"
+@@ -800,7 +832,7 @@
+   {
+    "dst": "services/applications/public.py::get_brief",
+    "lines": [
+-    220
++    232
+    ],
+    "src": "services/billing/service.py::mark_fine_paid_outside",
+    "type": "calls"
+@@ -6895,17 +6927,17 @@
+   },
+   {
+    "dst": "service:applications",
+-   "src": "services/applications/consumers.py::on_fully_paid",
++   "src": "services/applications/consumers.py::on_invoice_cancelled",
+    "type": "part_of"
+   },
+   {
+    "dst": "service:applications",
+-   "src": "services/applications/consumers.py::on_invoice_cancelled",
++   "src": "services/applications/consumers.py::on_invoice_issued",
+    "type": "part_of"
+   },
+   {
+    "dst": "service:applications",
+-   "src": "services/applications/consumers.py::on_invoice_issued",
++   "src": "services/applications/consumers.py::on_issue_unlocked",
+    "type": "part_of"
+   },
+   {
+@@ -7190,12 +7222,12 @@
+   },
+   {
+    "dst": "service:billing",
+-   "src": "services/billing/guards.py::fully_paid",
++   "src": "services/billing/guards.py::has_active_invoice",
+    "type": "part_of"
+   },
+   {
+    "dst": "service:billing",
+-   "src": "services/billing/guards.py::has_active_invoice",
++   "src": "services/billing/guards.py::issue_paid",
+    "type": "part_of"
+   },
+   {
+@@ -7238,6 +7270,16 @@
+    "src": "services/billing/public.py::active_books_invoice",
+    "type": "part_of"
+   },
++  {
++   "dst": "service:billing",
++   "src": "services/billing/public.py::issue_threshold",
++   "type": "part_of"
++  },
++  {
++   "dst": "service:billing",
++   "src": "services/billing/public.py::issue_unlocked",
++   "type": "part_of"
++  },
+   {
+    "dst": "service:billing",
+    "src": "services/billing/public.py::open_fines_count",
+@@ -7660,9 +7702,9 @@
+   {
+    "dst": "applications.applications",
+    "lines": [
+-    54,
+     55,
+-    56
++    56,
++    57
+    ],
+    "src": "services/applications/consumers.py::on_client_updated",
+    "type": "reads"
+@@ -7875,7 +7917,7 @@
+   {
+    "dst": "billing.accountant_assignments",
+    "lines": [
+-    49
++    59
+    ],
+    "src": "services/billing/public.py::accountant_of",
+    "type": "reads"
+@@ -7883,8 +7925,8 @@
+   {
+    "dst": "billing.invoices",
+    "lines": [
+-    33,
+-    34
++    43,
++    44
+    ],
+    "src": "services/billing/public.py::active_books_invoice",
+    "type": "reads"
+@@ -7892,7 +7934,7 @@
+   {
+    "dst": "billing.fines",
+    "lines": [
+-    55
++    65
+    ],
+    "src": "services/billing/public.py::open_fines_count",
+    "type": "reads"
+@@ -7900,8 +7942,8 @@
+   {
+    "dst": "billing.payments",
+    "lines": [
+-    24,
+-    25
++    25,
++    26
+    ],
+    "src": "services/billing/public.py::paid_amount",
+    "type": "reads"
+@@ -7917,7 +7959,7 @@
+   {
+    "dst": "billing.invoices",
+    "lines": [
+-    234
++    246
+    ],
+    "src": "services/billing/service.py::active_invoices",
+    "type": "reads"
+@@ -7933,7 +7975,7 @@
+   {
+    "dst": "billing.fine_rates",
+    "lines": [
+-    166
++    178
+    ],
+    "src": "services/billing/service.py::create_fine",
+    "type": "reads"
+@@ -7941,7 +7983,7 @@
+   {
+    "dst": "billing.fines",
+    "lines": [
+-    178
++    190
+    ],
+    "src": "services/billing/service.py::issue_fine_invoice",
+    "type": "reads"
+@@ -7949,7 +7991,7 @@
+   {
+    "dst": "billing.fines",
+    "lines": [
+-    118
++    130
+    ],
+    "src": "services/billing/service.py::link_payment",
+    "type": "reads"
+@@ -7957,7 +7999,7 @@
+   {
+    "dst": "billing.invoices",
+    "lines": [
+-    99
++    100
+    ],
+    "src": "services/billing/service.py::link_payment",
+    "type": "reads"
+@@ -7965,7 +8007,7 @@
+   {
+    "dst": "billing.fines",
+    "lines": [
+-    217
++    229
+    ],
+    "src": "services/billing/service.py::mark_fine_paid_outside",
+    "type": "reads"
+@@ -7973,7 +8015,7 @@
+   {
+    "dst": "billing.invoices",
+    "lines": [
+-    149
++    161
+    ],
+    "src": "services/billing/service.py::refund_payment",
+    "type": "reads"
+@@ -7981,7 +8023,7 @@
+   {
+    "dst": "billing.payments",
+    "lines": [
+-    146
++    158
+    ],
+    "src": "services/billing/service.py::refund_payment",
+    "type": "reads"
+@@ -7997,7 +8039,7 @@
+   {
+    "dst": "billing.payments",
+    "lines": [
+-    135
++    147
+    ],
+    "src": "services/billing/service.py::unlink_payment",
+    "type": "reads"
+@@ -10353,6 +10395,14 @@
+    "src": "services/applications/service.py::update_client",
+    "type": "reads_config"
+   },
++  {
++   "dst": "libs/settings.py::BOOKS_ISSUE_PAID_SHARE",
++   "lines": [
++    34
++   ],
++   "src": "services/billing/public.py::issue_threshold",
++   "type": "reads_config"
++  },
+   {
+    "dst": "services/billing/service.py::CENT",
+    "lines": [
+@@ -11589,6 +11639,21 @@
+    "src": "services/applications/service.py::approve",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_paid_flow.py::test_fine_invoice_is_settled_only_by_full_payment",
++   "src": "services/applications/service.py::approve",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_paid_flow.py::test_half_payment_closes_duplicates",
++   "src": "services/applications/service.py::approve",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_paid_flow.py::test_half_payment_opens_issue_and_rest_changes_nothing",
++   "src": "services/applications/service.py::approve",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_paid_flow.py::test_invoice_requires_assigned_accountant",
+    "src": "services/applications/service.py::approve",
+@@ -11610,7 +11675,7 @@
+    "type": "tested_by"
+   },
+   {
+-   "dst": "tests/test_paid_flow.py::test_partial_payment_does_not_open_issue",
++   "dst": "tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue",
+    "src": "services/applications/service.py::approve",
+    "type": "tested_by"
+   },
+@@ -11719,6 +11784,21 @@
+    "src": "services/applications/service.py::assign_reviewer",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_paid_flow.py::test_fine_invoice_is_settled_only_by_full_payment",
++   "src": "services/applications/service.py::assign_reviewer",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_paid_flow.py::test_half_payment_closes_duplicates",
++   "src": "services/applications/service.py::assign_reviewer",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_paid_flow.py::test_half_payment_opens_issue_and_rest_changes_nothing",
++   "src": "services/applications/service.py::assign_reviewer",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_paid_flow.py::test_invoice_requires_assigned_accountant",
+    "src": "services/applications/service.py::assign_reviewer",
+@@ -11740,7 +11820,7 @@
+    "type": "tested_by"
+   },
+   {
+-   "dst": "tests/test_paid_flow.py::test_partial_payment_does_not_open_issue",
++   "dst": "tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue",
+    "src": "services/applications/service.py::assign_reviewer",
+    "type": "tested_by"
+   },
+@@ -11889,6 +11969,21 @@
+    "src": "services/applications/service.py::create_application",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_paid_flow.py::test_fine_invoice_is_settled_only_by_full_payment",
++   "src": "services/applications/service.py::create_application",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_paid_flow.py::test_half_payment_closes_duplicates",
++   "src": "services/applications/service.py::create_application",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_paid_flow.py::test_half_payment_opens_issue_and_rest_changes_nothing",
++   "src": "services/applications/service.py::create_application",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_paid_flow.py::test_invoice_requires_assigned_accountant",
+    "src": "services/applications/service.py::create_application",
+@@ -11910,7 +12005,7 @@
+    "type": "tested_by"
+   },
+   {
+-   "dst": "tests/test_paid_flow.py::test_partial_payment_does_not_open_issue",
++   "dst": "tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue",
+    "src": "services/applications/service.py::create_application",
+    "type": "tested_by"
+   },
+@@ -12014,13 +12109,28 @@
+    "src": "services/applications/service.py::load",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_paid_flow.py::test_fine_invoice_is_settled_only_by_full_payment",
++   "src": "services/applications/service.py::load",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_paid_flow.py::test_half_payment_closes_duplicates",
++   "src": "services/applications/service.py::load",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_paid_flow.py::test_half_payment_opens_issue_and_rest_changes_nothing",
++   "src": "services/applications/service.py::load",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_paid_flow.py::test_paid_application_full_path",
+    "src": "services/applications/service.py::load",
+    "type": "tested_by"
+   },
+   {
+-   "dst": "tests/test_paid_flow.py::test_partial_payment_does_not_open_issue",
++   "dst": "tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue",
+    "src": "services/applications/service.py::load",
+    "type": "tested_by"
+   },
+@@ -12094,6 +12204,21 @@
+    "src": "services/applications/service.py::submit_for_review",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_paid_flow.py::test_fine_invoice_is_settled_only_by_full_payment",
++   "src": "services/applications/service.py::submit_for_review",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_paid_flow.py::test_half_payment_closes_duplicates",
++   "src": "services/applications/service.py::submit_for_review",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_paid_flow.py::test_half_payment_opens_issue_and_rest_changes_nothing",
++   "src": "services/applications/service.py::submit_for_review",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_paid_flow.py::test_invoice_requires_assigned_accountant",
+    "src": "services/applications/service.py::submit_for_review",
+@@ -12115,7 +12240,7 @@
+    "type": "tested_by"
+   },
+   {
+-   "dst": "tests/test_paid_flow.py::test_partial_payment_does_not_open_issue",
++   "dst": "tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue",
+    "src": "services/applications/service.py::submit_for_review",
+    "type": "tested_by"
+   },
+@@ -12184,6 +12309,11 @@
+    "src": "services/billing/public.py::active_books_invoice",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_paid_flow.py::test_fine_invoice_is_settled_only_by_full_payment",
++   "src": "services/billing/service.py::create_fine",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_archive.py::test_unpaid_invoice_goes_to_archive_after_month",
+    "src": "services/billing/service.py::issue_books_invoice",
+@@ -12209,6 +12339,21 @@
+    "src": "services/billing/service.py::issue_books_invoice",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_paid_flow.py::test_fine_invoice_is_settled_only_by_full_payment",
++   "src": "services/billing/service.py::issue_books_invoice",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_paid_flow.py::test_half_payment_closes_duplicates",
++   "src": "services/billing/service.py::issue_books_invoice",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_paid_flow.py::test_half_payment_opens_issue_and_rest_changes_nothing",
++   "src": "services/billing/service.py::issue_books_invoice",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_paid_flow.py::test_invoice_requires_assigned_accountant",
+    "src": "services/billing/service.py::issue_books_invoice",
+@@ -12230,7 +12375,7 @@
+    "type": "tested_by"
+   },
+   {
+-   "dst": "tests/test_paid_flow.py::test_partial_payment_does_not_open_issue",
++   "dst": "tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue",
+    "src": "services/billing/service.py::issue_books_invoice",
+    "type": "tested_by"
+   },
+@@ -12244,6 +12389,11 @@
+    "src": "services/billing/service.py::issue_books_invoice",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_paid_flow.py::test_fine_invoice_is_settled_only_by_full_payment",
++   "src": "services/billing/service.py::issue_fine_invoice",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_notifications.py::test_booking_email_goes_to_client_and_representative",
+    "src": "services/billing/service.py::link_payment",
+@@ -12259,6 +12409,21 @@
+    "src": "services/billing/service.py::link_payment",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_paid_flow.py::test_fine_invoice_is_settled_only_by_full_payment",
++   "src": "services/billing/service.py::link_payment",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_paid_flow.py::test_half_payment_closes_duplicates",
++   "src": "services/billing/service.py::link_payment",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_paid_flow.py::test_half_payment_opens_issue_and_rest_changes_nothing",
++   "src": "services/billing/service.py::link_payment",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_paid_flow.py::test_issue_only_on_booked_date",
+    "src": "services/billing/service.py::link_payment",
+@@ -12270,7 +12435,7 @@
+    "type": "tested_by"
+   },
+   {
+-   "dst": "tests/test_paid_flow.py::test_partial_payment_does_not_open_issue",
++   "dst": "tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue",
+    "src": "services/billing/service.py::link_payment",
+    "type": "tested_by"
+   },
+@@ -12309,6 +12474,21 @@
+    "src": "services/billing/service.py::take_application",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_paid_flow.py::test_fine_invoice_is_settled_only_by_full_payment",
++   "src": "services/billing/service.py::take_application",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_paid_flow.py::test_half_payment_closes_duplicates",
++   "src": "services/billing/service.py::take_application",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_paid_flow.py::test_half_payment_opens_issue_and_rest_changes_nothing",
++   "src": "services/billing/service.py::take_application",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_paid_flow.py::test_invoice_requires_assigned_accountant",
+    "src": "services/billing/service.py::take_application",
+@@ -12330,7 +12510,7 @@
+    "type": "tested_by"
+   },
+   {
+-   "dst": "tests/test_paid_flow.py::test_partial_payment_does_not_open_issue",
++   "dst": "tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue",
+    "src": "services/billing/service.py::take_application",
+    "type": "tested_by"
+   },
+@@ -15759,11 +15939,21 @@
+    "src": "services/scheduling/service.py::active_link",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_paid_flow.py::test_half_payment_opens_issue_and_rest_changes_nothing",
++   "src": "services/scheduling/service.py::active_link",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_paid_flow.py::test_paid_application_full_path",
+    "src": "services/scheduling/service.py::active_link",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue",
++   "src": "services/scheduling/service.py::active_link",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_scheduling.py::test_booking_only_on_own_venue_and_sphere",
+    "src": "services/scheduling/service.py::active_link",
+@@ -18029,7 +18219,7 @@
+   {
+    "dst": "billing.fines",
+    "lines": [
+-    169
++    181
+    ],
+    "src": "services/billing/service.py::create_fine",
+    "type": "writes"
+@@ -18045,7 +18235,7 @@
+   {
+    "dst": "billing.invoices",
+    "lines": [
+-    189
++    201
+    ],
+    "src": "services/billing/service.py::issue_fine_invoice",
+    "type": "writes"
+@@ -18056,7 +18246,7 @@
+    ],
+    "dst": "billing.fines",
+    "lines": [
+-    119
++    131
+    ],
+    "src": "services/billing/service.py::link_payment",
+    "type": "writes"
+@@ -18067,8 +18257,8 @@
+    ],
+    "dst": "billing.payments",
+    "lines": [
+-    105,
+-    108
++    106,
++    109
+    ],
+    "src": "services/billing/service.py::link_payment",
+    "type": "writes"
+@@ -18080,8 +18270,8 @@
+    ],
+    "dst": "billing.fines",
+    "lines": [
+-    225,
+-    226
++    237,
++    238
+    ],
+    "src": "services/billing/service.py::mark_fine_paid_outside",
+    "type": "writes"
+@@ -18092,7 +18282,7 @@
+    ],
+    "dst": "billing.payments",
+    "lines": [
+-    150
++    162
+    ],
+    "src": "services/billing/service.py::refund_payment",
+    "type": "writes"
+@@ -18116,8 +18306,8 @@
+    ],
+    "dst": "billing.payments",
+    "lines": [
+-    138,
+-    139
++    150,
++    151
+    ],
+    "src": "services/billing/service.py::unlink_payment",
+    "type": "writes"
+@@ -20000,32 +20190,43 @@
+    "type": "config",
+    "value": "events:"
+   },
++  {
++   "doc": "Доля счёта за книги, после оплаты которой платная заявка переходит к записи на выдачу. Счёт на штраф гасится только полной оплатой.",
++   "end_line": 18,
++   "hash": "b2af71099172",
++   "id": "libs/settings.py::BOOKS_ISSUE_PAID_SHARE",
++   "line": 18,
++   "name": "BOOKS_ISSUE_PAID_SHARE",
++   "path": "libs/settings.py",
++   "type": "config",
++   "value": "Decimal('0.5')"
++  },
+   {
+    "doc": "Клиент может перенести или отменить визит не позднее чем за столько дней.",
+-   "end_line": 14,
++   "end_line": 15,
+    "hash": "7a73deb1e47c",
+    "id": "libs/settings.py::CLIENT_RESCHEDULE_MIN_DAYS",
+-   "line": 14,
++   "line": 15,
+    "name": "CLIENT_RESCHEDULE_MIN_DAYS",
+    "path": "libs/settings.py",
+    "type": "config",
+    "value": 2
+   },
+   {
+-   "end_line": 4,
++   "end_line": 5,
+    "hash": "bf2bf8d7c6ae",
+    "id": "libs/settings.py::DATABASE_URL",
+-   "line": 4,
++   "line": 5,
+    "name": "DATABASE_URL",
+    "path": "libs/settings.py",
+    "type": "config",
+    "value": "os.environ.get('DATABASE_URL', f'postgresql+asyncpg://erp:erp@localhost:{DB_PORT}/erp')"
+   },
+   {
+-   "end_line": 3,
++   "end_line": 4,
+    "hash": "42eb361f2f00",
+    "id": "libs/settings.py::DB_PORT",
+-   "line": 3,
++   "line": 4,
+    "name": "DB_PORT",
+    "path": "libs/settings.py",
+    "type": "config",
+@@ -20033,10 +20234,10 @@
+   },
+   {
+    "doc": "Срок пользования книгами с даты выдачи.",
+-   "end_line": 8,
++   "end_line": 9,
+    "hash": "384b23b3482d",
+    "id": "libs/settings.py::LOAN_PERIOD_DAYS",
+-   "line": 8,
++   "line": 9,
+    "name": "LOAN_PERIOD_DAYS",
+    "path": "libs/settings.py",
+    "type": "config",
+@@ -20044,20 +20245,20 @@
+   },
+   {
+    "doc": "Платная заявка уходит в архив, если счёт не оплачен за столько дней.",
+-   "end_line": 12,
++   "end_line": 13,
+    "hash": "434367f2c935",
+    "id": "libs/settings.py::PAYMENT_ARCHIVE_DAYS",
+-   "line": 12,
++   "line": 13,
+    "name": "PAYMENT_ARCHIVE_DAYS",
+    "path": "libs/settings.py",
+    "type": "config",
+    "value": 30
+   },
+   {
+-   "end_line": 5,
++   "end_line": 6,
+    "hash": "457139fc6055",
+    "id": "libs/settings.py::REDIS_URL",
+-   "line": 5,
++   "line": 6,
+    "name": "REDIS_URL",
+    "path": "libs/settings.py",
+    "type": "config",
+@@ -20065,10 +20266,10 @@
+   },
+   {
+    "doc": "Заявка уходит в архив, если с начала проверки прошло столько дней, а данные не получены.",
+-   "end_line": 10,
++   "end_line": 11,
+    "hash": "6cdc3dfad7bf",
+    "id": "libs/settings.py::REVIEW_ARCHIVE_DAYS",
+-   "line": 10,
++   "line": 11,
+    "name": "REVIEW_ARCHIVE_DAYS",
+    "path": "libs/settings.py",
+    "type": "config",
+@@ -21458,8 +21659,8 @@
+   },
+   {
+    "end_line": 41,
+-   "hash": "3150c6b390e2",
+-   "hash_own": "877abd5e4f52",
++   "hash": "cb499e35acdb",
++   "hash_own": "ca54171bdde4",
+    "id": "services/applications/jobs.py::archive_stale",
+    "kind": "job",
+    "line": 14,
+@@ -22331,12 +22532,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 69,
++   "end_line": 70,
+    "hash": "8df2e69239a7",
+    "hash_own": "0da01045f856",
+    "id": "services/applications/consumers.py::on_books_issued",
+    "kind": "consumer",
+-   "line": 67,
++   "line": 68,
+    "name": "on_books_issued",
+    "path": "services/applications/consumers.py",
+    "service": "applications",
+@@ -22344,31 +22545,18 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 63,
++   "end_line": 64,
+    "hash": "b9e398d012dd",
+    "hash_own": "6cb54c85182e",
+    "id": "services/applications/consumers.py::on_client_updated",
+    "kind": "consumer",
+-   "line": 51,
++   "line": 52,
+    "name": "on_client_updated",
+    "path": "services/applications/consumers.py",
+    "service": "applications",
+    "signature": "(session, payload)",
+    "type": "symbol"
+   },
+-  {
+-   "end_line": 39,
+-   "hash": "ea8e31c2634d",
+-   "hash_own": "d114c5c4709b",
+-   "id": "services/applications/consumers.py::on_fully_paid",
+-   "kind": "consumer",
+-   "line": 31,
+-   "name": "on_fully_paid",
+-   "path": "services/applications/consumers.py",
+-   "service": "applications",
+-   "signature": "(session, payload)",
+-   "type": "symbol"
+-  },
+   {
+    "end_line": 27,
+    "hash": "6eb5887db165",
+@@ -22396,12 +22584,25 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 78,
++   "end_line": 40,
++   "hash": "1b698641d00c",
++   "hash_own": "c4b86238cfcd",
++   "id": "services/applications/consumers.py::on_issue_unlocked",
++   "kind": "consumer",
++   "line": 32,
++   "name": "on_issue_unlocked",
++   "path": "services/applications/consumers.py",
++   "service": "applications",
++   "signature": "(session, payload)",
++   "type": "symbol"
++  },
++  {
++   "end_line": 79,
+    "hash": "685365203414",
+    "hash_own": "e58d1067e51e",
+    "id": "services/applications/consumers.py::on_payment_refunded",
+    "kind": "consumer",
+-   "line": 73,
++   "line": 74,
+    "name": "on_payment_refunded",
+    "path": "services/applications/consumers.py",
+    "service": "applications",
+@@ -22409,12 +22610,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 47,
++   "end_line": 48,
+    "hash": "3695aacda943",
+    "hash_own": "4932444042cf",
+    "id": "services/applications/consumers.py::on_review_passed",
+    "kind": "consumer",
+-   "line": 43,
++   "line": 44,
+    "name": "on_review_passed",
+    "path": "services/applications/consumers.py",
+    "service": "applications",
+@@ -23195,7 +23396,7 @@
+   },
+   {
+    "end_line": 46,
+-   "hash": "8b5495f0ef85",
++   "hash": "21b886cab72f",
+    "hash_own": "66050dcf14f1",
+    "id": "services/billing/api.py::link",
+    "kind": "route",
+@@ -23312,26 +23513,26 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 12,
+-   "hash": "cc2b7c6c1da7",
+-   "hash_own": "5a0ab0b48352",
+-   "id": "services/billing/guards.py::fully_paid",
++   "end_line": 18,
++   "hash": "e5396f97ac2e",
++   "hash_own": "0122d2675ac4",
++   "id": "services/billing/guards.py::has_active_invoice",
+    "kind": "guard",
+-   "line": 10,
+-   "name": "fully_paid",
++   "line": 17,
++   "name": "has_active_invoice",
+    "path": "services/billing/guards.py",
+    "service": "billing",
+    "signature": "(session, app)",
+    "type": "symbol"
+   },
+   {
+-   "end_line": 17,
+-   "hash": "e5396f97ac2e",
+-   "hash_own": "0122d2675ac4",
+-   "id": "services/billing/guards.py::has_active_invoice",
++   "end_line": 13,
++   "hash": "ec4adc8c1793",
++   "hash_own": "c62297b11c18",
++   "id": "services/billing/guards.py::issue_paid",
+    "kind": "guard",
+-   "line": 16,
+-   "name": "has_active_invoice",
++   "line": 11,
++   "name": "issue_paid",
+    "path": "services/billing/guards.py",
+    "service": "billing",
+    "signature": "(session, app)",
+@@ -23403,24 +23604,24 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 19,
++   "end_line": 20,
+    "hash": "476f8df60caa",
+    "hash_own": "476f8df60caa",
+    "id": "services/billing/public.py::InvoiceBrief",
+    "kind": "class",
+-   "line": 14,
++   "line": 15,
+    "name": "InvoiceBrief",
+    "path": "services/billing/public.py",
+    "service": "billing",
+    "type": "symbol"
+   },
+   {
+-   "end_line": 50,
++   "end_line": 60,
+    "hash": "d0ed4673ab0b",
+    "hash_own": "c0fe8bb159b5",
+    "id": "services/billing/public.py::accountant_of",
+    "kind": "function",
+-   "line": 48,
++   "line": 58,
+    "name": "accountant_of",
+    "path": "services/billing/public.py",
+    "service": "billing",
+@@ -23428,12 +23629,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 45,
++   "end_line": 55,
+    "hash": "ec804ecd1ad5",
+    "hash_own": "917c6eb99860",
+    "id": "services/billing/public.py::active_books_invoice",
+    "kind": "function",
+-   "line": 31,
++   "line": 41,
+    "name": "active_books_invoice",
+    "path": "services/billing/public.py",
+    "service": "billing",
+@@ -23441,12 +23642,39 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 56,
++   "doc": "Сколько нужно оплатить по счёту за книги, чтобы заявка перешла к записи на выдачу.",
++   "end_line": 34,
++   "hash": "686bd655d685",
++   "hash_own": "16b55ef8a13f",
++   "id": "services/billing/public.py::issue_threshold",
++   "kind": "function",
++   "line": 32,
++   "name": "issue_threshold",
++   "path": "services/billing/public.py",
++   "service": "billing",
++   "signature": "(amount)",
++   "type": "symbol"
++  },
++  {
++   "end_line": 38,
++   "hash": "8cff98c31d3e",
++   "hash_own": "aa95072d6524",
++   "id": "services/billing/public.py::issue_unlocked",
++   "kind": "function",
++   "line": 37,
++   "name": "issue_unlocked",
++   "path": "services/billing/public.py",
++   "service": "billing",
++   "signature": "(invoice)",
++   "type": "symbol"
++  },
++  {
++   "end_line": 66,
+    "hash": "ca044c9712a2",
+    "hash_own": "9ba33f8aac7e",
+    "id": "services/billing/public.py::open_fines_count",
+    "kind": "function",
+-   "line": 53,
++   "line": 63,
+    "name": "open_fines_count",
+    "path": "services/billing/public.py",
+    "service": "billing",
+@@ -23454,12 +23682,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 28,
++   "end_line": 29,
+    "hash": "14250e3467e5",
+    "hash_own": "131b062b4ff8",
+    "id": "services/billing/public.py::paid_amount",
+    "kind": "function",
+-   "line": 22,
++   "line": 23,
+    "name": "paid_amount",
+    "path": "services/billing/public.py",
+    "service": "billing",
+@@ -23488,12 +23716,12 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 237,
++   "end_line": 249,
+    "hash": "28364fcb32b8",
+    "hash_own": "450f874c36da",
+    "id": "services/billing/service.py::active_invoices",
+    "kind": "function",
+-   "line": 230,
++   "line": 242,
+    "name": "active_invoices",
+    "path": "services/billing/service.py",
+    "service": "billing",
+@@ -23532,16 +23760,16 @@
+     {
+      "condition": "rate is None",
+      "error": "DomainError",
+-     "line": 168,
++     "line": 180,
+      "message": "f'размер штрафа {kind} не настроен для представителя и площадки'"
+     }
+    ],
+-   "end_line": 174,
++   "end_line": 186,
+    "hash": "ee1bd44a23f3",
+    "hash_own": "074ffa8ed44b",
+    "id": "services/billing/service.py::create_fine",
+    "kind": "function",
+-   "line": 164,
++   "line": 176,
+    "name": "create_fine",
+    "path": "services/billing/service.py",
+    "service": "billing",
+@@ -23586,28 +23814,28 @@
+     {
+      "condition": "fine is None",
+      "error": "NotFound",
+-     "line": 180,
++     "line": 192,
+      "message": "f'штраф {fine_id}'"
+     },
+     {
+      "condition": "brief.kind == 'debt'",
+      "error": "DomainError",
+-     "line": 183,
++     "line": 195,
+      "message": "по заявке в долг штраф оплачивается вне системы"
+     },
+     {
+      "condition": "not venue.requisites",
+      "error": "DomainError",
+-     "line": 187,
++     "line": 199,
+      "message": "у площадки не заполнены реквизиты организации"
+     }
+    ],
+-   "end_line": 212,
++   "end_line": 224,
+    "hash": "dc16f34adba2",
+    "hash_own": "7b8d3720789f",
+    "id": "services/billing/service.py::issue_fine_invoice",
+    "kind": "function",
+-   "line": 177,
++   "line": 189,
+    "name": "issue_fine_invoice",
+    "path": "services/billing/service.py",
+    "service": "billing",
+@@ -23619,22 +23847,22 @@
+     {
+      "condition": "invoice is None",
+      "error": "NotFound",
+-     "line": 101,
++     "line": 102,
+      "message": "f'счёт {invoice_id}'"
+     },
+     {
+      "condition": "invoice.status != 'active'",
+      "error": "DomainError",
+-     "line": 103,
++     "line": 104,
+      "message": "платёж нельзя привязать к аннулированному счёту"
+     }
+    ],
+-   "end_line": 129,
+-   "hash": "55becc083ced",
+-   "hash_own": "db745dc66f7d",
++   "end_line": 141,
++   "hash": "85e7ca24dbee",
++   "hash_own": "6f22e8aeb0e0",
+    "id": "services/billing/service.py::link_payment",
+    "kind": "function",
+-   "line": 98,
++   "line": 99,
+    "name": "link_payment",
+    "path": "services/billing/service.py",
+    "service": "billing",
+@@ -23646,29 +23874,29 @@
+     {
+      "condition": "fine is None",
+      "error": "NotFound",
+-     "line": 219,
++     "line": 231,
+      "message": "f'штраф {fine_id}'"
+     },
+     {
+      "condition": "brief.kind != 'debt'",
+      "error": "DomainError",
+-     "line": 222,
++     "line": 234,
+      "message": "вне системы гасятся только штрафы по заявкам в долг"
+     },
+     {
+      "condition": "brief.operator_id != operator_id",
+      "error": "AccessDenied",
+-     "line": 224,
++     "line": 236,
+      "message": "заявка закреплена за другим оператором"
+     }
+    ],
+    "doc": "По заявке в долг погашение отмечает оператор по данным главного бухгалтера.",
+-   "end_line": 227,
++   "end_line": 239,
+    "hash": "8cefd5dfd13f",
+    "hash_own": "50788fe6fac5",
+    "id": "services/billing/service.py::mark_fine_paid_outside",
+    "kind": "function",
+-   "line": 215,
++   "line": 227,
+    "name": "mark_fine_paid_outside",
+    "path": "services/billing/service.py",
+    "service": "billing",
+@@ -23680,22 +23908,22 @@
+     {
+      "condition": "not reason",
+      "error": "DomainError",
+-     "line": 145,
++     "line": 157,
+      "message": "возврат платежа требует причины"
+     },
+     {
+      "condition": "payment is None",
+      "error": "NotFound",
+-     "line": 148,
++     "line": 160,
+      "message": "f'платёж {payment_id}'"
+     }
+    ],
+-   "end_line": 161,
++   "end_line": 173,
+    "hash": "3b8f520a3f85",
+    "hash_own": "ad73316f8894",
+    "id": "services/billing/service.py::refund_payment",
+    "kind": "function",
+-   "line": 143,
++   "line": 155,
+    "name": "refund_payment",
+    "path": "services/billing/service.py",
+    "service": "billing",
+@@ -23729,22 +23957,22 @@
+     {
+      "condition": "not reason",
+      "error": "DomainError",
+-     "line": 134,
++     "line": 146,
+      "message": "отвязка платежа требует причины"
+     },
+     {
+      "condition": "payment is None",
+      "error": "NotFound",
+-     "line": 137,
++     "line": 149,
+      "message": "f'платёж {payment_id}'"
+     }
+    ],
+-   "end_line": 140,
++   "end_line": 152,
+    "hash": "fe6ce419998d",
+    "hash_own": "d13e6768e8fc",
+    "id": "services/billing/service.py::unlink_payment",
+    "kind": "function",
+-   "line": 132,
++   "line": 144,
+    "name": "unlink_payment",
+    "path": "services/billing/service.py",
+    "service": "billing",
+@@ -33313,50 +33541,50 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 103,
++   "end_line": 108,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_bpm_layer_links_guards_and_code",
+    "kind": "test",
+-   "line": 94,
++   "line": 99,
+    "name": "test_bpm_layer_links_guards_and_code",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 80,
++   "end_line": 85,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_code_layer_finds_links_invisible_to_imports",
+    "kind": "test",
+-   "line": 59,
++   "line": 64,
+    "name": "test_code_layer_finds_links_invisible_to_imports",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(code_model)",
+    "type": "test"
+   },
+   {
+-   "end_line": 132,
++   "end_line": 137,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_entity_resolves_russian_term",
+    "kind": "test",
+-   "line": 129,
++   "line": 134,
+    "name": "test_entity_resolves_russian_term",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(g)",
+    "type": "test"
+   },
+   {
+-   "end_line": 91,
++   "end_line": 96,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_event_layer_resolves_dynamic_subscribers",
+    "kind": "test",
+-   "line": 83,
++   "line": 88,
+    "name": "test_event_layer_resolves_dynamic_subscribers",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 115,
++   "end_line": 120,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_find_entry_maps_russian_task_to_setting",
+    "kind": "test",
+-   "line": 113,
++   "line": 118,
+    "name": "test_find_entry_maps_russian_task_to_setting",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(g)",
+@@ -33373,30 +33601,30 @@
+    "type": "test"
+   },
+   {
+-   "end_line": 126,
++   "end_line": 131,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_impact_respects_budget_and_crosses_services",
+    "kind": "test",
+-   "line": 119,
++   "line": 124,
+    "name": "test_impact_respects_budget_and_crosses_services",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(g, budget)",
+    "type": "test"
+   },
+   {
+-   "end_line": 153,
++   "end_line": 158,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_mcp_log_line",
+    "kind": "test",
+-   "line": 135,
++   "line": 140,
+    "name": "test_mcp_log_line",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(monkeypatch, tmp_path, g)",
+    "type": "test"
+   },
+   {
+-   "end_line": 160,
++   "end_line": 165,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_rule_annotation_binds_to_function",
+    "kind": "test",
+-   "line": 156,
++   "line": 161,
+    "name": "test_rule_annotation_binds_to_function",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "()",
+@@ -34723,61 +34951,91 @@
+    "type": "test"
+   },
+   {
+-   "end_line": 99,
++   "end_line": 143,
+    "id": "tests/test_paid_flow.py::test_cannot_close_with_books_out",
+    "kind": "test",
+-   "line": 94,
++   "line": 138,
+    "name": "test_cannot_close_with_books_out",
+    "path": "tests/test_paid_flow.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 62,
++   "end_line": 120,
++   "id": "tests/test_paid_flow.py::test_fine_invoice_is_settled_only_by_full_payment",
++   "kind": "test",
++   "line": 112,
++   "name": "test_fine_invoice_is_settled_only_by_full_payment",
++   "path": "tests/test_paid_flow.py",
++   "signature": "()",
++   "type": "test"
++  },
++  {
++   "end_line": 109,
++   "id": "tests/test_paid_flow.py::test_half_payment_closes_duplicates",
++   "kind": "test",
++   "line": 102,
++   "name": "test_half_payment_closes_duplicates",
++   "path": "tests/test_paid_flow.py",
++   "signature": "()",
++   "type": "test"
++  },
++  {
++   "end_line": 99,
++   "id": "tests/test_paid_flow.py::test_half_payment_opens_issue_and_rest_changes_nothing",
++   "kind": "test",
++   "line": 90,
++   "name": "test_half_payment_opens_issue_and_rest_changes_nothing",
++   "path": "tests/test_paid_flow.py",
++   "signature": "()",
++   "type": "test"
++  },
++  {
++   "end_line": 64,
+    "id": "tests/test_paid_flow.py::test_invoice_requires_assigned_accountant",
+    "kind": "test",
+-   "line": 54,
++   "line": 56,
+    "name": "test_invoice_requires_assigned_accountant",
+    "path": "tests/test_paid_flow.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 70,
++   "end_line": 72,
+    "id": "tests/test_paid_flow.py::test_invoice_requires_venue_requisites",
+    "kind": "test",
+-   "line": 65,
++   "line": 67,
+    "name": "test_invoice_requires_venue_requisites",
+    "path": "tests/test_paid_flow.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 91,
++   "end_line": 135,
+    "id": "tests/test_paid_flow.py::test_issue_only_on_booked_date",
+    "kind": "test",
+-   "line": 83,
++   "line": 127,
+    "name": "test_issue_only_on_booked_date",
+    "path": "tests/test_paid_flow.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 51,
++   "end_line": 53,
+    "id": "tests/test_paid_flow.py::test_paid_application_full_path",
+    "kind": "test",
+-   "line": 30,
++   "line": 32,
+    "name": "test_paid_application_full_path",
+    "path": "tests/test_paid_flow.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 80,
+-   "id": "tests/test_paid_flow.py::test_partial_payment_does_not_open_issue",
++   "end_line": 87,
++   "id": "tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue",
+    "kind": "test",
+-   "line": 73,
+-   "name": "test_partial_payment_does_not_open_issue",
++   "line": 75,
++   "name": "test_payment_below_half_does_not_open_issue",
+    "path": "tests/test_paid_flow.py",
+    "signature": "()",
+    "type": "test"
+diff --git a/knowledge/model/events.json b/knowledge/model/events.json
+index bf77ce8..6eb0bde 100644
+--- a/knowledge/model/events.json
++++ b/knowledge/model/events.json
+@@ -33,7 +33,7 @@
+    "type": "consumes"
+   },
+   {
+-   "dst": "payment.fully_paid",
++   "dst": "payment.issue_unlocked",
+    "src": "service:applications",
+    "type": "consumes"
+   },
+@@ -165,7 +165,7 @@
+   {
+    "dst": "books.issued",
+    "lines": [
+-    67
++    68
+    ],
+    "src": "services/applications/consumers.py::on_books_issued",
+    "type": "consumes"
+@@ -173,19 +173,11 @@
+   {
+    "dst": "client.updated",
+    "lines": [
+-    51
++    52
+    ],
+    "src": "services/applications/consumers.py::on_client_updated",
+    "type": "consumes"
+   },
+-  {
+-   "dst": "payment.fully_paid",
+-   "lines": [
+-    31
+-   ],
+-   "src": "services/applications/consumers.py::on_fully_paid",
+-   "type": "consumes"
+-  },
+   {
+    "dst": "invoice.cancelled",
+    "lines": [
+@@ -202,10 +194,18 @@
+    "src": "services/applications/consumers.py::on_invoice_issued",
+    "type": "consumes"
+   },
++  {
++   "dst": "payment.issue_unlocked",
++   "lines": [
++    32
++   ],
++   "src": "services/applications/consumers.py::on_issue_unlocked",
++   "type": "consumes"
++  },
+   {
+    "dst": "payment.refunded",
+    "lines": [
+-    73
++    74
+    ],
+    "src": "services/applications/consumers.py::on_payment_refunded",
+    "type": "consumes"
+@@ -213,7 +213,7 @@
+   {
+    "dst": "application.review_passed",
+    "lines": [
+-    43
++    44
+    ],
+    "src": "services/applications/consumers.py::on_review_passed",
+    "type": "consumes"
+@@ -1090,6 +1090,11 @@
+    "src": "service:billing",
+    "type": "publishes"
+   },
++  {
++   "dst": "payment.issue_unlocked",
++   "src": "service:billing",
++   "type": "publishes"
++  },
+   {
+    "dst": "payment.linked",
+    "src": "service:billing",
+@@ -1223,7 +1228,7 @@
+   {
+    "dst": "invoice.issued",
+    "lines": [
+-    202
++    214
+    ],
+    "src": "services/billing/service.py::issue_fine_invoice",
+    "type": "publishes"
+@@ -1232,7 +1237,16 @@
+    "condition": "before < invoice.amount <= after",
+    "dst": "payment.fully_paid",
+    "lines": [
+-    120
++    132
++   ],
++   "src": "services/billing/service.py::link_payment",
++   "type": "publishes"
++  },
++  {
++   "condition": "invoice.kind == 'books' and before < issue_threshold(invoice.amount) <= after",
++   "dst": "payment.issue_unlocked",
++   "lines": [
++    119
+    ],
+    "src": "services/billing/service.py::link_payment",
+    "type": "publishes"
+@@ -1240,7 +1254,7 @@
+   {
+    "dst": "payment.linked",
+    "lines": [
+-    111
++    112
+    ],
+    "src": "services/billing/service.py::link_payment",
+    "type": "publishes"
+@@ -1248,7 +1262,7 @@
+   {
+    "dst": "payment.refunded",
+    "lines": [
+-    151
++    163
+    ],
+    "src": "services/billing/service.py::refund_payment",
+    "type": "publishes"
+@@ -3056,15 +3070,32 @@
+    ],
+    "type": "event"
+   },
++  {
++   "id": "payment.fully_paid",
++   "name": "payment.fully_paid",
++   "orphan": "нет подписчиков",
++   "payload": [
++    "application_id",
++    "invoice_id",
++    "invoice_kind"
++   ],
++   "publisher_services": [
++    "billing"
++   ],
++   "publishers": [
++    "services/billing/service.py::link_payment"
++   ],
++   "type": "event"
++  },
+   {
+    "consumer_services": [
+     "applications"
+    ],
+    "consumers": [
+-    "services/applications/consumers.py::on_fully_paid"
++    "services/applications/consumers.py::on_issue_unlocked"
+    ],
+-   "id": "payment.fully_paid",
+-   "name": "payment.fully_paid",
++   "id": "payment.issue_unlocked",
++   "name": "payment.issue_unlocked",
+    "payload": [
+     "application_id",
+     "invoice_id",
+diff --git a/knowledge/rules/applications.yaml b/knowledge/rules/applications.yaml
+index bd0cc74..b8b0b75 100644
+--- a/knowledge/rules/applications.yaml
++++ b/knowledge/rules/applications.yaml
+@@ -351,7 +351,7 @@ rules:
+ - id: R-APP-BOOKING-01
+   title: Готовность к записи фиксируется и запускает выдачу ссылки на запись
+   text: >
+-    При переходе в awaiting_issue (после проверки debt/social или после полной оплаты paid) заполняется
++    При переходе в awaiting_issue (после проверки debt/social или после оплаты половины счёта paid) заполняется
+     booking_reached_at (один раз) и публикуется application.ready_for_booking; scheduling по нему формирует
+     публичную ссылку на запись (issue_link).
+   kind: effect
+@@ -455,7 +455,7 @@ rules:
+   - R-APP-ARCHIVE-01
+   implemented_by:
+   - symbol: services/applications/consumers.py::on_client_updated
+-    lines: 52-63
++    lines: 53-64
+     hash: b9e398d012dd
+   - transition: awaiting_invoice->on_review
+     hash: bb5857d29271
+@@ -519,15 +519,16 @@ rules:
+   schema_ref: §11 Счета и платежи
+   status: draft
+ - id: R-APP-PAY-03
+-  title: Только полная оплата счёта за книги открывает выдачу
++  title: Оплата не менее половины счёта за книги открывает выдачу
+   text: >
+-    По payment.fully_paid (invoice_kind=books) заявка в awaiting_payment переводится в awaiting_issue
+-    при выполнении guard fully_paid, отмечается готовой к записи и закрывает дубли клиента по сфере. Частичная
+-    оплата этап не меняет.
++    По payment.issue_unlocked (invoice_kind=books; привязанные платежи впервые покрыли долю BOOKS_ISSUE_PAID_SHARE
++    = 50% счёта) заявка в awaiting_payment переводится в awaiting_issue при выполнении guard issue_paid,
++    отмечается готовой к записи и закрывает дубли клиента по сфере. Оплата меньше половины этап не меняет;
++    доплата остатка (и payment.fully_paid) на этап тоже не влияет.
+   kind: effect
+   applies_to:
+   - application.kind=paid
+-  trigger: event:payment.fully_paid
++  trigger: event:payment.issue_unlocked
+   effects:
+   - transition:awaiting_payment->awaiting_issue
+   - event:application.ready_for_booking
+@@ -538,17 +539,22 @@ rules:
+   - R-APP-BOOKING-01
+   - R-APP-DEDUP-01
+   implemented_by:
+-  - symbol: services/applications/consumers.py::on_fully_paid
+-    lines: 32-39
+-    hash: ea8e31c2634d
++  - symbol: services/applications/consumers.py::on_issue_unlocked
++    lines: 33-40
++    hash: 1b698641d00c
+   - transition: awaiting_payment->awaiting_issue
+-    hash: 6fe11e269daf
+-  - guard: guard:fully_paid
++    hash: f7973e35fa90
++  - guard: guard:issue_paid
++  config:
++  - libs/settings.py::BOOKS_ISSUE_PAID_SHARE
+   tested_by:
+-  - tests/test_paid_flow.py::test_partial_payment_does_not_open_issue
++  - tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue
++  - tests/test_paid_flow.py::test_half_payment_opens_issue_and_rest_changes_nothing
++  - tests/test_paid_flow.py::test_half_payment_closes_duplicates
+   - tests/test_paid_flow.py::test_paid_application_full_path
+   schema_ref: §9 Виды заявок — Платная
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-APP-PAY-04
+   title: Возврат платежа по оплаченной заявке отправляет её в архив с отметкой «возврат»
+   text: >
+@@ -568,7 +574,7 @@ rules:
+   - R-APP-VENUE-CHANGE-02
+   implemented_by:
+   - symbol: services/applications/consumers.py::on_payment_refunded
+-    lines: 74-78
++    lines: 75-79
+     hash: '685365203414'
+   - transition: awaiting_issue->archived
+     hash: 191f005d1e70
+@@ -595,7 +601,7 @@ rules:
+   - R-APP-CLOSE-01
+   implemented_by:
+   - symbol: services/applications/consumers.py::on_books_issued
+-    lines: 68-69
++    lines: 69-70
+     hash: 8df2e69239a7
+   - transition: awaiting_issue->books_out
+     hash: 771af805e9ca
+@@ -768,7 +774,7 @@ rules:
+   implemented_by:
+   - symbol: services/applications/jobs.py::archive_stale
+     lines: 17-27
+-    hash: 3150c6b390e2
++    hash: cb499e35acdb
+   - transition: on_review->archived
+     hash: 9f1416124f1e
+   - transition: needs_rework->archived
+@@ -785,13 +791,14 @@ rules:
+     Схема: месяц. Код: фиксированные 30 дней из настройки. Схема §9 (платная): уходит в архив, если за
+     месяц не получены данные для счёта — заявки на awaiting_invoice (без выставленного счёта) задача не
+     архивирует никогда.
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-APP-ARCHIVE-02
+-  title: Платная заявка без полной оплаты дольше PAYMENT_ARCHIVE_DAYS уходит в архив
++  title: Платная заявка без оплаты половины счёта дольше PAYMENT_ARCHIVE_DAYS уходит в архив
+   text: >
+-    archive_stale архивирует платные заявки на awaiting_payment, если действующий счёт за книги оплачен
+-    не полностью и payment_clock_started_at старше PAYMENT_ARCHIVE_DAYS (30 дней); outcome=unpaid, actor
+-    system. Отсчёт идёт от выставления счёта или от возврата из архива.
++    archive_stale архивирует платные заявки на awaiting_payment, если по действующему счёту за книги оплачено
++    меньше доли BOOKS_ISSUE_PAID_SHARE (50%) и payment_clock_started_at старше PAYMENT_ARCHIVE_DAYS (30
++    дней); outcome=unpaid, actor system. Отсчёт идёт от выставления счёта или от возврата из архива.
+   kind: timer
+   applies_to:
+   - application.kind=paid
+@@ -807,7 +814,7 @@ rules:
+   implemented_by:
+   - symbol: services/applications/jobs.py::archive_stale
+     lines: 29-40
+-    hash: 3150c6b390e2
++    hash: cb499e35acdb
+   - transition: awaiting_payment->archived
+     hash: 6d4d7f1696d6
+   enforced_by_db:
+@@ -815,13 +822,15 @@ rules:
+     hash: 668dded20200
+   config:
+   - libs/settings.py::PAYMENT_ARCHIVE_DAYS
++  - libs/settings.py::BOOKS_ISSUE_PAID_SHARE
+   tested_by:
+   - tests/test_archive.py::test_unpaid_invoice_goes_to_archive_after_month
+   schema_ref: §5 Архив и попытки
+   discrepancy: >
+-    Код архивирует и частично оплаченные заявки (paid_amount < amount) как unpaid; возврат поступившей
++    Код архивирует и частично оплаченные заявки (оплачено меньше половины счёта) как unpaid; возврат поступившей
+     части платежа при этом не инициируется — схема этот случай не описывает.
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-APP-ARCHIVE-03
+   title: Ручной архив и его последствия — закрытие попытки, сброс записей, сообщение в чат
+   text: >
+@@ -970,14 +979,14 @@ rules:
+ - id: R-APP-DEDUP-01
+   title: Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
+   text: >
+-    close_duplicates вызывается при полной оплате платной заявки и при прохождении проверки заявки в долг
+-    (подписчик application.review_passed с kind=debt). Все другие заявки клиента по той же сфере на этапах
+-    OPEN_STAGES (включая awaiting_issue и archived) того же трека (не-social с не-social) переводятся
+-    в closed_duplicate; незакрытая попытка закрывается с outcome=duplicate.
++    close_duplicates вызывается при оплате половины счёта платной заявки (payment.issue_unlocked) и при
++    прохождении проверки заявки в долг (подписчик application.review_passed с kind=debt). Все другие заявки
++    клиента по той же сфере на этапах OPEN_STAGES (включая awaiting_issue и archived) того же трека (не-social
++    с не-social) переводятся в closed_duplicate; незакрытая попытка закрывается с outcome=duplicate.
+   kind: effect
+   applies_to:
+   - table:applications.applications
+-  trigger: event:payment.fully_paid
++  trigger: event:payment.issue_unlocked
+   effects:
+   - transition:draft->closed_duplicate
+   - transition:on_review->closed_duplicate
+@@ -1001,11 +1010,11 @@ rules:
+     lines: 22-22
+     hash: 8e83fa21ccf0
+   - symbol: services/applications/consumers.py::on_review_passed
+-    lines: 44-47
++    lines: 45-48
+     hash: 3695aacda943
+-  - symbol: services/applications/consumers.py::on_fully_paid
+-    lines: 39-39
+-    hash: ea8e31c2634d
++  - symbol: services/applications/consumers.py::on_issue_unlocked
++    lines: 40-40
++    hash: 1b698641d00c
+   - transition: awaiting_issue->closed_duplicate
+     hash: bb5857d29271
+   enforced_by_db:
+@@ -1015,12 +1024,15 @@ rules:
+     hash: 668dded20200
+   config:
+   - services/applications/dedup.py::OPEN_STAGES
++  tested_by:
++  - tests/test_paid_flow.py::test_half_payment_closes_duplicates
+   schema_ref: §6 Клиент и проверка данных
+   discrepancy: >
+     Схема: остаётся та заявка, что первой дошла до записи. Код: OPEN_STAGES включает awaiting_issue, поэтому
+     более поздний «победитель» (например, заявка в долг, прошедшая проверку после оплаты платной) закрывает
+     уже дошедшую до записи и оплаченную заявку. Для социальных заявок дедупликация не запускается вообще.
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-APP-DEDUP-02
+   title: Закрытие дубля аннулирует его неоплаченные счета и сбрасывает записи
+   text: >
+@@ -1181,7 +1193,7 @@ rules:
+     lines: 42-44
+     hash: 6b065a90a3fe
+   - symbol: services/billing/service.py::issue_fine_invoice
+-    lines: 185-187
++    lines: 197-199
+     hash: dc16f34adba2
+   tested_by:
+   - tests/test_paid_flow.py::test_invoice_requires_venue_requisites
+diff --git a/knowledge/rules/billing.yaml b/knowledge/rules/billing.yaml
+index d872be1..cbcaef4 100644
+--- a/knowledge/rules/billing.yaml
++++ b/knowledge/rules/billing.yaml
+@@ -77,7 +77,7 @@ rules:
+     lines: 36-36
+     hash: 6b065a90a3fe
+   - symbol: services/billing/service.py::issue_fine_invoice
+-    lines: 184-184
++    lines: 196-196
+     hash: dc16f34adba2
+   tested_by:
+   - tests/test_paid_flow.py::test_invoice_requires_assigned_accountant
+@@ -98,7 +98,7 @@ rules:
+   - R-BILL-ASSIGN-01
+   implemented_by:
+   - symbol: services/billing/public.py::accountant_of
+-    lines: 48-50
++    lines: 58-60
+     hash: d0ed4673ab0b
+   schema_ref: §15 Чат заявки
+   status: draft
+@@ -161,7 +161,7 @@ rules:
+     lines: 42-44
+     hash: 6b065a90a3fe
+   - symbol: services/billing/service.py::issue_fine_invoice
+-    lines: 185-187
++    lines: 197-199
+     hash: dc16f34adba2
+   tested_by:
+   - tests/test_paid_flow.py::test_invoice_requires_venue_requisites
+@@ -216,7 +216,7 @@ rules:
+     lines: 49-60
+     hash: 6b065a90a3fe
+   - symbol: services/billing/service.py::issue_fine_invoice
+-    lines: 188-200
++    lines: 200-212
+     hash: dc16f34adba2
+   schema_ref: §7 Площадки и цены
+   status: draft
+@@ -236,7 +236,7 @@ rules:
+   - R-BILL-INVOICE-02
+   implemented_by:
+   - symbol: services/billing/public.py::active_books_invoice
+-    lines: 31-45
++    lines: 41-55
+     hash: ec804ecd1ad5
+   enforced_by_db:
+   - constraint: uq_invoices_one_active_books
+@@ -435,7 +435,7 @@ rules:
+     lines: 20-23
+     hash: 4b35aa862a56
+   - symbol: services/billing/service.py::active_invoices
+-    lines: 230-237
++    lines: 242-249
+     hash: 28364fcb32b8
+   enforced_by_db:
+   - constraint: trg_invoices_cancel_guard
+@@ -480,9 +480,9 @@ rules:
+   title: Неоплаченная платная заявка уходит в архив через PAYMENT_ARCHIVE_DAYS от начала отсчёта оплаты
+   text: >
+     Фоновая задача applications archive_stale берёт через active_books_invoice счёт заявки в awaiting_payment.
+-    Если счёт оплачен не полностью и payment_clock_started_at старше PAYMENT_ARCHIVE_DAYS (30 дней), заявка
+-    уходит в архив с отметкой unpaid. Отсчёт идёт от выставления счёта или от возврата из архива. Срок
+-    задан настройкой, а не литералом.
++    Если по счёту оплачено меньше доли BOOKS_ISSUE_PAID_SHARE (50%, issue_unlocked) и payment_clock_started_at
++    старше PAYMENT_ARCHIVE_DAYS (30 дней), заявка уходит в архив с отметкой unpaid. Отсчёт идёт от выставления
++    счёта или от возврата из архива. Срок задан настройкой, а не литералом.
+   kind: timer
+   applies_to:
+   - application.kind=paid
+@@ -496,12 +496,13 @@ rules:
+   - R-BILL-INVOICE-05
+   implemented_by:
+   - symbol: services/billing/public.py::active_books_invoice
+-    lines: 31-45
++    lines: 41-55
+     hash: ec804ecd1ad5
+   - transition: awaiting_payment->archived
+     hash: 6d4d7f1696d6
+   config:
+   - libs/settings.py::PAYMENT_ARCHIVE_DAYS
++  - libs/settings.py::BOOKS_ISSUE_PAID_SHARE
+   tested_by:
+   - tests/test_archive.py::test_unpaid_invoice_goes_to_archive_after_month
+   schema_ref: §5 Архив и попытки
+@@ -520,21 +521,23 @@ rules:
+   - R-BILL-PAYMENT-03
+   implemented_by:
+   - symbol: services/billing/service.py::link_payment
+-    lines: 102-103
+-    hash: 55becc083ced
++    lines: 103-104
++    hash: 85e7ca24dbee
+   enforced_by_db:
+   - constraint: trg_payments_active_invoice
+     hash: b07b6660880b
+   - constraint: forbid_payment_to_cancelled
+     hash: 37992887d11f
+   schema_ref: §11 Счета и платежи
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-BILL-PAYMENT-02
+   title: Оплаченная сумма — сумма действующих платежей без отвязанных и возвращённых
+   text: >
+     paid_amount суммирует платежи счёта, у которых unlinked_at IS NULL и refunded = false. Эта сумма используется
+-    в guard'ах fully_paid, при аннулировании счёта, в архивации по сроку и в подписчиках billing. Триггер
+-    forbid_cancel_paid_invoice использует то же определение.
++    в guard'е issue_paid, при публикации payment.issue_unlocked и payment.fully_paid, при аннулировании
++    счёта, в архивации по сроку и в подписчиках billing. Триггер forbid_cancel_paid_invoice использует
++    то же определение.
+   kind: calculation
+   trigger: symbol:services/billing/public.py::paid_amount
+   effects:
+@@ -552,7 +555,7 @@ rules:
+   - constraint: forbid_cancel_paid_invoice
+     hash: 92060728b12b
+   tested_by:
+-  - tests/test_paid_flow.py::test_partial_payment_does_not_open_issue
++  - tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue
+   schema_ref: §11 Счета и платежи
+   status: draft
+ - id: R-BILL-PAYMENT-03
+@@ -573,8 +576,8 @@ rules:
+   - R-BILL-PAYMENT-04
+   implemented_by:
+   - symbol: services/billing/service.py::link_payment
+-    lines: 104-115
+-    hash: 55becc083ced
++    lines: 105-116
++    hash: 85e7ca24dbee
+   enforced_by_db:
+   - constraint: payments_amount_check
+     hash: 5ddec6c010bb
+@@ -584,17 +587,23 @@ rules:
+   discrepancy: >
+     Схема: привязывает платежи только главный бухгалтер. Код не проверяет роль: chief_id приходит в теле
+     запроса POST /invoices/{invoice_id}/payments и только записывается в linked_by.
+-  status: verified
++  status: suspect
+   verified_at: '2026-10-23'
++  suspect_since: '2026-10-23'
+ - id: R-BILL-PAYMENT-04
+-  title: Полная оплата публикуется один раз — когда сумма впервые достигает суммы счёта
+-  text: >
+-    link_payment публикует payment.fully_paid, только если до платежа оплачено меньше суммы счёта, а после
+-    — не меньше (before < amount <= after). Частичная оплата событие не порождает. Повторные платежи после
+-    полной оплаты тоже не порождают.
++  title: >
++    Доля оплаты счёта за книги и полная оплата публикуются по одному разу — когда сумма впервые достигает
++    порога
++  text: >
++    Для счёта за книги link_payment публикует payment.issue_unlocked, только если до платежа оплачено
++    меньше доли BOOKS_ISSUE_PAID_SHARE (50%) суммы счёта, а после — не меньше (before < threshold <= after).
++    Для счёта любого вида payment.fully_paid публикуется, только если до платежа оплачено меньше суммы
++    счёта, а после — не меньше (before < amount <= after). Платёж, сразу покрывающий весь счёт за книги,
++    порождает оба события. Повторные платежи после достижения порога событие не порождают.
+   kind: effect
+   trigger: symbol:services/billing/service.py::link_payment
+   effects:
++  - event:payment.issue_unlocked
+   - event:payment.fully_paid
+   roles:
+   - chief_accountant
+@@ -603,27 +612,33 @@ rules:
+   - R-BILL-FINE-PAY-01
+   implemented_by:
+   - symbol: services/billing/service.py::link_payment
+-    lines: 116-128
+-    hash: 55becc083ced
++    lines: 117-140
++    hash: 85e7ca24dbee
++  config:
++  - libs/settings.py::BOOKS_ISSUE_PAID_SHARE
+   tested_by:
+-  - tests/test_paid_flow.py::test_partial_payment_does_not_open_issue
++  - tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue
++  - tests/test_paid_flow.py::test_half_payment_opens_issue_and_rest_changes_nothing
++  - tests/test_paid_flow.py::test_fine_invoice_is_settled_only_by_full_payment
+   schema_ref: §9 Виды заявок / Платная
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-BILL-PROCESS-01
+-  title: Полная оплата счёта за книги открывает выдачу и закрывает дубли
++  title: Оплата половины счёта за книги открывает выдачу и закрывает дубли
+   text: >
+-    Подписчик applications on_fully_paid для счёта books переводит заявку из awaiting_payment в awaiting_issue
+-    (actor system), формирует ссылку на запись (mark_ready_for_booking) и закрывает заявки-дубли клиента
+-    по той же сфере (dedup.close_duplicates). Переход awaiting_payment->awaiting_issue защищён guard'ом
+-    fully_paid.
++    Подписчик applications on_issue_unlocked (payment.issue_unlocked, счёт books оплачен не меньше чем
++    на BOOKS_ISSUE_PAID_SHARE = 50%) переводит заявку из awaiting_payment в awaiting_issue (actor system),
++    формирует ссылку на запись (mark_ready_for_booking) и закрывает заявки-дубли клиента по той же сфере
++    (dedup.close_duplicates). Переход awaiting_payment->awaiting_issue защищён guard'ом issue_paid. Доплата
++    остатка этап не меняет.
+   kind: effect
+   applies_to:
+   - application.kind=paid
+-  trigger: event:payment.fully_paid
++  trigger: event:payment.issue_unlocked
+   effects:
+   - transition:awaiting_payment->awaiting_issue
+   - event:application.closed_duplicate
+-  - symbol:services/applications/consumers.py::on_fully_paid
++  - symbol:services/applications/consumers.py::on_issue_unlocked
+   roles:
+   - chief_accountant
+   related:
+@@ -631,22 +646,27 @@ rules:
+   - R-BILL-PROCESS-02
+   - R-BILL-DUPLICATE-01
+   implemented_by:
+-  - symbol: services/applications/consumers.py::on_fully_paid
+-    lines: 31-39
+-    hash: ea8e31c2634d
++  - symbol: services/applications/consumers.py::on_issue_unlocked
++    lines: 32-40
++    hash: 1b698641d00c
+   - transition: awaiting_payment->awaiting_issue
+-    hash: 6fe11e269daf
+-  - guard: guard:fully_paid
++    hash: f7973e35fa90
++  - guard: guard:issue_paid
++  config:
++  - libs/settings.py::BOOKS_ISSUE_PAID_SHARE
+   tested_by:
+   - tests/test_paid_flow.py::test_paid_application_full_path
+-  - tests/test_paid_flow.py::test_partial_payment_does_not_open_issue
++  - tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue
++  - tests/test_paid_flow.py::test_half_payment_opens_issue_and_rest_changes_nothing
++  - tests/test_paid_flow.py::test_half_payment_closes_duplicates
+   schema_ref: §6 Клиент и проверка данных
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-BILL-PROCESS-02
+-  title: 'Guard fully_paid: действующий счёт за книги оплачен полностью'
++  title: 'Guard issue_paid: действующий счёт за книги оплачен не меньше чем наполовину'
+   text: >
+-    Guard fully_paid истинен, если у заявки есть действующий счёт за книги и paid_amount не меньше его
+-    суммы. Им защищён переход awaiting_payment->awaiting_issue.
++    Guard issue_paid истинен, если у заявки есть действующий счёт за книги и paid_amount не меньше доли
++    BOOKS_ISSUE_PAID_SHARE (50%) его суммы (billing.public.issue_unlocked). Им защищён переход awaiting_payment->awaiting_issue.
+   kind: guard
+   applies_to:
+   - application.kind=paid
+@@ -657,17 +677,23 @@ rules:
+   - R-BILL-PROCESS-01
+   - R-BILL-PAYMENT-02
+   implemented_by:
+-  - symbol: services/billing/guards.py::fully_paid
+-    lines: 10-12
+-    hash: cc2b7c6c1da7
+-  - guard: guard:fully_paid
++  - symbol: services/billing/guards.py::issue_paid
++    lines: 11-13
++    hash: ec4adc8c1793
++  - symbol: services/billing/public.py::issue_unlocked
++    lines: 36-37
++    hash: 8cff98c31d3e
++  - guard: guard:issue_paid
+   - transition: awaiting_payment->awaiting_issue
+-    hash: 6fe11e269daf
++    hash: f7973e35fa90
++  config:
++  - libs/settings.py::BOOKS_ISSUE_PAID_SHARE
+   tested_by:
+-  - tests/test_paid_flow.py::test_partial_payment_does_not_open_issue
++  - tests/test_paid_flow.py::test_payment_below_half_does_not_open_issue
+   schema_ref: §9 Виды заявок / Платная
+-  status: verified
++  status: suspect
+   verified_at: '2026-10-23'
++  suspect_since: '2026-10-23'
+ - id: R-BILL-PROCESS-03
+   title: После повторной проверки заявка с действующим счётом идёт сразу в «Ожидает оплаты»
+   text: >
+@@ -685,7 +711,7 @@ rules:
+   - R-BILL-UNARCHIVE-01
+   implemented_by:
+   - symbol: services/billing/guards.py::has_active_invoice
+-    lines: 16-17
++    lines: 17-18
+     hash: e5396f97ac2e
+   - guard: guard:has_active_invoice
+   - transition: on_review->awaiting_payment
+@@ -709,7 +735,7 @@ rules:
+   - R-BILL-PAYMENT-02
+   implemented_by:
+   - symbol: services/billing/service.py::refund_payment
+-    lines: 144-160
++    lines: 156-172
+     hash: 3b8f520a3f85
+   schema_ref: §11 Счета и платежи
+   discrepancy: >
+@@ -734,7 +760,7 @@ rules:
+   - R-BILL-CANCEL-01
+   implemented_by:
+   - symbol: services/billing/service.py::unlink_payment
+-    lines: 133-139
++    lines: 145-151
+     hash: fe6ce419998d
+   enforced_by_db:
+   - constraint: payments_check
+@@ -793,7 +819,7 @@ rules:
+   - R-BILL-INVOICE-07
+   implemented_by:
+   - symbol: services/billing/service.py::create_fine
+-    lines: 165-173
++    lines: 177-185
+     hash: ee1bd44a23f3
+   enforced_by_db:
+   - constraint: fine_rates_amount_check
+@@ -849,7 +875,7 @@ rules:
+   - R-BILL-FINE-INVOICE-02
+   implemented_by:
+   - symbol: services/billing/service.py::issue_fine_invoice
+-    lines: 184-211
++    lines: 196-223
+     hash: dc16f34adba2
+   enforced_by_db:
+   - constraint: invoices_check
+@@ -875,7 +901,7 @@ rules:
+   - R-BILL-ASSIGN-02
+   implemented_by:
+   - symbol: services/billing/service.py::issue_fine_invoice
+-    lines: 181-183
++    lines: 193-195
+     hash: dc16f34adba2
+   schema_ref: §14 Выдача, возврат и штрафы
+   status: draft
+@@ -900,10 +926,11 @@ rules:
+   - R-BILL-FINE-SETTLED-01
+   implemented_by:
+   - symbol: services/billing/service.py::link_payment
+-    lines: 116-119
+-    hash: 55becc083ced
++    lines: 128-131
++    hash: 85e7ca24dbee
+   schema_ref: §14 Выдача, возврат и штрафы
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-BILL-FINE-OUTSIDE-01
+   title: Штраф по заявке в долг гасит закреплённый оператор вне системы
+   text: >
+@@ -923,7 +950,7 @@ rules:
+   - R-BILL-FINE-SETTLED-01
+   implemented_by:
+   - symbol: services/billing/service.py::mark_fine_paid_outside
+-    lines: 220-226
++    lines: 232-238
+     hash: 8cefd5dfd13f
+   schema_ref: §9 Виды заявок / В долг
+   status: verified
+@@ -944,7 +971,7 @@ rules:
+   - R-BILL-FINE-OUTSIDE-01
+   implemented_by:
+   - symbol: services/billing/public.py::open_fines_count
+-    lines: 53-56
++    lines: 63-66
+     hash: ca044c9712a2
+   - guard: guard:settled
+   - transition: books_out->closed
+diff --git a/knowledge/rules/chat.yaml b/knowledge/rules/chat.yaml
+index 43bef1f..1e19ce7 100644
+--- a/knowledge/rules/chat.yaml
++++ b/knowledge/rules/chat.yaml
+@@ -537,7 +537,7 @@ rules:
+ - id: R-CHAT-EVENTS-07
+   title: Часть событий заявки в чат не попадает
+   text: >
+-    Топиков payment.fully_paid, payment.refunded, books.issued, loan.damaged, loan.lost, application.review_passed
++    Топиков payment.issue_unlocked, payment.fully_paid, payment.refunded, books.issued, loan.damaged, loan.lost, application.review_passed
+     и application.ready_for_booking нет в EVENT_TEXT, поэтому в чат они не пишутся. Выдача книг видна
+     только через смену этапа. Отвязка платежа (unlink_payment) и назначение проверяющего или бухгалтера
+     событий не публикуют и в чате тоже не отражаются.
+diff --git a/knowledge/rules/scheduling.yaml b/knowledge/rules/scheduling.yaml
+index a3955d7..2df7ff1 100644
+--- a/knowledge/rules/scheduling.yaml
++++ b/knowledge/rules/scheduling.yaml
+@@ -729,7 +729,7 @@ rules:
+     lines: 248-251
+     hash: 9edf671be6de
+   - symbol: services/applications/consumers.py::on_books_issued
+-    lines: 67-69
++    lines: 68-70
+     hash: 8df2e69239a7
+   - transition: awaiting_issue->books_out
+     hash: 771af805e9ca
+diff --git a/libs/settings.py b/libs/settings.py
+index e4debd2..2ef9150 100644
+--- a/libs/settings.py
++++ b/libs/settings.py
+@@ -1,4 +1,5 @@
+ import os
++from decimal import Decimal
+ 
+ DB_PORT = os.environ.get("DB_PORT", "55432")
+ DATABASE_URL = os.environ.get("DATABASE_URL", f"postgresql+asyncpg://erp:erp@localhost:{DB_PORT}/erp")
+@@ -12,3 +13,6 @@ REVIEW_ARCHIVE_DAYS = 30
+ PAYMENT_ARCHIVE_DAYS = 30
+ # Клиент может перенести или отменить визит не позднее чем за столько дней.
+ CLIENT_RESCHEDULE_MIN_DAYS = 2
++# Доля счёта за книги, после оплаты которой платная заявка переходит к записи на выдачу.
++# Счёт на штраф гасится только полной оплатой.
++BOOKS_ISSUE_PAID_SHARE = Decimal("0.5")
+diff --git a/services/applications/consumers.py b/services/applications/consumers.py
+index 7066240..f907d7b 100644
+--- a/services/applications/consumers.py
++++ b/services/applications/consumers.py
+@@ -27,8 +27,9 @@ async def on_invoice_cancelled(session: AsyncSession, payload: dict[str, Any]) -
+         await bpm.transition(session, app, "awaiting_invoice", actor="system")
+ 
+ 
+-@subscribe("payment.fully_paid")
+-async def on_fully_paid(session: AsyncSession, payload: dict[str, Any]) -> None:
++# @rule R-APP-PAY-03
++@subscribe("payment.issue_unlocked")
++async def on_issue_unlocked(session: AsyncSession, payload: dict[str, Any]) -> None:
+     if payload["invoice_kind"] != "books":
+         return
+     app = await service.load(session, payload["application_id"])
+diff --git a/services/applications/jobs.py b/services/applications/jobs.py
+index 4ac40db..a6ee200 100644
+--- a/services/applications/jobs.py
++++ b/services/applications/jobs.py
+@@ -33,7 +33,7 @@ async def archive_stale(session: AsyncSession, now: datetime) -> list[int]:
+     ).all()
+     for app in awaiting_payment:
+         invoice = await billing.active_books_invoice(session, app.id)
+-        if invoice is None or invoice.paid_amount >= invoice.amount:
++        if invoice is None or billing.issue_unlocked(invoice):
+             continue
+         if invoice.payment_clock_started_at < now - timedelta(days=settings.PAYMENT_ARCHIVE_DAYS):
+             await service.archive(session, app.id, actor="system", outcome="unpaid")
+diff --git a/services/billing/guards.py b/services/billing/guards.py
+index f670542..4675194 100644
+--- a/services/billing/guards.py
++++ b/services/billing/guards.py
+@@ -3,13 +3,14 @@ from typing import Any
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+ from libs.bpm import engine as bpm
+-from services.billing.public import active_books_invoice
++from services.billing.public import active_books_invoice, issue_unlocked
+ 
+ 
+-@bpm.guard("fully_paid")
+-async def fully_paid(session: AsyncSession, app: Any) -> bool:
++# @rule R-BILL-PROCESS-02
++@bpm.guard("issue_paid")
++async def issue_paid(session: AsyncSession, app: Any) -> bool:
+     invoice = await active_books_invoice(session, app.id)
+-    return invoice is not None and invoice.paid_amount >= invoice.amount
++    return invoice is not None and issue_unlocked(invoice)
+ 
+ 
+ @bpm.guard("has_active_invoice")
+diff --git a/services/billing/public.py b/services/billing/public.py
+index 0eedbf6..00d50a0 100644
+--- a/services/billing/public.py
++++ b/services/billing/public.py
+@@ -7,6 +7,7 @@ from decimal import Decimal
+ from sqlalchemy import func, select
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
++from libs import settings
+ from services.billing.models import AccountantAssignment, Fine, Invoice, Payment
+ 
+ 
+@@ -28,6 +29,15 @@ async def paid_amount(session: AsyncSession, invoice_id: int) -> Decimal:
+     return Decimal(total)
+ 
+ 
++def issue_threshold(amount: Decimal) -> Decimal:
++    """Сколько нужно оплатить по счёту за книги, чтобы заявка перешла к записи на выдачу."""
++    return amount * settings.BOOKS_ISSUE_PAID_SHARE
++
++
++def issue_unlocked(invoice: InvoiceBrief) -> bool:
++    return invoice.paid_amount >= issue_threshold(invoice.amount)
++
++
+ async def active_books_invoice(session: AsyncSession, application_id: int) -> InvoiceBrief | None:
+     inv = await session.scalar(
+         select(Invoice).where(
+diff --git a/services/billing/service.py b/services/billing/service.py
+index 9f326e3..9153608 100644
+--- a/services/billing/service.py
++++ b/services/billing/service.py
+@@ -9,7 +9,7 @@ from libs import clock, events
+ from libs.errors import AccessDenied, DomainError, NotFound
+ from services.applications import public as applications
+ from services.billing.models import AccountantAssignment, Fine, FineRate, Invoice, Payment
+-from services.billing.public import paid_amount
++from services.billing.public import issue_threshold, paid_amount
+ 
+ CENT = Decimal("0.01")
+ 
+@@ -95,6 +95,7 @@ async def cancel_invoice(session: AsyncSession, invoice_id: int, reason: str) ->
+     return invoice
+ 
+ 
++# @rule R-BILL-PAYMENT-04
+ async def link_payment(session: AsyncSession, invoice_id: int, amount: Decimal, chief_id: int) -> Payment:
+     invoice = await session.get(Invoice, invoice_id)
+     if invoice is None:
+@@ -113,6 +114,17 @@ async def link_payment(session: AsyncSession, invoice_id: int, amount: Decimal,
+         "payment.linked",
+         {"application_id": invoice.application_id, "invoice_id": invoice.id, "amount": str(amount)},
+     )
++    # Выдачу по счёту за книги открывает оплата доли счёта; событие — в момент, когда доля впервые покрыта.
++    if invoice.kind == "books" and before < issue_threshold(invoice.amount) <= after:
++        events.publish(
++            session,
++            "payment.issue_unlocked",
++            {
++                "application_id": invoice.application_id,
++                "invoice_id": invoice.id,
++                "invoice_kind": invoice.kind,
++            },
++        )
+     if before < invoice.amount <= after:
+         if invoice.kind == "fine":
+             fine = await session.get(Fine, invoice.fine_id)
+diff --git a/tests/knowledge/test_knowledge_tools.py b/tests/knowledge/test_knowledge_tools.py
+index e6c69aa..04d85f8 100644
+--- a/tests/knowledge/test_knowledge_tools.py
++++ b/tests/knowledge/test_knowledge_tools.py
+@@ -98,8 +98,8 @@ def test_event_layer_resolves_dynamic_subscribers() -> None:
+ 
+ def test_bpm_layer_links_guards_and_code() -> None:
+     doc = extract_bpm.extract()
+-    assert ("guard:fully_paid", "services/billing/guards.py::fully_paid") in _edges(doc, "implemented_by")
+-    assert ("awaiting_payment->awaiting_issue", "guard:fully_paid") in _edges(doc, "guarded_by")
++    assert ("guard:issue_paid", "services/billing/guards.py::issue_paid") in _edges(doc, "implemented_by")
++    assert ("awaiting_payment->awaiting_issue", "guard:issue_paid") in _edges(doc, "guarded_by")
+     approve = {dst for src, dst in _edges(doc, "transitions_to") if src.endswith("service.py::approve")}
+     assert approve == {
+         "on_review->awaiting_invoice",
+diff --git a/tests/test_paid_flow.py b/tests/test_paid_flow.py
+index 474bbc5..ee6d959 100644
+--- a/tests/test_paid_flow.py
++++ b/tests/test_paid_flow.py
+@@ -6,6 +6,7 @@ import pytest
+ from libs.errors import DomainError
+ from services.applications import service as apps
+ from services.billing import service as billing
++from services.billing.models import Fine
+ from services.scheduling import service as scheduling
+ from tests.factories import (
+     ACCOUNTANT,
+@@ -22,6 +23,7 @@ from tests.factories import (
+     paid_application,
+     pass_review,
+     pay,
++    read,
+     stage,
+     token,
+ )
+@@ -70,14 +72,56 @@ async def test_invoice_requires_venue_requisites() -> None:
+         await act(billing.issue_books_invoice, app_id, ACCOUNTANT)
+ 
+ 
+-async def test_partial_payment_does_not_open_issue() -> None:
++async def test_payment_below_half_does_not_open_issue() -> None:
+     app_id = await new_application()
+     await pass_review(app_id)
+     inv = await invoice(app_id)
+     await pay(inv, Decimal("50.00"))
+     assert await stage(app_id) == "awaiting_payment"
++    await pay(inv, Decimal("4.99"))
++    assert await stage(app_id) == "awaiting_payment"
++    assert await token(app_id) is None
++    await pay(inv, Decimal("0.01"))  # 55.00 из 110.00 — ровно половина
++    assert await stage(app_id) == "awaiting_issue"
++    assert await token(app_id) is not None
++    assert (await application(app_id)).booking_reached_at is not None
++
++
++async def test_half_payment_opens_issue_and_rest_changes_nothing() -> None:
++    app_id = await new_application()
++    await pass_review(app_id)
++    inv = await invoice(app_id)
+     await pay(inv, Decimal("60.00"))
+     assert await stage(app_id) == "awaiting_issue"
++    first_token = await token(app_id)
++    await pay(inv, Decimal("50.00"))
++    assert await stage(app_id) == "awaiting_issue"
++    assert await token(app_id) == first_token
++
++
++async def test_half_payment_closes_duplicates() -> None:
++    app_id = await new_application()
++    other_id = await new_application()
++    await pass_review(app_id)
++    inv = await invoice(app_id)
++    await pay(inv, Decimal("55.00"))
++    assert await stage(app_id) == "awaiting_issue"
++    assert await stage(other_id) == "closed_duplicate"
++
++
++async def test_fine_invoice_is_settled_only_by_full_payment() -> None:
++    app_id, _ = await paid_application()
++    fine = await act(billing.create_fine, app_id, None, "lost")
++    fine_inv = await act(billing.issue_fine_invoice, fine.id, ACCOUNTANT)
++    await pay(fine_inv, Decimal("300.00"))
++    assert await read(_fine_status, fine.id) == "open"
++    await pay(fine_inv, Decimal("200.00"))
++    assert await read(_fine_status, fine.id) == "paid"
++    assert await stage(app_id) == "awaiting_issue"
++
++
++async def _fine_status(session, fine_id: int) -> str:
++    return (await session.get(Fine, fine_id)).status
+ 
+ 
+ async def test_issue_only_on_booked_date() -> None:

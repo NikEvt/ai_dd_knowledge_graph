@@ -1,0 +1,2 @@
+{"run_id": "20261023-040733-T08-SMB-r0", "task_id": "T08", "variant": "SMB", "repeat": 0,
+ "worker_model": "claude-opus-5-5", "base": "7a0dbb88a8efeda388fb09a2299857e4f3cd75d1", "workdir": "~/work/ai-dd/wt/20261023-040733-T08-SMB-r0"}

@@ -1,0 +1,1616 @@
+diff --git a/migrations/noise/halls.sql b/migrations/noise/halls.sql
+new file mode 100644
+index 0000000..1ecccbf
+--- /dev/null
++++ b/migrations/noise/halls.sql
+@@ -0,0 +1,155 @@
++-- Аренда залов площадок под частные мероприятия.
++CREATE SCHEMA halls;
++
++CREATE TABLE halls.hall_managers (
++    venue_id integer NOT NULL,
++    manager_id integer NOT NULL,
++    PRIMARY KEY (venue_id, manager_id)
++);
++
++CREATE TABLE halls.halls (
++    id serial PRIMARY KEY,
++    venue_id integer NOT NULL,
++    name text NOT NULL,
++    capacity integer NOT NULL CHECK (capacity > 0),
++    hourly_rate numeric(12, 2) NOT NULL CHECK (hourly_rate > 0),
++    active boolean NOT NULL DEFAULT true,
++    UNIQUE (venue_id, name)
++);
++
++CREATE TABLE halls.hall_bookings (
++    id serial PRIMARY KEY,
++    hall_id integer NOT NULL REFERENCES halls.halls (id),
++    venue_id integer NOT NULL,
++    client_ref text NOT NULL CHECK (length(trim(client_ref)) > 0),
++    event_kind text NOT NULL
++        CHECK (event_kind IN ('wedding', 'birthday', 'party', 'corporate', 'conference')),
++    guests integer NOT NULL CHECK (guests > 0),
++    starts_at timestamptz NOT NULL,
++    ends_at timestamptz NOT NULL,
++    status text NOT NULL DEFAULT 'draft'
++        CHECK (status IN ('draft', 'prepaid', 'confirmed', 'held', 'cancelled')),
++    created_by integer NOT NULL,
++    created_at timestamptz NOT NULL,
++    confirmed_at timestamptz,
++    cancelled_at timestamptz,
++    cancel_reason text,
++    CHECK (ends_at > starts_at),
++    CHECK ((status = 'cancelled') = (cancelled_at IS NOT NULL)),
++    CHECK (status NOT IN ('confirmed', 'held') OR confirmed_at IS NOT NULL)
++);
++
++CREATE UNIQUE INDEX hall_bookings_hall_start_uq
++    ON halls.hall_bookings (hall_id, starts_at)
++    WHERE status <> 'cancelled';
++
++CREATE INDEX hall_bookings_status_created_idx ON halls.hall_bookings (status, created_at);
++
++CREATE TABLE halls.hall_booking_history (
++    id serial PRIMARY KEY,
++    booking_id integer NOT NULL REFERENCES halls.hall_bookings (id),
++    old_status text,
++    new_status text NOT NULL,
++    changed_at timestamptz NOT NULL DEFAULT now()
++);
++
++CREATE TABLE halls.hall_invoices (
++    id serial PRIMARY KEY,
++    booking_id integer NOT NULL REFERENCES halls.hall_bookings (id),
++    amount numeric(12, 2) NOT NULL CHECK (amount > 0),
++    status text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'paid', 'void')),
++    issued_at timestamptz NOT NULL,
++    closed_at timestamptz,
++    CHECK ((status = 'open') = (closed_at IS NULL))
++);
++
++-- У брони не больше одного действующего счёта.
++CREATE UNIQUE INDEX hall_invoices_booking_active_uq
++    ON halls.hall_invoices (booking_id)
++    WHERE status <> 'void';
++
++CREATE TABLE halls.hall_payments (
++    id serial PRIMARY KEY,
++    invoice_id integer NOT NULL REFERENCES halls.hall_invoices (id),
++    amount numeric(12, 2) NOT NULL CHECK (amount > 0),
++    external_ref text,
++    recorded_by integer NOT NULL,
++    paid_at timestamptz NOT NULL
++);
++
++CREATE UNIQUE INDEX hall_payments_external_ref_uq
++    ON halls.hall_payments (external_ref)
++    WHERE external_ref IS NOT NULL;
++
++CREATE TABLE halls.hall_templates (
++    id serial PRIMARY KEY,
++    venue_id integer NOT NULL,
++    kind_group text NOT NULL CHECK (kind_group IN ('corporate', 'private')),
++    type text NOT NULL CHECK (type IN ('invoice', 'prepaid', 'confirmed', 'cancel')),
++    body text NOT NULL,
++    UNIQUE (venue_id, kind_group, type)
++);
++
++CREATE TABLE halls.hall_emails (
++    id serial PRIMARY KEY,
++    booking_id integer NOT NULL REFERENCES halls.hall_bookings (id),
++    client_ref text NOT NULL,
++    type text NOT NULL,
++    template_id integer REFERENCES halls.hall_templates (id),
++    body text NOT NULL,
++    status text NOT NULL CHECK (status IN ('sent', 'no_template')),
++    created_at timestamptz NOT NULL
++);
++
++CREATE INDEX hall_emails_booking_idx ON halls.hall_emails (booking_id);
++
++CREATE FUNCTION halls.forbid_venue_change() RETURNS trigger
++LANGUAGE plpgsql AS $$
++BEGIN
++    IF OLD.status IN ('confirmed', 'held') AND NEW.venue_id IS DISTINCT FROM OLD.venue_id THEN
++        RAISE EXCEPTION 'бронь % подтверждена, площадку сменить нельзя', OLD.id
++            USING ERRCODE = 'check_violation';
++    END IF;
++    RETURN NEW;
++END;
++$$;
++
++CREATE TRIGGER trg_hall_bookings_venue_lock
++    BEFORE UPDATE OF venue_id ON halls.hall_bookings
++    FOR EACH ROW EXECUTE FUNCTION halls.forbid_venue_change();
++
++CREATE FUNCTION halls.log_status_change() RETURNS trigger
++LANGUAGE plpgsql AS $$
++BEGIN
++    IF TG_OP = 'INSERT' THEN
++        INSERT INTO halls.hall_booking_history (booking_id, old_status, new_status)
++        VALUES (NEW.id, NULL, NEW.status);
++    ELSIF NEW.status IS DISTINCT FROM OLD.status THEN
++        INSERT INTO halls.hall_booking_history (booking_id, old_status, new_status)
++        VALUES (NEW.id, OLD.status, NEW.status);
++    END IF;
++    RETURN NULL;
++END;
++$$;
++
++CREATE TRIGGER trg_hall_bookings_history
++    AFTER INSERT OR UPDATE OF status ON halls.hall_bookings
++    FOR EACH ROW EXECUTE FUNCTION halls.log_status_change();
++
++CREATE FUNCTION halls.forbid_payment_on_closed_invoice() RETURNS trigger
++LANGUAGE plpgsql AS $$
++DECLARE
++    invoice_status text;
++BEGIN
++    SELECT status INTO invoice_status FROM halls.hall_invoices WHERE id = NEW.invoice_id;
++    IF invoice_status IS DISTINCT FROM 'open' THEN
++        RAISE EXCEPTION 'счёт % закрыт, платёж не принимается', NEW.invoice_id
++            USING ERRCODE = 'check_violation';
++    END IF;
++    RETURN NEW;
++END;
++$$;
++
++CREATE TRIGGER trg_hall_payments_open_invoice
++    BEFORE INSERT ON halls.hall_payments
++    FOR EACH ROW EXECUTE FUNCTION halls.forbid_payment_on_closed_invoice();
+diff --git a/services/halls/__init__.py b/services/halls/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/services/halls/api.py b/services/halls/api.py
+new file mode 100644
+index 0000000..4948492
+--- /dev/null
++++ b/services/halls/api.py
+@@ -0,0 +1,131 @@
++from datetime import datetime
++from decimal import Decimal
++from typing import Annotated
++
++from fastapi import APIRouter, Depends
++from pydantic import BaseModel, Field
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs.web import session
++from services.halls import service
++from services.halls.models import Hall, HallBooking
++
++router = APIRouter(tags=["halls"])
++Session = Annotated[AsyncSession, Depends(session)]
++
++
++class HallIn(BaseModel):
++    manager_id: int
++    name: str
++    capacity: int = Field(gt=0)
++    hourly_rate: Decimal = Field(gt=0)
++
++
++class HallOut(BaseModel):
++    id: int
++    venue_id: int
++    name: str
++    capacity: int
++    hourly_rate: Decimal
++
++    @classmethod
++    def of(cls, h: Hall) -> HallOut:
++        return cls(id=h.id, venue_id=h.venue_id, name=h.name, capacity=h.capacity, hourly_rate=h.hourly_rate)
++
++
++class BookingIn(BaseModel):
++    manager_id: int
++    hall_id: int
++    client_ref: str
++    event_kind: str
++    guests: int
++    starts_at: datetime
++    ends_at: datetime
++
++
++class BookingOut(BaseModel):
++    id: int
++    hall_id: int
++    venue_id: int
++    client_ref: str
++    event_kind: str
++    status: str
++    starts_at: datetime
++    ends_at: datetime
++    invoice_id: int | None
++    amount: Decimal | None
++    paid: Decimal
++
++
++class VenueChangeIn(BaseModel):
++    manager_id: int
++    hall_id: int
++
++
++class PaymentIn(BaseModel):
++    amount: Decimal
++    recorded_by: int
++    external_ref: str | None = None
++
++
++async def _booking_out(s: AsyncSession, b: HallBooking) -> BookingOut:
++    invoice = await service.active_invoice(s, b.id)
++    return BookingOut(
++        id=b.id,
++        hall_id=b.hall_id,
++        venue_id=b.venue_id,
++        client_ref=b.client_ref,
++        event_kind=b.event_kind,
++        status=b.status,
++        starts_at=b.starts_at,
++        ends_at=b.ends_at,
++        invoice_id=invoice.id if invoice else None,
++        amount=invoice.amount if invoice else None,
++        paid=await service.paid_total(s, invoice.id) if invoice else Decimal(0),
++    )
++
++
++@router.get("/venues/{venue_id}/halls")
++async def list_halls(venue_id: int, s: Session) -> list[HallOut]:
++    return [HallOut.of(h) for h in await service.venue_halls(s, venue_id)]
++
++
++@router.post("/venues/{venue_id}/halls", status_code=201)
++async def create_hall(venue_id: int, body: HallIn, s: Session) -> HallOut:
++    hall = await service.create_hall(
++        s,
++        manager_id=body.manager_id,
++        venue_id=venue_id,
++        name=body.name,
++        capacity=body.capacity,
++        hourly_rate=body.hourly_rate,
++    )
++    return HallOut.of(hall)
++
++
++@router.post("/bookings", status_code=201)
++async def create_booking(body: BookingIn, s: Session) -> BookingOut:
++    b = await service.create_booking(s, **body.model_dump())
++    return await _booking_out(s, b)
++
++
++@router.get("/bookings/{booking_id}")
++async def get_booking(booking_id: int, s: Session) -> BookingOut:
++    return await _booking_out(s, await service.get_booking(s, booking_id))
++
++
++@router.post("/bookings/{booking_id}/venue")
++async def change_venue(booking_id: int, body: VenueChangeIn, s: Session) -> BookingOut:
++    b = await service.change_venue(s, booking_id, body.manager_id, body.hall_id)
++    return await _booking_out(s, b)
++
++
++@router.delete("/bookings/{booking_id}")
++async def cancel_booking(booking_id: int, manager_id: int, s: Session) -> None:
++    await service.cancel_booking(s, booking_id, manager_id)
++
++
++@router.post("/invoices/{invoice_id}/payments", status_code=201)
++async def record_payment(invoice_id: int, body: PaymentIn, s: Session) -> dict[str, int]:
++    p = await service.record_payment(s, invoice_id, body.amount, body.recorded_by, body.external_ref)
++    return {"payment_id": p.id}
+diff --git a/services/halls/app.py b/services/halls/app.py
+new file mode 100644
+index 0000000..685c028
+--- /dev/null
++++ b/services/halls/app.py
+@@ -0,0 +1,10 @@
++from fastapi import FastAPI
++
++from libs.web import install_error_handlers
++from services import wiring
++from services.halls.api import router
++
++wiring.load()
++app = FastAPI(title="halls")
++app.include_router(router)
++install_error_handlers(app)
+diff --git a/services/halls/consumers.py b/services/halls/consumers.py
+new file mode 100644
+index 0000000..1c0f68c
+--- /dev/null
++++ b/services/halls/consumers.py
+@@ -0,0 +1,37 @@
++from typing import Any
++
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs.events import subscribe
++from services.halls import service
++
++
++@subscribe("halls.invoice_issued")
++async def on_invoice_issued(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.send_email(session, payload["booking_id"], "invoice", {"amount": payload["amount"]})
++
++
++@subscribe("halls.payment_received")
++async def on_payment_received(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.apply_payments(session, payload["booking_id"])
++
++
++@subscribe("halls.booking_prepaid")
++async def on_booking_prepaid(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.send_email(session, payload["booking_id"], "prepaid", {"paid": payload["paid"]})
++
++
++@subscribe("halls.booking_confirmed")
++async def on_booking_confirmed(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.send_email(session, payload["booking_id"], "confirmed")
++
++
++@subscribe("halls.venue_changed")
++async def on_venue_changed(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.reissue_invoice(session, payload["booking_id"])
++
++
++@subscribe("halls.booking_cancelled")
++async def on_booking_cancelled(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.void_invoice(session, payload["booking_id"])
++    await service.send_email(session, payload["booking_id"], "cancel", {"reason": payload["reason"]})
+diff --git a/services/halls/jobs.py b/services/halls/jobs.py
+new file mode 100644
+index 0000000..be613e9
+--- /dev/null
++++ b/services/halls/jobs.py
+@@ -0,0 +1,39 @@
++from datetime import datetime, timedelta
++
++from sqlalchemy import select
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from services.halls import service, settings
++from services.halls.models import HallBooking
++
++
++async def cancel_unpaid(session: AsyncSession, now: datetime) -> list[int]:
++    """Отменяет брони, по которым так и не внесли предоплату."""
++    bookings = (
++        await session.scalars(
++            select(HallBooking)
++            .where(
++                HallBooking.status == "draft",
++                HallBooking.created_at <= now - timedelta(days=settings.UNPAID_CANCEL_DAYS),
++            )
++            .order_by(HallBooking.id)
++            .with_for_update(skip_locked=True)
++        )
++    ).all()
++    for booking in bookings:
++        await service.cancel_unpaid(session, booking, now)
++    return [b.id for b in bookings]
++
++
++async def close_past_events(session: AsyncSession, now: datetime) -> list[int]:
++    """Подтверждённые брони, чьё мероприятие закончилось, переводятся в «проведено»."""
++    bookings = (
++        await session.scalars(
++            select(HallBooking)
++            .where(HallBooking.status == "confirmed", HallBooking.ends_at <= now)
++            .order_by(HallBooking.id)
++        )
++    ).all()
++    for booking in bookings:
++        await service.mark_held(session, booking)
++    return [b.id for b in bookings]
+diff --git a/services/halls/models.py b/services/halls/models.py
+new file mode 100644
+index 0000000..09b08ec
+--- /dev/null
++++ b/services/halls/models.py
+@@ -0,0 +1,113 @@
++from datetime import datetime
++from decimal import Decimal
++
++from sqlalchemy import ForeignKey
++from sqlalchemy.orm import Mapped, mapped_column
++
++from libs.db import Base
++
++SCHEMA = {"schema": "halls"}
++
++
++class HallManager(Base):
++    """Менеджер, закреплённый за площадкой: ведёт её залы и брони."""
++
++    __tablename__ = "hall_managers"
++    __table_args__ = SCHEMA
++
++    venue_id: Mapped[int] = mapped_column(primary_key=True)
++    manager_id: Mapped[int] = mapped_column(primary_key=True)
++
++
++class Hall(Base):
++    __tablename__ = "halls"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    venue_id: Mapped[int]
++    name: Mapped[str]
++    capacity: Mapped[int]
++    hourly_rate: Mapped[Decimal]
++    active: Mapped[bool] = mapped_column(default=True)
++
++
++class HallBooking(Base):
++    __tablename__ = "hall_bookings"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    hall_id: Mapped[int] = mapped_column(ForeignKey("halls.halls.id"))
++    venue_id: Mapped[int]
++    client_ref: Mapped[str]
++    event_kind: Mapped[str]
++    guests: Mapped[int]
++    starts_at: Mapped[datetime]
++    ends_at: Mapped[datetime]
++    status: Mapped[str] = mapped_column(default="draft")
++    created_by: Mapped[int]
++    created_at: Mapped[datetime]
++    confirmed_at: Mapped[datetime | None]
++    cancelled_at: Mapped[datetime | None]
++    cancel_reason: Mapped[str | None]
++
++
++class BookingHistory(Base):
++    """Заполняется триггером при каждой смене статуса брони."""
++
++    __tablename__ = "hall_booking_history"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    booking_id: Mapped[int] = mapped_column(ForeignKey("halls.hall_bookings.id"))
++    old_status: Mapped[str | None]
++    new_status: Mapped[str]
++    changed_at: Mapped[datetime]
++
++
++class HallInvoice(Base):
++    __tablename__ = "hall_invoices"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    booking_id: Mapped[int] = mapped_column(ForeignKey("halls.hall_bookings.id"))
++    amount: Mapped[Decimal]
++    status: Mapped[str] = mapped_column(default="open")
++    issued_at: Mapped[datetime]
++    closed_at: Mapped[datetime | None]
++
++
++class HallPayment(Base):
++    __tablename__ = "hall_payments"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    invoice_id: Mapped[int] = mapped_column(ForeignKey("halls.hall_invoices.id"))
++    amount: Mapped[Decimal]
++    external_ref: Mapped[str | None]
++    recorded_by: Mapped[int]
++    paid_at: Mapped[datetime]
++
++
++class HallTemplate(Base):
++    __tablename__ = "hall_templates"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    venue_id: Mapped[int]
++    kind_group: Mapped[str]
++    type: Mapped[str]
++    body: Mapped[str]
++
++
++class HallEmail(Base):
++    __tablename__ = "hall_emails"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    booking_id: Mapped[int] = mapped_column(ForeignKey("halls.hall_bookings.id"))
++    client_ref: Mapped[str]
++    type: Mapped[str]
++    template_id: Mapped[int | None] = mapped_column(ForeignKey("halls.hall_templates.id"))
++    body: Mapped[str]
++    status: Mapped[str]
++    created_at: Mapped[datetime]
+diff --git a/services/halls/service.py b/services/halls/service.py
+new file mode 100644
+index 0000000..d01fe4d
+--- /dev/null
++++ b/services/halls/service.py
+@@ -0,0 +1,456 @@
++"""Залы площадок, бронирование под мероприятия, счета и оплата аренды."""
++
++from datetime import datetime, timedelta
++from decimal import Decimal
++from string import Template as Text
++from typing import Any
++
++from sqlalchemy import func, select, update
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs import clock, events
++from libs.errors import AccessDenied, DomainError, NotFound
++from services.halls import settings
++from services.halls.models import (
++    Hall,
++    HallBooking,
++    HallEmail,
++    HallInvoice,
++    HallManager,
++    HallPayment,
++    HallTemplate,
++)
++
++CENT = Decimal("0.01")
++
++
++async def _require_manager(session: AsyncSession, venue_id: int, manager_id: int) -> None:
++    if await session.get(HallManager, (venue_id, manager_id)) is None:
++        raise AccessDenied("менеджер не закреплён за площадкой")
++
++
++async def _hall(session: AsyncSession, hall_id: int) -> Hall:
++    hall = await session.get(Hall, hall_id)
++    if hall is None:
++        raise NotFound(f"зал {hall_id}")
++    return hall
++
++
++async def get_booking(session: AsyncSession, booking_id: int) -> HallBooking:
++    booking = await session.get(HallBooking, booking_id)
++    if booking is None:
++        raise NotFound(f"бронь {booking_id}")
++    return booking
++
++
++# --- Залы ---
++
++
++async def create_hall(
++    session: AsyncSession,
++    *,
++    manager_id: int,
++    venue_id: int,
++    name: str,
++    capacity: int,
++    hourly_rate: Decimal,
++) -> Hall:
++    await _require_manager(session, venue_id, manager_id)
++    name = name.strip()
++    if not name:
++        raise DomainError("у зала должно быть название")
++    taken = await session.scalar(select(Hall.id).where(Hall.venue_id == venue_id, Hall.name == name))
++    if taken is not None:
++        raise DomainError(f"на площадке уже есть зал «{name}»")
++    hall = Hall(venue_id=venue_id, name=name, capacity=capacity, hourly_rate=hourly_rate)
++    session.add(hall)
++    await session.flush()
++    return hall
++
++
++async def deactivate_hall(session: AsyncSession, hall_id: int, manager_id: int) -> Hall:
++    hall = await _hall(session, hall_id)
++    await _require_manager(session, hall.venue_id, manager_id)
++    upcoming = await session.scalar(
++        select(func.count()).where(
++            HallBooking.hall_id == hall_id,
++            HallBooking.status.in_(settings.ACTIVE_STATUSES),
++            HallBooking.ends_at > clock.now(),
++        )
++    )
++    if upcoming:
++        raise DomainError("в зале есть предстоящие брони — сначала перенесите или отмените их")
++    hall.active = False
++    return hall
++
++
++async def venue_halls(session: AsyncSession, venue_id: int) -> list[Hall]:
++    rows = await session.scalars(
++        select(Hall).where(Hall.venue_id == venue_id, Hall.active.is_(True)).order_by(Hall.name)
++    )
++    return list(rows.all())
++
++
++# --- Бронирование ---
++
++
++def _check_period(starts_at: datetime, ends_at: datetime) -> None:
++    now = clock.now()
++    if starts_at - now < timedelta(days=settings.MIN_LEAD_DAYS):
++        raise DomainError(f"зал бронируется не позднее чем за {settings.MIN_LEAD_DAYS} дн. до мероприятия")
++    if starts_at - now > timedelta(days=settings.BOOKING_HORIZON_DAYS):
++        raise DomainError("слишком далёкая дата мероприятия")
++    duration = ends_at - starts_at
++    if duration < timedelta(hours=settings.MIN_DURATION_HOURS):
++        raise DomainError(f"минимальная аренда — {settings.MIN_DURATION_HOURS} ч")
++    if duration > timedelta(hours=settings.MAX_DURATION_HOURS):
++        raise DomainError(f"максимальная аренда — {settings.MAX_DURATION_HOURS} ч")
++
++
++async def _check_hall_free(
++    session: AsyncSession,
++    hall: Hall,
++    starts_at: datetime,
++    ends_at: datetime,
++    exclude_id: int | None = None,
++) -> None:
++    gap = timedelta(minutes=settings.CLEANUP_MINUTES)
++    query = select(HallBooking.id).where(
++        HallBooking.hall_id == hall.id,
++        HallBooking.status.in_(settings.ACTIVE_STATUSES),
++        HallBooking.starts_at < ends_at + gap,
++        HallBooking.ends_at + gap > starts_at,
++    )
++    if exclude_id is not None:
++        query = query.where(HallBooking.id != exclude_id)
++    if await session.scalar(query.limit(1)) is not None:
++        raise DomainError(f"зал «{hall.name}» занят в это время")
++
++
++def _check_fits(hall: Hall, guests: int) -> None:
++    if not hall.active:
++        raise DomainError(f"зал «{hall.name}» не сдаётся")
++    if guests > hall.capacity:
++        raise DomainError(f"зал «{hall.name}» вмещает не больше {hall.capacity} гостей")
++
++
++def rent_amount(hall: Hall, starts_at: datetime, ends_at: datetime) -> Decimal:
++    minutes = Decimal(int((ends_at - starts_at).total_seconds() // 60))
++    return (hall.hourly_rate * minutes / 60).quantize(CENT)
++
++
++async def create_booking(
++    session: AsyncSession,
++    *,
++    manager_id: int,
++    hall_id: int,
++    client_ref: str,
++    event_kind: str,
++    guests: int,
++    starts_at: datetime,
++    ends_at: datetime,
++) -> HallBooking:
++    hall = await _hall(session, hall_id)
++    await _require_manager(session, hall.venue_id, manager_id)
++    if event_kind not in settings.EVENT_KINDS:
++        raise DomainError(f"неизвестный вид мероприятия: {event_kind}")
++    if guests <= 0:
++        raise DomainError("число гостей должно быть положительным")
++    _check_fits(hall, guests)
++    _check_period(starts_at, ends_at)
++    await _check_hall_free(session, hall, starts_at, ends_at)
++
++    booking = HallBooking(
++        hall_id=hall.id,
++        venue_id=hall.venue_id,
++        client_ref=client_ref,
++        event_kind=event_kind,
++        guests=guests,
++        starts_at=starts_at,
++        ends_at=ends_at,
++        status="draft",
++        created_by=manager_id,
++        created_at=clock.now(),
++    )
++    session.add(booking)
++    await session.flush()
++    events.publish(
++        session,
++        "halls.booking_created",
++        {
++            "booking_id": booking.id,
++            "hall_id": hall.id,
++            "venue_id": hall.venue_id,
++            "starts_at": starts_at.isoformat(),
++        },
++    )
++    await issue_invoice(session, booking, hall)
++    return booking
++
++
++async def change_venue(
++    session: AsyncSession, booking_id: int, manager_id: int, new_hall_id: int
++) -> HallBooking:
++    """Перенос брони в зал другой площадки. Счёт перевыставляется по ставке нового зала."""
++    booking = await get_booking(session, booking_id)
++    await _require_manager(session, booking.venue_id, manager_id)
++    if booking.status not in ("draft", "prepaid"):
++        raise DomainError("площадку можно сменить только до подтверждения брони")
++    hall = await _hall(session, new_hall_id)
++    if hall.venue_id == booking.venue_id:
++        raise DomainError("зал находится на той же площадке")
++    _check_fits(hall, booking.guests)
++    await _check_hall_free(session, hall, booking.starts_at, booking.ends_at, exclude_id=booking.id)
++
++    old_venue_id = booking.venue_id
++    booking.hall_id = hall.id
++    booking.venue_id = hall.venue_id
++    await session.flush()
++    events.publish(
++        session,
++        "halls.venue_changed",
++        {"booking_id": booking.id, "old_venue_id": old_venue_id, "venue_id": hall.venue_id},
++    )
++    return booking
++
++
++async def _cancel(session: AsyncSession, booking: HallBooking, *, reason: str, at: datetime) -> None:
++    booking.status = "cancelled"
++    booking.cancelled_at = at
++    booking.cancel_reason = reason
++    events.publish(
++        session,
++        "halls.booking_cancelled",
++        {
++            "booking_id": booking.id,
++            "venue_id": booking.venue_id,
++            "starts_at": booking.starts_at.isoformat(),
++            "reason": reason,
++        },
++    )
++
++
++async def cancel_booking(
++    session: AsyncSession, booking_id: int, manager_id: int, reason: str = "client_request"
++) -> HallBooking:
++    booking = await get_booking(session, booking_id)
++    await _require_manager(session, booking.venue_id, manager_id)
++    if booking.status == "cancelled":
++        raise DomainError("бронь уже отменена")
++    if booking.status == "held":
++        raise DomainError("мероприятие уже прошло")
++    await _cancel(session, booking, reason=reason, at=clock.now())
++    return booking
++
++
++async def cancel_unpaid(session: AsyncSession, booking: HallBooking, now: datetime) -> None:
++    await _cancel(session, booking, reason="unpaid", at=now)
++
++
++async def mark_held(session: AsyncSession, booking: HallBooking) -> None:
++    booking.status = "held"
++    events.publish(
++        session,
++        "halls.booking_held",
++        {"booking_id": booking.id, "venue_id": booking.venue_id, "hall_id": booking.hall_id},
++    )
++
++
++# --- Счета и оплата ---
++
++
++async def active_invoice(session: AsyncSession, booking_id: int) -> HallInvoice | None:
++    return await session.scalar(
++        select(HallInvoice).where(HallInvoice.booking_id == booking_id, HallInvoice.status != "void")
++    )
++
++
++async def paid_total(session: AsyncSession, invoice_id: int) -> Decimal:
++    total = await session.scalar(
++        select(func.coalesce(func.sum(HallPayment.amount), 0)).where(HallPayment.invoice_id == invoice_id)
++    )
++    return Decimal(total)
++
++
++async def is_fully_paid(session: AsyncSession, invoice: HallInvoice) -> bool:
++    return await paid_total(session, invoice.id) >= invoice.amount
++
++
++async def issue_invoice(session: AsyncSession, booking: HallBooking, hall: Hall) -> HallInvoice:
++    invoice = HallInvoice(
++        booking_id=booking.id,
++        amount=rent_amount(hall, booking.starts_at, booking.ends_at),
++        status="open",
++        issued_at=clock.now(),
++    )
++    session.add(invoice)
++    await session.flush()
++    events.publish(
++        session,
++        "halls.invoice_issued",
++        {"booking_id": booking.id, "invoice_id": invoice.id, "amount": str(invoice.amount)},
++    )
++    return invoice
++
++
++async def reissue_invoice(session: AsyncSession, booking_id: int) -> HallInvoice | None:
++    """Аннулирует действующий счёт брони и выставляет новый; принятые платежи переходят в новый счёт."""
++    booking = await get_booking(session, booking_id)
++    if booking.status not in ("draft", "prepaid"):
++        return None
++    old = await active_invoice(session, booking.id)
++    if old is not None:
++        old.status = "void"
++        old.closed_at = clock.now()
++        await session.flush()
++    invoice = await issue_invoice(session, booking, await _hall(session, booking.hall_id))
++    if old is not None:
++        await session.execute(
++            update(HallPayment).where(HallPayment.invoice_id == old.id).values(invoice_id=invoice.id)
++        )
++        if await is_fully_paid(session, invoice):
++            invoice.status = "paid"
++            invoice.closed_at = clock.now()
++        events.publish(
++            session, "halls.payment_received", {"booking_id": booking.id, "invoice_id": invoice.id}
++        )
++    return invoice
++
++
++async def void_invoice(session: AsyncSession, booking_id: int) -> None:
++    invoice = await active_invoice(session, booking_id)
++    if invoice is not None and invoice.status == "open":
++        invoice.status = "void"
++        invoice.closed_at = clock.now()
++
++
++async def record_payment(
++    session: AsyncSession,
++    invoice_id: int,
++    amount: Decimal,
++    recorded_by: int,
++    external_ref: str | None = None,
++) -> HallPayment:
++    invoice = await session.get(HallInvoice, invoice_id)
++    if invoice is None:
++        raise NotFound(f"счёт {invoice_id}")
++    if invoice.status != "open":
++        raise DomainError("счёт закрыт, платёж принять нельзя")
++    booking = await get_booking(session, invoice.booking_id)
++    if booking.status == "cancelled":
++        raise DomainError("бронь отменена, платёж принять нельзя")
++    if amount <= 0:
++        raise DomainError("сумма платежа должна быть положительной")
++    if external_ref is not None:
++        dup = await session.scalar(select(HallPayment.id).where(HallPayment.external_ref == external_ref))
++        if dup is not None:
++            raise DomainError(f"платёж {external_ref} уже учтён")
++    rest = invoice.amount - await paid_total(session, invoice.id)
++    if amount > rest:
++        raise DomainError(f"сумма больше остатка по счёту ({rest})")
++
++    payment = HallPayment(
++        invoice_id=invoice.id,
++        amount=amount,
++        external_ref=external_ref,
++        recorded_by=recorded_by,
++        paid_at=clock.now(),
++    )
++    session.add(payment)
++    await session.flush()
++    if await is_fully_paid(session, invoice):
++        invoice.status = "paid"
++        invoice.closed_at = clock.now()
++    events.publish(
++        session,
++        "halls.payment_received",
++        {"booking_id": booking.id, "invoice_id": invoice.id, "amount": str(amount)},
++    )
++    return payment
++
++
++async def apply_payments(session: AsyncSession, booking_id: int) -> HallBooking:
++    """Пересчитывает статус брони по оплате действующего счёта."""
++    booking = await get_booking(session, booking_id)
++    if booking.status not in ("draft", "prepaid"):
++        return booking
++    invoice = await active_invoice(session, booking.id)
++    if invoice is None:
++        return booking
++    paid = await paid_total(session, invoice.id)
++    payload = {"booking_id": booking.id, "venue_id": booking.venue_id, "invoice_id": invoice.id}
++    if await is_fully_paid(session, invoice):
++        booking.status = "confirmed"
++        booking.confirmed_at = clock.now()
++        events.publish(session, "halls.booking_confirmed", payload)
++    elif paid >= invoice.amount * settings.PREPAY_SHARE:
++        if booking.status == "draft":
++            booking.status = "prepaid"
++            events.publish(session, "halls.booking_prepaid", payload | {"paid": str(paid)})
++    elif booking.status == "prepaid":
++        # После перевыставления счёта внесённого может не хватать на предоплату.
++        booking.status = "draft"
++    return booking
++
++
++# --- Письма клиенту ---
++
++
++async def set_template(
++    session: AsyncSession, *, manager_id: int, venue_id: int, kind_group: str, type_: str, body: str
++) -> HallTemplate:
++    await _require_manager(session, venue_id, manager_id)
++    if kind_group not in set(settings.TEMPLATE_GROUP.values()):
++        raise DomainError(f"неизвестная группа шаблонов: {kind_group}")
++    tpl = await session.scalar(
++        select(HallTemplate).where(
++            HallTemplate.venue_id == venue_id,
++            HallTemplate.kind_group == kind_group,
++            HallTemplate.type == type_,
++        )
++    )
++    if tpl is None:
++        tpl = HallTemplate(venue_id=venue_id, kind_group=kind_group, type=type_, body=body)
++        session.add(tpl)
++    else:
++        tpl.body = body
++    await session.flush()
++    return tpl
++
++
++async def find_template(
++    session: AsyncSession, venue_id: int, event_kind: str, type_: str
++) -> HallTemplate | None:
++    return await session.scalar(
++        select(HallTemplate).where(
++            HallTemplate.venue_id == venue_id,
++            HallTemplate.kind_group == settings.TEMPLATE_GROUP[event_kind],
++            HallTemplate.type == type_,
++        )
++    )
++
++
++async def send_email(
++    session: AsyncSession, booking_id: int, type_: str, extra: dict[str, Any] | None = None
++) -> HallEmail:
++    booking = await get_booking(session, booking_id)
++    hall = await _hall(session, booking.hall_id)
++    tpl = await find_template(session, booking.venue_id, booking.event_kind, type_)
++    context = {
++        "hall": hall.name,
++        "starts_at": booking.starts_at.strftime("%d.%m.%Y %H:%M"),
++        "guests": booking.guests,
++        **(extra or {}),
++    }
++    email = HallEmail(
++        booking_id=booking.id,
++        client_ref=booking.client_ref,
++        type=type_,
++        template_id=tpl.id if tpl else None,
++        body=Text(tpl.body).safe_substitute(context) if tpl else "",
++        status="sent" if tpl else "no_template",
++        created_at=clock.now(),
++    )
++    session.add(email)
++    await session.flush()
++    return email
+diff --git a/services/halls/settings.py b/services/halls/settings.py
+new file mode 100644
+index 0000000..76c19c0
+--- /dev/null
++++ b/services/halls/settings.py
+@@ -0,0 +1,28 @@
++from decimal import Decimal
++
++# Доля счёта, после оплаты которой бронь считается предоплаченной.
++PREPAY_SHARE = Decimal("0.5")
++# Бронь без предоплаты отменяется через столько дней после создания.
++UNPAID_CANCEL_DAYS = 30
++# Бронировать зал можно не раньше чем за столько дней до мероприятия...
++MIN_LEAD_DAYS = 2
++# ...и не дальше чем на столько дней вперёд.
++BOOKING_HORIZON_DAYS = 365
++# Длительность аренды, часы.
++MIN_DURATION_HOURS = 2
++MAX_DURATION_HOURS = 12
++# Время на уборку зала между мероприятиями.
++CLEANUP_MINUTES = 60
++
++# Группа шаблонов писем по виду мероприятия.
++TEMPLATE_GROUP = {
++    "wedding": "private",
++    "birthday": "private",
++    "party": "private",
++    "corporate": "corporate",
++    "conference": "corporate",
++}
++EVENT_KINDS = tuple(TEMPLATE_GROUP)
++
++# Статусы, в которых бронь занимает зал.
++ACTIVE_STATUSES = ("draft", "prepaid", "confirmed")
+diff --git a/tests/halls_factories.py b/tests/halls_factories.py
+new file mode 100644
+index 0000000..bb12e50
+--- /dev/null
++++ b/tests/halls_factories.py
+@@ -0,0 +1,142 @@
++"""Данные и типовые шаги сервиса аренды залов для тестов."""
++
++from datetime import datetime, timedelta
++from decimal import Decimal
++
++from sqlalchemy import select
++
++from libs import db
++from services.halls import service as halls
++from services.halls.models import (
++    BookingHistory,
++    Hall,
++    HallBooking,
++    HallEmail,
++    HallInvoice,
++    HallManager,
++    HallTemplate,
++)
++from tests.factories import T0, act, read
++
++# Площадки — просто номера, ядро про них не знает.
++CENTER, RIVER, LOFT = 11, 12, 13
++MANAGER = {CENTER: 801, RIVER: 802, LOFT: 803}
++ACCOUNTANT = 901
++
++WHITE_HALL, CHAMBER_HALL, PANORAMA_HALL, LOFT_HALL = 1, 2, 3, 4
++
++EVENT_START = T0 + timedelta(days=20, hours=6)  # 22 марта, 15:00 UTC
++EVENT_END = EVENT_START + timedelta(hours=4)
++
++
++async def seed_halls() -> None:
++    async with db.sessionmaker().begin() as s:
++        s.add_all([HallManager(venue_id=v, manager_id=m) for v, m in MANAGER.items()])
++        s.add_all(
++            [
++                Hall(
++                    id=WHITE_HALL, venue_id=CENTER, name="Белый зал", capacity=80, hourly_rate=Decimal(5000)
++                ),
++                Hall(
++                    id=CHAMBER_HALL, venue_id=CENTER, name="Камерный", capacity=20, hourly_rate=Decimal(2000)
++                ),
++                Hall(
++                    id=PANORAMA_HALL, venue_id=RIVER, name="Панорама", capacity=120, hourly_rate=Decimal(6000)
++                ),
++                Hall(id=LOFT_HALL, venue_id=LOFT, name="Лофт", capacity=40, hourly_rate=Decimal(3000)),
++            ]
++        )
++        for venue_id in (CENTER, RIVER):
++            for group in ("corporate", "private"):
++                for type_ in ("invoice", "prepaid", "confirmed", "cancel"):
++                    s.add(
++                        HallTemplate(
++                            venue_id=venue_id,
++                            kind_group=group,
++                            type=type_,
++                            body=f"V{venue_id} {group} {type_}: $hall $starts_at",
++                        )
++                    )
++    async with db.engine().begin() as conn:
++        await conn.exec_driver_sql("SELECT setval(pg_get_serial_sequence('halls.halls', 'id'), 100)")
++
++
++async def new_booking(
++    *,
++    hall: int = WHITE_HALL,
++    client: str = "client:anna",
++    kind: str = "wedding",
++    guests: int = 50,
++    starts_at: datetime = EVENT_START,
++    ends_at: datetime | None = None,
++    manager: int | None = None,
++) -> HallBooking:
++    hall_obj = await read(lambda s: s.get(Hall, hall))
++    return await act(
++        halls.create_booking,
++        manager_id=manager or MANAGER[hall_obj.venue_id],
++        hall_id=hall,
++        client_ref=client,
++        event_kind=kind,
++        guests=guests,
++        starts_at=starts_at,
++        ends_at=ends_at or starts_at + (EVENT_END - EVENT_START),
++    )
++
++
++async def booking(booking_id: int) -> HallBooking:
++    return await read(halls.get_booking, booking_id)
++
++
++async def status(booking_id: int) -> str:
++    return (await booking(booking_id)).status
++
++
++async def invoice(booking_id: int) -> HallInvoice:
++    return await read(halls.active_invoice, booking_id)
++
++
++async def pay(booking_id: int, amount: Decimal | None = None, ref: str | None = None) -> None:
++    inv = await invoice(booking_id)
++    await act(halls.record_payment, inv.id, inv.amount if amount is None else amount, ACCOUNTANT, ref)
++
++
++async def prepay(booking_id: int) -> None:
++    inv = await invoice(booking_id)
++    await pay(booking_id, inv.amount / 2)
++
++
++async def emails(booking_id: int) -> list[HallEmail]:
++    async def q(s):
++        rows = await s.scalars(
++            select(HallEmail).where(HallEmail.booking_id == booking_id).order_by(HallEmail.id)
++        )
++        return list(rows.all())
++
++    return await read(q)
++
++
++async def email_types(booking_id: int) -> list[str]:
++    return [e.type for e in await emails(booking_id)]
++
++
++async def history(booking_id: int) -> list[tuple[str | None, str]]:
++    async def q(s):
++        rows = await s.execute(
++            select(BookingHistory.old_status, BookingHistory.new_status)
++            .where(BookingHistory.booking_id == booking_id)
++            .order_by(BookingHistory.id)
++        )
++        return [tuple(r) for r in rows.all()]
++
++    return await read(q)
++
++
++async def invoices(booking_id: int) -> list[HallInvoice]:
++    async def q(s):
++        rows = await s.scalars(
++            select(HallInvoice).where(HallInvoice.booking_id == booking_id).order_by(HallInvoice.id)
++        )
++        return list(rows.all())
++
++    return await read(q)
+diff --git a/tests/test_halls_api.py b/tests/test_halls_api.py
+new file mode 100644
+index 0000000..00f9007
+--- /dev/null
++++ b/tests/test_halls_api.py
+@@ -0,0 +1,64 @@
++import httpx
++import pytest
++
++from libs import events
++from services.halls.app import app
++from tests.halls_factories import (
++    ACCOUNTANT,
++    CENTER,
++    EVENT_END,
++    EVENT_START,
++    MANAGER,
++    PANORAMA_HALL,
++    email_types,
++    seed_halls,
++)
++
++
++@pytest.fixture(autouse=True)
++async def halls_data(world: None) -> None:
++    await seed_halls()
++
++
++@pytest.fixture
++async def client():
++    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://halls") as c:
++        yield c
++
++
++async def test_booking_lifecycle_over_http(client: httpx.AsyncClient) -> None:
++    r = await client.post(
++        "/bookings",
++        json={
++            "manager_id": MANAGER[CENTER],
++            "hall_id": 1,
++            "client_ref": "client:anna",
++            "event_kind": "birthday",
++            "guests": 30,
++            "starts_at": EVENT_START.isoformat(),
++            "ends_at": EVENT_END.isoformat(),
++        },
++    )
++    assert r.status_code == 201, r.text
++    created = r.json()
++    assert (created["status"], created["amount"]) == ("draft", "20000.00")
++
++    r = await client.post(
++        f"/invoices/{created['invoice_id']}/payments",
++        json={"amount": "20000", "recorded_by": ACCOUNTANT, "external_ref": "bank-1"},
++    )
++    assert r.status_code == 201
++    await events.dispatch_pending()
++
++    r = await client.get(f"/bookings/{created['id']}")
++    assert (r.json()["status"], r.json()["paid"]) == ("confirmed", "20000.00")
++    assert await email_types(created["id"]) == ["invoice", "confirmed"]
++
++    r = await client.post(
++        f"/bookings/{created['id']}/venue", json={"manager_id": MANAGER[CENTER], "hall_id": PANORAMA_HALL}
++    )
++    assert r.status_code == 409
++    assert "до подтверждения" in r.json()["detail"]
++
++    r = await client.delete(f"/bookings/{created['id']}", params={"manager_id": 999})
++    assert r.status_code == 403
+diff --git a/tests/test_halls_booking.py b/tests/test_halls_booking.py
+new file mode 100644
+index 0000000..6072c60
+--- /dev/null
++++ b/tests/test_halls_booking.py
+@@ -0,0 +1,177 @@
++from datetime import timedelta
++from decimal import Decimal
++
++import pytest
++from sqlalchemy.exc import DBAPIError
++
++from libs import db
++from libs.errors import AccessDenied, DomainError
++from services.halls import service as halls
++from tests.factories import T0, act, read
++from tests.halls_factories import (
++    CENTER,
++    CHAMBER_HALL,
++    EVENT_END,
++    EVENT_START,
++    LOFT,
++    LOFT_HALL,
++    MANAGER,
++    PANORAMA_HALL,
++    RIVER,
++    WHITE_HALL,
++    booking,
++    email_types,
++    history,
++    invoice,
++    invoices,
++    new_booking,
++    pay,
++    prepay,
++    seed_halls,
++    status,
++)
++
++
++@pytest.fixture(autouse=True)
++async def halls_data(world: None) -> None:
++    await seed_halls()
++
++
++async def test_booking_starts_as_draft_with_invoice() -> None:
++    b = await new_booking()
++    assert b.status == "draft"
++    assert b.venue_id == CENTER
++    inv = await invoice(b.id)
++    # 4 часа по 5000
++    assert inv.amount == Decimal("20000.00")
++    assert inv.status == "open"
++    assert await email_types(b.id) == ["invoice"]
++
++
++async def test_partial_hours_are_billed_by_minutes() -> None:
++    b = await new_booking(ends_at=EVENT_START + timedelta(hours=2, minutes=30))
++    assert (await invoice(b.id)).amount == Decimal("12500.00")
++
++
++async def test_manager_of_other_venue_cannot_book() -> None:
++    with pytest.raises(AccessDenied, match="не закреплён"):
++        await new_booking(manager=MANAGER[RIVER])
++
++
++async def test_guests_over_capacity_rejected() -> None:
++    with pytest.raises(DomainError, match="не больше 20 гостей"):
++        await new_booking(hall=CHAMBER_HALL, guests=25)
++
++
++@pytest.mark.parametrize(
++    ("starts_at", "hours", "message"),
++    [
++        (T0 + timedelta(days=1), 4, "не позднее чем за 2"),
++        (T0 + timedelta(days=400), 4, "далёкая дата"),
++        (EVENT_START, 1, "минимальная аренда"),
++        (EVENT_START, 14, "максимальная аренда"),
++    ],
++)
++async def test_booking_period_rules(starts_at, hours: int, message: str) -> None:
++    with pytest.raises(DomainError, match=message):
++        await new_booking(starts_at=starts_at, ends_at=starts_at + timedelta(hours=hours))
++
++
++async def test_overlapping_booking_rejected_with_cleanup_gap() -> None:
++    await new_booking()
++    with pytest.raises(DomainError, match="занят"):
++        # Начало через 30 минут после окончания — не успеют убрать зал.
++        await new_booking(client="client:boris", starts_at=EVENT_END + timedelta(minutes=30))
++    later = await new_booking(client="client:boris", starts_at=EVENT_END + timedelta(hours=1))
++    assert later.status == "draft"
++
++
++async def test_cancelled_booking_frees_hall() -> None:
++    first = await new_booking()
++    await act(halls.cancel_booking, first.id, MANAGER[CENTER])
++    second = await new_booking(client="client:boris")
++    assert second.starts_at == first.starts_at
++
++
++async def test_change_venue_moves_booking_and_reissues_invoice() -> None:
++    b = await new_booking()
++    await act(halls.change_venue, b.id, MANAGER[CENTER], PANORAMA_HALL)
++
++    moved = await booking(b.id)
++    assert (moved.venue_id, moved.hall_id) == (RIVER, PANORAMA_HALL)
++    old, new = await invoices(b.id)
++    assert old.status == "void"
++    assert new.status == "open"
++    assert new.amount == Decimal("24000.00")
++    assert await email_types(b.id) == ["invoice", "invoice"]
++
++
++async def test_change_venue_keeps_prepayment() -> None:
++    b = await new_booking(guests=35)
++    await prepay(b.id)
++    assert await status(b.id) == "prepaid"
++
++    # Новый зал дешевле: внесённые 10000 покрывают уже больше половины.
++    await act(halls.change_venue, b.id, MANAGER[CENTER], LOFT_HALL)
++    inv = await invoice(b.id)
++    assert inv.amount == Decimal("12000.00")
++    assert await read(halls.paid_total, inv.id) == Decimal("10000.00")
++    assert await status(b.id) == "prepaid"
++
++
++async def test_change_venue_to_pricier_hall_can_drop_prepaid() -> None:
++    b = await new_booking(hall=LOFT_HALL, guests=35)
++    await prepay(b.id)
++    assert await status(b.id) == "prepaid"
++    # 6000 из нового счёта на 24000 — меньше половины.
++    await act(halls.change_venue, b.id, MANAGER[LOFT], PANORAMA_HALL)
++    assert await status(b.id) == "draft"
++
++
++async def test_change_venue_within_same_venue_rejected() -> None:
++    b = await new_booking()
++    with pytest.raises(DomainError, match="той же площадке"):
++        await act(halls.change_venue, b.id, MANAGER[CENTER], CHAMBER_HALL)
++
++
++async def test_change_venue_requires_manager_of_current_venue() -> None:
++    b = await new_booking()
++    with pytest.raises(AccessDenied):
++        await act(halls.change_venue, b.id, MANAGER[RIVER], PANORAMA_HALL)
++
++
++async def test_change_venue_after_confirmation_forbidden() -> None:
++    b = await new_booking()
++    await pay(b.id)
++    assert await status(b.id) == "confirmed"
++    with pytest.raises(DomainError, match="до подтверждения"):
++        await act(halls.change_venue, b.id, MANAGER[CENTER], PANORAMA_HALL)
++
++
++async def test_venue_lock_trigger_protects_confirmed_booking() -> None:
++    b = await new_booking()
++    await pay(b.id)
++    with pytest.raises(DBAPIError, match="площадку сменить нельзя"):
++        async with db.engine().begin() as conn:
++            await conn.exec_driver_sql(
++                f"UPDATE halls.hall_bookings SET venue_id = {RIVER}, hall_id = {PANORAMA_HALL} "
++                f"WHERE id = {b.id}"
++            )
++    assert (await booking(b.id)).venue_id == CENTER
++
++
++async def test_status_history_written_by_trigger() -> None:
++    b = await new_booking()
++    await prepay(b.id)
++    await pay(b.id, Decimal(10000))
++    assert await history(b.id) == [(None, "draft"), ("draft", "prepaid"), ("prepaid", "confirmed")]
++
++
++async def test_deactivate_hall_with_upcoming_bookings_rejected() -> None:
++    await new_booking()
++    with pytest.raises(DomainError, match="предстоящие брони"):
++        await act(halls.deactivate_hall, WHITE_HALL, MANAGER[CENTER])
++    hall = await act(halls.deactivate_hall, CHAMBER_HALL, MANAGER[CENTER])
++    assert hall.active is False
++    with pytest.raises(DomainError, match="не сдаётся"):
++        await new_booking(hall=CHAMBER_HALL, guests=10)
+diff --git a/tests/test_halls_cancel.py b/tests/test_halls_cancel.py
+new file mode 100644
+index 0000000..e0fb63b
+--- /dev/null
++++ b/tests/test_halls_cancel.py
+@@ -0,0 +1,99 @@
++from datetime import timedelta
++from decimal import Decimal
++
++import pytest
++
++from libs.errors import DomainError
++from services.halls import jobs
++from services.halls import service as halls
++from tests.factories import T0, act, travel
++from tests.halls_factories import (
++    CENTER,
++    EVENT_END,
++    LOFT,
++    LOFT_HALL,
++    MANAGER,
++    booking,
++    emails,
++    invoice,
++    invoices,
++    new_booking,
++    pay,
++    prepay,
++    seed_halls,
++    status,
++)
++
++
++@pytest.fixture(autouse=True)
++async def halls_data(world: None) -> None:
++    await seed_halls()
++
++
++async def test_cancel_sends_letter_from_event_group_template() -> None:
++    wedding = await new_booking()
++    conference = await new_booking(
++        client="client:acme", kind="conference", starts_at=EVENT_END + timedelta(days=1)
++    )
++    for b in (wedding, conference):
++        await act(halls.cancel_booking, b.id, MANAGER[CENTER])
++
++    assert (await emails(wedding.id))[-1].body.startswith("V11 private cancel:")
++    assert (await emails(conference.id))[-1].body.startswith("V11 corporate cancel:")
++    cancelled = await booking(wedding.id)
++    assert cancelled.status == "cancelled"
++    assert cancelled.cancel_reason == "client_request"
++    (inv,) = await invoices(wedding.id)
++    assert inv.status == "void"
++
++
++async def test_venue_without_templates_records_unsent_letter() -> None:
++    b = await new_booking(hall=LOFT_HALL, guests=30)
++    await act(halls.cancel_booking, b.id, MANAGER[LOFT])
++    letter = (await emails(b.id))[-1]
++    assert (letter.type, letter.status, letter.template_id) == ("cancel", "no_template", None)
++
++
++async def test_cancelled_and_held_bookings_cannot_be_cancelled_or_paid() -> None:
++    b = await new_booking()
++    await pay(b.id, Decimal(1000))
++    await act(halls.cancel_booking, b.id, MANAGER[CENTER])
++    with pytest.raises(DomainError, match="уже отменена"):
++        await act(halls.cancel_booking, b.id, MANAGER[CENTER])
++
++    paid = await new_booking(client="client:boris")
++    await pay(paid.id)
++    travel(EVENT_END + timedelta(hours=1))
++    await act(jobs.close_past_events, now=EVENT_END + timedelta(hours=1))
++    assert await status(paid.id) == "held"
++    with pytest.raises(DomainError, match="уже прошло"):
++        await act(halls.cancel_booking, paid.id, MANAGER[CENTER])
++
++
++async def test_unpaid_booking_cancelled_after_thirty_days() -> None:
++    unpaid = await new_booking(starts_at=T0 + timedelta(days=60))
++    partly = await new_booking(client="client:boris", starts_at=T0 + timedelta(days=61))
++    prepaid = await new_booking(client="client:vera", starts_at=T0 + timedelta(days=62))
++    await pay(partly.id, Decimal(1000))
++    await prepay(prepaid.id)
++
++    assert await act(jobs.cancel_unpaid, now=T0 + timedelta(days=29, hours=23)) == []
++    cancelled = await act(jobs.cancel_unpaid, now=T0 + timedelta(days=30))
++
++    assert cancelled == [unpaid.id, partly.id]
++    assert await status(prepaid.id) == "prepaid"
++    for b in (unpaid, partly):
++        assert (await booking(b.id)).cancel_reason == "unpaid"
++        assert (await emails(b.id))[-1].type == "cancel"
++        assert (await invoices(b.id))[-1].status == "void"
++    assert (await invoice(prepaid.id)).status == "open"
++
++
++async def test_close_past_events_skips_unconfirmed() -> None:
++    confirmed = await new_booking()
++    draft = await new_booking(client="client:boris", starts_at=EVENT_END + timedelta(hours=2))
++    await pay(confirmed.id)
++
++    held = await act(jobs.close_past_events, now=EVENT_END + timedelta(days=1))
++    assert held == [confirmed.id]
++    assert await status(draft.id) == "draft"
+diff --git a/tests/test_halls_payments.py b/tests/test_halls_payments.py
+new file mode 100644
+index 0000000..a6d69da
+--- /dev/null
++++ b/tests/test_halls_payments.py
+@@ -0,0 +1,84 @@
++from decimal import Decimal
++
++import pytest
++from sqlalchemy.exc import DBAPIError
++
++from libs import db
++from libs.errors import DomainError
++from services.halls import service as halls
++from tests.factories import act, read
++from tests.halls_factories import (
++    ACCOUNTANT,
++    MANAGER,
++    PANORAMA_HALL,
++    booking,
++    email_types,
++    emails,
++    invoice,
++    invoices,
++    new_booking,
++    pay,
++    seed_halls,
++    status,
++)
++
++
++@pytest.fixture(autouse=True)
++async def halls_data(world: None) -> None:
++    await seed_halls()
++
++
++async def test_half_payment_makes_booking_prepaid() -> None:
++    b = await new_booking()
++    await pay(b.id, Decimal(4000), ref="bank-1")
++    assert await status(b.id) == "draft"
++
++    await pay(b.id, Decimal(6000), ref="bank-2")
++    assert await status(b.id) == "prepaid"
++    inv = await invoice(b.id)
++    assert inv.status == "open"
++    assert not await read(halls.is_fully_paid, inv)
++    assert await email_types(b.id) == ["invoice", "prepaid"]
++
++
++async def test_full_payment_confirms_booking_in_one_step() -> None:
++    b = await new_booking(kind="corporate", guests=60)
++    await pay(b.id)
++
++    confirmed = await booking(b.id)
++    assert confirmed.status == "confirmed"
++    assert confirmed.confirmed_at is not None
++    inv = await invoice(b.id)
++    assert inv.status == "paid"
++    assert await read(halls.is_fully_paid, inv)
++    sent = await emails(b.id)
++    assert [e.type for e in sent] == ["invoice", "confirmed"]
++    assert sent[-1].body.startswith("V11 corporate confirmed: Белый зал 22.03.2026")
++
++
++async def test_payment_over_rest_rejected() -> None:
++    b = await new_booking()
++    await pay(b.id, Decimal(15000))
++    with pytest.raises(DomainError, match=r"больше остатка по счёту \(5000"):
++        await pay(b.id, Decimal(6000))
++
++
++async def test_duplicate_bank_reference_rejected() -> None:
++    b = await new_booking()
++    await pay(b.id, Decimal(1000), ref="bank-7")
++    with pytest.raises(DomainError, match="уже учтён"):
++        await pay(b.id, Decimal(1000), ref="bank-7")
++
++
++async def test_payment_to_void_invoice_rejected_in_service_and_db() -> None:
++    b = await new_booking()
++    await act(halls.change_venue, b.id, MANAGER[11], PANORAMA_HALL)
++    old, _ = await invoices(b.id)
++    with pytest.raises(DomainError, match="счёт закрыт"):
++        await act(halls.record_payment, old.id, Decimal(100), ACCOUNTANT)
++    with pytest.raises(DBAPIError, match="платёж не принимается"):
++        async with db.engine().begin() as conn:
++            await conn.exec_driver_sql(
++                "INSERT INTO halls.hall_payments (invoice_id, amount, recorded_by, paid_at) "
++                f"VALUES ({old.id}, 100, {ACCOUNTANT}, now())"
++            )

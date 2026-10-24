@@ -1,0 +1,24 @@
+diff --git a/knowledge/model/code.json b/knowledge/model/code.json
+index 6cfd29f..defe48e 100644
+--- a/knowledge/model/code.json
++++ b/knowledge/model/code.json
+@@ -6522,7 +6522,7 @@
+   },
+   {
+    "end_line": 46,
+-   "hash": "8b5495f0ef85",
++   "hash": "e5cdc69d933c",
+    "hash_own": "66050dcf14f1",
+    "id": "services/billing/api.py::link",
+    "kind": "route",
+@@ -6957,8 +6957,8 @@
+     }
+    ],
+    "end_line": 129,
+-   "hash": "55becc083ced",
+-   "hash_own": "db745dc66f7d",
++   "hash": "df68d6b2c83f",
++   "hash_own": "df64e9953c78",
+    "id": "services/billing/service.py::link_payment",
+    "kind": "function",
+    "line": 98,

@@ -1,0 +1,31 @@
+{
+  "mcpServers": {
+    "knowledge": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--quiet",
+        "python",
+        "mcp/knowledge_server.py"
+      ]
+    },
+    "claude-flow": {
+      "command": "npx",
+      "args": [
+        "--no-install",
+        "ruflo",
+        "mcp",
+        "start"
+      ],
+      "env": {
+        "npm_config_update_notifier": "false",
+        "CLAUDE_FLOW_AUTO_UPDATE": "false",
+        "CLAUDE_FLOW_MODE": "v3",
+        "CLAUDE_FLOW_HOOKS_ENABLED": "true",
+        "CLAUDE_FLOW_TOPOLOGY": "hierarchical-mesh",
+        "CLAUDE_FLOW_MAX_AGENTS": "15",
+        "CLAUDE_FLOW_MEMORY_BACKEND": "hybrid"
+      }
+    }
+  }
+}

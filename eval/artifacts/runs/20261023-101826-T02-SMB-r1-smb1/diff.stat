@@ -1,0 +1,26 @@
+ AGENTS.md                                  |   2 +-
+ docs/README.md                             |   4 +-
+ docs/config.md                             |   6 +-
+ docs/coverage.md                           |  16 +-
+ docs/entities/applications.applications.md |   2 +-
+ docs/entities/scheduling.bookings.md       |   6 +-
+ docs/entities/scheduling.holds.md          |   6 +-
+ docs/entities/scheduling.loans.md          |  12 +-
+ docs/events.md                             |   2 +-
+ docs/reconciliation.md                     |   8 +-
+ docs/roles.md                              |  12 +-
+ docs/rules/README.md                       |   6 +-
+ docs/rules/chat.md                         |   6 +-
+ docs/rules/scheduling.md                   |  21 +--
+ docs/rules/schema.md                       |   4 +-
+ knowledge/model/code.json                  | 230 +++++++++++++++++++++++------
+ knowledge/model/events.json                |   2 +-
+ knowledge/reconciliation.yaml              |  11 +-
+ knowledge/rules/chat.yaml                  |  13 +-
+ knowledge/rules/scheduling.yaml            |  43 +++---
+ knowledge/rules/schema.yaml                |   5 +-
+ libs/settings.py                           |   2 +-
+ services/scheduling/jobs.py                |   6 +-
+ tests/knowledge/test_knowledge_tools.py    |   9 +-
+ tests/test_loans.py                        |  43 ++++++
+ 25 files changed, 336 insertions(+), 141 deletions(-)

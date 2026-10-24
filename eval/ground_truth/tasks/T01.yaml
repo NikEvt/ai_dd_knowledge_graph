@@ -1,0 +1,88 @@
+id: T01
+prompt_file: T01.prompt.md
+summary: социальная заявка — смена площадки после ссылки на запись
+expected_nodes:
+- ref: GT-VEN-02
+  kind: rule
+  role: change
+  hidden: H1
+- ref: trg_applications_venue_lock
+  kind: db
+  role: change
+  hidden: H1
+- ref: applications.forbid_venue_change
+  kind: db
+  role: change
+  hidden: H1
+- ref: GT-VEN-03
+  kind: rule
+  role: keep
+- ref: GT-VEN-07
+  kind: rule
+  role: affected
+  hidden: H2
+- ref: services/applications/service.py::change_venue
+  kind: code
+  role: affected
+- ref: application.venue_changed
+  kind: event
+  role: affected
+  hidden: H2
+- ref: services/scheduling/consumers.py::on_venue_changed
+  kind: code
+  role: affected
+  hidden: H2
+- ref: services/scheduling/service.py::reset_bookings
+  kind: code
+  role: affected
+  hidden: H2
+- ref: services/notifications/consumers.py::on_booking_cancelled
+  kind: code
+  role: affected
+  hidden: H2
+- ref: GT-VEN-05
+  kind: rule
+  role: keep
+- ref: GT-NOT-02
+  kind: rule
+  role: risk
+  note: на новой площадке может не быть шаблонов social
+- ref: services/scheduling/service.py::issue_link
+  kind: code
+  role: affected
+  source: blind_audit
+  hidden: H2
+- ref: booking.cancelled
+  kind: event
+  role: affected
+  source: blind_audit
+  hidden: H2
+- ref: services/chat/consumers.py::EVENT_TEXT
+  kind: code
+  role: affected
+  source: blind_audit
+  hidden: H2
+- ref: services/billing/consumers.py::on_venue_changed
+  kind: code
+  role: affected
+  source: blind_audit
+  hidden: H2
+- ref: uq_booking_links_one_active
+  kind: db
+  role: risk
+  source: blind_audit
+  hidden: H1
+- ref: services/notifications/config.py::TEMPLATE_GROUP
+  kind: config
+  role: risk
+  source: blind_audit
+  hidden: H4
+- ref: tests/test_venue_change.py
+  kind: code
+  role: change
+  source: blind_audit
+hidden_tests:
+- hidden_tests/tasks/test_t01.py
+supersedes:
+- test_gt_applications.py::test_gt_venue_social_locked_after_link
+reference: reference/T01.patch

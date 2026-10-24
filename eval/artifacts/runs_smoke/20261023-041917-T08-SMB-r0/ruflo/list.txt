@@ -1,0 +1,12 @@
+Transformers.js loaded: Xenova/all-MiniLM-L6-v2
+
+Memory Entries
+
++-----------------------+-----------+-------+--------+----------+----------+
+| Key                   | Namespace |  Size | Vector | Accessed | Updated  |
++-----------------------+-----------+-------+--------+----------+----------+
+| chat/api-body-to-text | project   | 408 B |   ✓    |        0 | just now |
++-----------------------+-----------+-------+--------+----------+----------+
+
+[INFO] Showing 1 of 1 entries
+[WARN] 1 more entries are in ~/work/ai-dd/wt/20261023-041917-T08-SMB-r0/.swarm/agentdb-memory.db and were not read here. That store is written by the MCP/AgentDB path; read it with --path ~/work/ai-dd/wt/20261023-041917-T08-SMB-r0/.swarm/agentdb-memory.db.

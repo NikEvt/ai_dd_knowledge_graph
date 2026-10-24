@@ -1,0 +1,15 @@
+ docs/config.md                                    |  6 +-
+ docs/entities/README.md                           |  2 +-
+ docs/entities/scheduling.slots.md                 |  5 +-
+ docs/entities/scheduling.venue_limits.md          |  3 +-
+ docs/events.md                                    | 20 +++---
+ docs/reconciliation.md                            | 12 ++--
+ docs/roles.md                                     | 21 ++++---
+ docs/rules/applications.md                        | 13 ++--
+ docs/rules/scheduling.md                          | 76 +++++++++++++----------
+ migrations/versions/0002_slot_capacity_reduced.py | 20 ++++++
+ services/scheduling/consumers.py                  |  7 +--
+ services/scheduling/models.py                     |  2 +
+ services/scheduling/service.py                    | 29 +++++++++
+ tests/test_scheduling.py                          | 46 ++++++++++++++
+ 14 files changed, 186 insertions(+), 76 deletions(-)

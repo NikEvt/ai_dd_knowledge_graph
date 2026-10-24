@@ -1,0 +1,1680 @@
+diff --git a/migrations/noise/inventory.sql b/migrations/noise/inventory.sql
+new file mode 100644
+index 0000000..bdd0e04
+--- /dev/null
++++ b/migrations/noise/inventory.sql
+@@ -0,0 +1,147 @@
++-- inventory: книжный фонд площадок, перемещения, межбиблиотечный абонемент
++
++CREATE SCHEMA inventory;
++
++-- Хранители фонда: кто отвечает за экземпляры на площадке
++CREATE TABLE inventory.custodians (
++    venue_id int NOT NULL,
++    employee_id int NOT NULL,
++    PRIMARY KEY (venue_id, employee_id)
++);
++
++-- Библиотеки-партнёры по МБА
++CREATE TABLE inventory.partner_libraries (
++    id serial PRIMARY KEY,
++    code text NOT NULL UNIQUE CHECK (code ~ '^[A-Z0-9-]{2,16}$'),
++    name text NOT NULL,
++    daily_penalty numeric(12,2) NOT NULL CHECK (daily_penalty >= 0),
++    max_active_loans int NOT NULL DEFAULT 5 CHECK (max_active_loans > 0),
++    suspended boolean NOT NULL DEFAULT false
++);
++
++CREATE TABLE inventory.copies (
++    id serial PRIMARY KEY,
++    inventory_no text NOT NULL UNIQUE,
++    book_ref int NOT NULL,
++    venue_id int NOT NULL,
++    state text NOT NULL DEFAULT 'available'
++        CHECK (state IN ('available','on_loan','in_transit','lost','damaged','written_off')),
++    acquired_at timestamptz NOT NULL,
++    updated_at timestamptz NOT NULL
++);
++CREATE INDEX ix_copies_book_venue ON inventory.copies (book_ref, venue_id);
++
++CREATE TABLE inventory.transfers (
++    id serial PRIMARY KEY,
++    copy_id int NOT NULL REFERENCES inventory.copies,
++    from_venue_id int NOT NULL,
++    to_venue_id int NOT NULL,
++    status text NOT NULL CHECK (status IN ('requested','in_transit','received','cancelled')),
++    requested_by int NOT NULL,
++    requested_at timestamptz NOT NULL,
++    shipped_at timestamptz,
++    closed_at timestamptz,
++    cancel_reason text,
++    CHECK (from_venue_id <> to_venue_id),
++    CHECK ((status = 'requested') = (shipped_at IS NULL) OR status = 'cancelled'),
++    CHECK ((status IN ('received','cancelled')) = (closed_at IS NOT NULL))
++);
++CREATE UNIQUE INDEX uq_transfers_one_open
++    ON inventory.transfers (copy_id) WHERE status IN ('requested','in_transit');
++
++CREATE TABLE inventory.ill_loans (
++    id serial PRIMARY KEY,
++    copy_id int NOT NULL REFERENCES inventory.copies,
++    partner_id int NOT NULL REFERENCES inventory.partner_libraries,
++    issued_by int NOT NULL,
++    issued_at timestamptz NOT NULL,
++    due_at timestamptz NOT NULL,
++    returned_at timestamptz,
++    status text NOT NULL CHECK (status IN ('out','returned','lost')),
++    overdue_flagged boolean NOT NULL DEFAULT false,
++    CHECK (due_at > issued_at),
++    CHECK ((status = 'returned') = (returned_at IS NOT NULL))
++);
++CREATE UNIQUE INDEX uq_ill_loans_one_out
++    ON inventory.ill_loans (copy_id) WHERE status = 'out';
++CREATE INDEX ix_ill_loans_due ON inventory.ill_loans (due_at) WHERE status = 'out';
++
++CREATE TABLE inventory.ill_penalties (
++    id serial PRIMARY KEY,
++    ill_loan_id int NOT NULL REFERENCES inventory.ill_loans,
++    partner_id int NOT NULL REFERENCES inventory.partner_libraries,
++    kind text NOT NULL CHECK (kind IN ('overdue','lost')),
++    days int NOT NULL DEFAULT 0 CHECK (days >= 0),
++    amount numeric(12,2) NOT NULL CHECK (amount >= 0),
++    status text NOT NULL DEFAULT 'accruing' CHECK (status IN ('accruing','final','paid')),
++    created_at timestamptz NOT NULL,
++    updated_at timestamptz NOT NULL,
++    UNIQUE (ill_loan_id, kind)
++);
++
++CREATE TABLE inventory.write_offs (
++    id serial PRIMARY KEY,
++    copy_id int NOT NULL UNIQUE REFERENCES inventory.copies,
++    reason text NOT NULL CHECK (reason IN ('lost','damaged','worn_out')),
++    act_no text NOT NULL UNIQUE,
++    ill_loan_id int REFERENCES inventory.ill_loans,
++    note text,
++    created_by int,
++    created_at timestamptz NOT NULL
++);
++
++-- Остатки по изданию на площадке, пересчитываются по событиям
++CREATE TABLE inventory.stock_levels (
++    book_ref int NOT NULL,
++    venue_id int NOT NULL,
++    total int NOT NULL CHECK (total >= 0),
++    available int NOT NULL CHECK (available >= 0),
++    updated_at timestamptz NOT NULL,
++    PRIMARY KEY (book_ref, venue_id),
++    CHECK (available <= total)
++);
++
++CREATE FUNCTION inventory.forbid_transfer_of_loaned_copy() RETURNS trigger AS $$
++BEGIN
++    IF NEW.venue_id IS DISTINCT FROM OLD.venue_id THEN
++        IF OLD.state = 'on_loan' OR EXISTS (
++            SELECT 1 FROM inventory.ill_loans l WHERE l.copy_id = OLD.id AND l.status = 'out'
++        ) THEN
++            RAISE EXCEPTION 'copy % is on loan and cannot change venue', OLD.inventory_no
++                USING ERRCODE = 'check_violation';
++        END IF;
++    END IF;
++    RETURN NEW;
++END $$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_copies_transfer_lock
++    BEFORE UPDATE OF venue_id ON inventory.copies
++    FOR EACH ROW EXECUTE FUNCTION inventory.forbid_transfer_of_loaned_copy();
++
++CREATE FUNCTION inventory.forbid_written_off_change() RETURNS trigger AS $$
++BEGIN
++    IF OLD.state = 'written_off' THEN
++        RAISE EXCEPTION 'copy % is written off', OLD.inventory_no USING ERRCODE = 'check_violation';
++    END IF;
++    RETURN NEW;
++END $$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_copies_written_off_final
++    BEFORE UPDATE ON inventory.copies
++    FOR EACH ROW EXECUTE FUNCTION inventory.forbid_written_off_change();
++
++CREATE FUNCTION inventory.check_transfer_origin() RETURNS trigger AS $$
++DECLARE
++    current_venue int;
++BEGIN
++    SELECT venue_id INTO current_venue FROM inventory.copies WHERE id = NEW.copy_id;
++    IF current_venue IS DISTINCT FROM NEW.from_venue_id THEN
++        RAISE EXCEPTION 'copy % is not at venue %', NEW.copy_id, NEW.from_venue_id
++            USING ERRCODE = 'check_violation';
++    END IF;
++    RETURN NEW;
++END $$ LANGUAGE plpgsql;
++
++CREATE TRIGGER trg_transfers_origin
++    BEFORE INSERT ON inventory.transfers
++    FOR EACH ROW EXECUTE FUNCTION inventory.check_transfer_origin();
+diff --git a/services/inventory/__init__.py b/services/inventory/__init__.py
+new file mode 100644
+index 0000000..e69de29
+diff --git a/services/inventory/api.py b/services/inventory/api.py
+new file mode 100644
+index 0000000..7b718ad
+--- /dev/null
++++ b/services/inventory/api.py
+@@ -0,0 +1,178 @@
++from datetime import datetime
++from decimal import Decimal
++from typing import Annotated
++
++from fastapi import APIRouter, Depends
++from pydantic import BaseModel
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs.web import session
++from services.inventory import service
++
++router = APIRouter(tags=["inventory"])
++Session = Annotated[AsyncSession, Depends(session)]
++
++
++class CopyIn(BaseModel):
++    custodian_id: int
++    venue_id: int
++    book_ref: int
++    inventory_no: str
++
++
++class CopyOut(BaseModel):
++    id: int
++    inventory_no: str
++    book_ref: int
++    venue_id: int
++    state: str
++
++
++class ByCustodian(BaseModel):
++    custodian_id: int
++    note: str | None = None
++
++
++class TransferIn(BaseModel):
++    custodian_id: int
++    to_venue_id: int
++
++
++class TransferOut(BaseModel):
++    id: int
++    copy_id: int
++    from_venue_id: int
++    to_venue_id: int
++    status: str
++
++
++class IllIn(BaseModel):
++    custodian_id: int
++    copy_id: int
++    partner_id: int
++
++
++class IllOut(BaseModel):
++    id: int
++    copy_id: int
++    partner_id: int
++    due_at: datetime
++    status: str
++
++
++class ReturnIn(BaseModel):
++    custodian_id: int
++    damaged: bool = False
++
++
++class StockOut(BaseModel):
++    total: int
++    available: int
++
++
++class PenaltyOut(BaseModel):
++    id: int
++    ill_loan_id: int
++    kind: str
++    days: int
++    amount: Decimal
++    status: str
++
++
++def _copy(c) -> CopyOut:
++    return CopyOut(
++        id=c.id, inventory_no=c.inventory_no, book_ref=c.book_ref, venue_id=c.venue_id, state=c.state
++    )
++
++
++def _transfer(t) -> TransferOut:
++    return TransferOut(
++        id=t.id, copy_id=t.copy_id, from_venue_id=t.from_venue_id, to_venue_id=t.to_venue_id, status=t.status
++    )
++
++
++def _loan(x) -> IllOut:
++    return IllOut(id=x.id, copy_id=x.copy_id, partner_id=x.partner_id, due_at=x.due_at, status=x.status)
++
++
++@router.post("/copies", status_code=201)
++async def register_copy(body: CopyIn, s: Session) -> CopyOut:
++    return _copy(await service.register_copy(s, **body.model_dump()))
++
++
++@router.get("/copies/{copy_id}")
++async def get_copy(copy_id: int, s: Session) -> CopyOut:
++    return _copy(await service.get_copy(s, copy_id))
++
++
++@router.get("/venues/{venue_id}/stock/{book_ref}")
++async def get_stock(venue_id: int, book_ref: int, s: Session) -> StockOut:
++    total, available = await service.stock(s, book_ref, venue_id)
++    return StockOut(total=total, available=available)
++
++
++@router.post("/copies/{copy_id}/lost")
++async def mark_lost(copy_id: int, body: ByCustodian, s: Session) -> CopyOut:
++    return _copy(await service.mark_lost(s, copy_id, body.custodian_id, body.note))
++
++
++@router.post("/copies/{copy_id}/damaged")
++async def mark_damaged(copy_id: int, body: ByCustodian, s: Session) -> CopyOut:
++    return _copy(await service.mark_damaged(s, copy_id, body.custodian_id, body.note))
++
++
++@router.post("/copies/{copy_id}/write-off", status_code=201)
++async def write_off_worn(copy_id: int, body: ByCustodian, s: Session) -> dict[str, str]:
++    act = await service.write_off_worn(s, copy_id, body.custodian_id, body.note)
++    return {"act_no": act.act_no}
++
++
++@router.post("/copies/{copy_id}/transfers", status_code=201)
++async def request_transfer(copy_id: int, body: TransferIn, s: Session) -> TransferOut:
++    return _transfer(await service.request_transfer(s, copy_id, body.to_venue_id, body.custodian_id))
++
++
++@router.post("/transfers/{transfer_id}/ship")
++async def ship_transfer(transfer_id: int, body: ByCustodian, s: Session) -> TransferOut:
++    return _transfer(await service.ship_transfer(s, transfer_id, body.custodian_id))
++
++
++@router.post("/transfers/{transfer_id}/receive")
++async def receive_transfer(transfer_id: int, body: ByCustodian, s: Session) -> TransferOut:
++    return _transfer(await service.receive_transfer(s, transfer_id, body.custodian_id))
++
++
++@router.post("/transfers/{transfer_id}/cancel")
++async def cancel_transfer(transfer_id: int, body: ByCustodian, s: Session) -> TransferOut:
++    reason = body.note or "cancelled"
++    return _transfer(await service.cancel_transfer(s, transfer_id, body.custodian_id, reason=reason))
++
++
++@router.post("/ill-loans", status_code=201)
++async def issue_ill(body: IllIn, s: Session) -> IllOut:
++    return _loan(await service.issue_ill(s, body.copy_id, body.partner_id, body.custodian_id))
++
++
++@router.post("/ill-loans/{loan_id}/renew")
++async def renew_ill(loan_id: int, body: ByCustodian, s: Session) -> IllOut:
++    return _loan(await service.renew_ill(s, loan_id, body.custodian_id))
++
++
++@router.post("/ill-loans/{loan_id}/return")
++async def return_ill(loan_id: int, body: ReturnIn, s: Session) -> IllOut:
++    return _loan(await service.return_ill(s, loan_id, body.custodian_id, damaged=body.damaged))
++
++
++@router.post("/ill-loans/{loan_id}/lost")
++async def report_ill_lost(loan_id: int, body: ByCustodian, s: Session) -> IllOut:
++    return _loan(await service.report_ill_lost(s, loan_id, body.custodian_id))
++
++
++@router.get("/partners/{partner_id}/penalties")
++async def penalties(partner_id: int, s: Session) -> list[PenaltyOut]:
++    return [
++        PenaltyOut(
++            id=p.id, ill_loan_id=p.ill_loan_id, kind=p.kind, days=p.days, amount=p.amount, status=p.status
++        )
++        for p in await service.penalties(s, partner_id)
++    ]
+diff --git a/services/inventory/app.py b/services/inventory/app.py
+new file mode 100644
+index 0000000..e1e21d3
+--- /dev/null
++++ b/services/inventory/app.py
+@@ -0,0 +1,10 @@
++from fastapi import FastAPI
++
++from libs.web import install_error_handlers
++from services import wiring
++from services.inventory.api import router
++
++wiring.load()
++app = FastAPI(title="inventory")
++app.include_router(router)
++install_error_handlers(app)
+diff --git a/services/inventory/consumers.py b/services/inventory/consumers.py
+new file mode 100644
+index 0000000..47b1b29
+--- /dev/null
++++ b/services/inventory/consumers.py
+@@ -0,0 +1,63 @@
++from datetime import datetime
++from typing import Any
++
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs.events import subscribe
++from services.inventory import service
++
++
++@subscribe("inventory.copy_registered")
++@subscribe("inventory.copy_relocated")
++@subscribe("inventory.copy_written_off")
++@subscribe("inventory.transfer_shipped")
++@subscribe("inventory.transfer_received")
++@subscribe("inventory.transfer_cancelled")
++@subscribe("inventory.ill_issued")
++@subscribe("inventory.ill_returned")
++async def on_stock_changed(session: AsyncSession, payload: dict[str, Any]) -> None:
++    for venue_id in payload["venue_ids"]:
++        await service.recount_stock(session, payload["book_ref"], venue_id)
++
++
++@subscribe("inventory.copy_lost")
++async def on_copy_lost(session: AsyncSession, payload: dict[str, Any]) -> None:
++    copy = await service.get_copy(session, payload["copy_id"])
++    loan_id = payload.get("ill_loan_id")
++    await service.write_off(
++        session, copy, "lost", by=payload.get("custodian_id"), ill_loan_id=loan_id, note=payload.get("note")
++    )
++    if loan_id is not None:
++        await service.charge_lost_copy(session, loan_id)
++
++
++@subscribe("inventory.copy_damaged")
++async def on_copy_damaged(session: AsyncSession, payload: dict[str, Any]) -> None:
++    copy = await service.get_copy(session, payload["copy_id"])
++    await service.write_off(
++        session,
++        copy,
++        "damaged",
++        by=payload.get("custodian_id"),
++        ill_loan_id=payload.get("ill_loan_id"),
++        note=payload.get("note"),
++    )
++
++
++@subscribe("inventory.ill_overdue")
++async def on_ill_overdue(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.accrue_overdue(session, payload["ill_loan_id"], payload["days_overdue"])
++
++
++@subscribe("inventory.ill_returned")
++async def on_ill_returned(session: AsyncSession, payload: dict[str, Any]) -> None:
++    days = service.days_late(
++        datetime.fromisoformat(payload["due_at"]), datetime.fromisoformat(payload["returned_at"])
++    )
++    if days:
++        await service.accrue_overdue(session, payload["ill_loan_id"], days, final=True)
++
++
++@subscribe("inventory.ill_penalty_accrued")
++async def on_penalty_accrued(session: AsyncSession, payload: dict[str, Any]) -> None:
++    await service.review_partner_debt(session, payload["partner_id"])
+diff --git a/services/inventory/jobs.py b/services/inventory/jobs.py
+new file mode 100644
+index 0000000..f5bc303
+--- /dev/null
++++ b/services/inventory/jobs.py
+@@ -0,0 +1,61 @@
++from datetime import datetime, timedelta
++
++from sqlalchemy import select
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs import events
++from services.inventory import service, settings
++from services.inventory.models import IllLoan, IllPenalty, Transfer
++
++
++async def flag_overdue_ill(session: AsyncSession, now: datetime) -> list[int]:
++    loans = (
++        await session.scalars(
++            select(IllLoan).where(
++                IllLoan.status == "out",
++                IllLoan.overdue_flagged.is_(False),
++                IllLoan.due_at < now,
++            )
++        )
++    ).all()
++    for loan in loans:
++        loan.overdue_flagged = True
++        events.publish(
++            session,
++            "inventory.ill_overdue",
++            {
++                "ill_loan_id": loan.id,
++                "copy_id": loan.copy_id,
++                "partner_id": loan.partner_id,
++                "days_overdue": service.days_late(loan.due_at, now),
++            },
++        )
++    return [loan.id for loan in loans]
++
++
++async def accrue_ill_penalties(session: AsyncSession, now: datetime) -> int:
++    """Ежедневный пересчёт пеней по ещё не возвращённым просроченным выдачам."""
++    rows = (
++        await session.execute(
++            select(IllLoan.id, IllLoan.due_at)
++            .join(IllPenalty, IllPenalty.ill_loan_id == IllLoan.id)
++            .where(IllLoan.status == "out", IllPenalty.kind == "overdue", IllPenalty.status == "accruing")
++        )
++    ).all()
++    for loan_id, due_at in rows:
++        await service.accrue_overdue(session, loan_id, service.days_late(due_at, now))
++    return len(rows)
++
++
++async def expire_stale_transfers(session: AsyncSession, now: datetime) -> list[int]:
++    stale = (
++        await session.scalars(
++            select(Transfer.id).where(
++                Transfer.status == "requested",
++                Transfer.requested_at < now - timedelta(days=settings.TRANSFER_REQUEST_TTL_DAYS),
++            )
++        )
++    ).all()
++    for transfer_id in stale:
++        await service.cancel_transfer(session, transfer_id, None, reason="expired")
++    return list(stale)
+diff --git a/services/inventory/models.py b/services/inventory/models.py
+new file mode 100644
+index 0000000..ebbde55
+--- /dev/null
++++ b/services/inventory/models.py
+@@ -0,0 +1,119 @@
++from datetime import datetime
++from decimal import Decimal
++
++from sqlalchemy import ForeignKey
++from sqlalchemy.orm import Mapped, mapped_column
++
++from libs.db import Base
++
++SCHEMA = {"schema": "inventory"}
++
++# Состояния, в которых экземпляр ещё числится в фонде площадки
++ON_BALANCE = ("available", "on_loan", "in_transit")
++OPEN_TRANSFER = ("requested", "in_transit")
++
++
++class Custodian(Base):
++    """Хранитель фонда площадки."""
++
++    __tablename__ = "custodians"
++    __table_args__ = SCHEMA
++
++    venue_id: Mapped[int] = mapped_column(primary_key=True)
++    employee_id: Mapped[int] = mapped_column(primary_key=True)
++
++
++class PartnerLibrary(Base):
++    __tablename__ = "partner_libraries"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    code: Mapped[str]
++    name: Mapped[str]
++    daily_penalty: Mapped[Decimal]
++    max_active_loans: Mapped[int] = mapped_column(default=5)
++    suspended: Mapped[bool] = mapped_column(default=False)
++
++
++class Copy(Base):
++    __tablename__ = "copies"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    inventory_no: Mapped[str]
++    book_ref: Mapped[int]
++    venue_id: Mapped[int]
++    state: Mapped[str] = mapped_column(default="available")
++    acquired_at: Mapped[datetime]
++    updated_at: Mapped[datetime]
++
++
++class Transfer(Base):
++    __tablename__ = "transfers"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    copy_id: Mapped[int] = mapped_column(ForeignKey("inventory.copies.id"))
++    from_venue_id: Mapped[int]
++    to_venue_id: Mapped[int]
++    status: Mapped[str]
++    requested_by: Mapped[int]
++    requested_at: Mapped[datetime]
++    shipped_at: Mapped[datetime | None]
++    closed_at: Mapped[datetime | None]
++    cancel_reason: Mapped[str | None]
++
++
++class IllLoan(Base):
++    __tablename__ = "ill_loans"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    copy_id: Mapped[int] = mapped_column(ForeignKey("inventory.copies.id"))
++    partner_id: Mapped[int] = mapped_column(ForeignKey("inventory.partner_libraries.id"))
++    issued_by: Mapped[int]
++    issued_at: Mapped[datetime]
++    due_at: Mapped[datetime]
++    returned_at: Mapped[datetime | None]
++    status: Mapped[str]
++    overdue_flagged: Mapped[bool] = mapped_column(default=False)
++
++
++class IllPenalty(Base):
++    __tablename__ = "ill_penalties"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    ill_loan_id: Mapped[int] = mapped_column(ForeignKey("inventory.ill_loans.id"))
++    partner_id: Mapped[int] = mapped_column(ForeignKey("inventory.partner_libraries.id"))
++    kind: Mapped[str]
++    days: Mapped[int] = mapped_column(default=0)
++    amount: Mapped[Decimal]
++    status: Mapped[str] = mapped_column(default="accruing")
++    created_at: Mapped[datetime]
++    updated_at: Mapped[datetime]
++
++
++class WriteOff(Base):
++    __tablename__ = "write_offs"
++    __table_args__ = SCHEMA
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    copy_id: Mapped[int] = mapped_column(ForeignKey("inventory.copies.id"))
++    reason: Mapped[str]
++    act_no: Mapped[str]
++    ill_loan_id: Mapped[int | None] = mapped_column(ForeignKey("inventory.ill_loans.id"))
++    note: Mapped[str | None]
++    created_by: Mapped[int | None]
++    created_at: Mapped[datetime]
++
++
++class StockLevel(Base):
++    __tablename__ = "stock_levels"
++    __table_args__ = SCHEMA
++
++    book_ref: Mapped[int] = mapped_column(primary_key=True)
++    venue_id: Mapped[int] = mapped_column(primary_key=True)
++    total: Mapped[int]
++    available: Mapped[int]
++    updated_at: Mapped[datetime]
+diff --git a/services/inventory/service.py b/services/inventory/service.py
+new file mode 100644
+index 0000000..1fb8988
+--- /dev/null
++++ b/services/inventory/service.py
+@@ -0,0 +1,539 @@
++"""Книжный фонд: учёт экземпляров, перемещения между площадками, МБА и списания."""
++
++import re
++from datetime import datetime, timedelta
++from decimal import Decimal
++
++from sqlalchemy import func, select
++from sqlalchemy.dialects.postgresql import insert
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from libs import clock, events
++from libs.errors import AccessDenied, DomainError, NotFound
++from services.inventory import settings
++from services.inventory.models import (
++    ON_BALANCE,
++    OPEN_TRANSFER,
++    Copy,
++    Custodian,
++    IllLoan,
++    IllPenalty,
++    PartnerLibrary,
++    StockLevel,
++    Transfer,
++    WriteOff,
++)
++
++INVENTORY_NO = re.compile(r"^[А-ЯA-Z]{1,4}-\d{4,8}$")
++DAY = timedelta(days=1)
++
++
++def days_late(due_at: datetime, at: datetime) -> int:
++    """Число начатых суток просрочки."""
++    delta = at - due_at
++    if delta <= timedelta(0):
++        return 0
++    return delta.days + (1 if delta % DAY else 0)
++
++
++async def _require_custodian(session: AsyncSession, venue_id: int, employee_id: int) -> None:
++    if await session.get(Custodian, (venue_id, employee_id)) is None:
++        raise AccessDenied("сотрудник не является хранителем фонда этой площадки")
++
++
++async def _copy(session: AsyncSession, copy_id: int) -> Copy:
++    copy = await session.get(Copy, copy_id, with_for_update=True)
++    if copy is None:
++        raise NotFound(f"экземпляр {copy_id}")
++    return copy
++
++
++def _set_state(copy: Copy, state: str) -> None:
++    copy.state = state
++    copy.updated_at = clock.now()
++
++
++def _stock_event(session: AsyncSession, topic: str, copy: Copy, **extra) -> None:
++    payload = {"copy_id": copy.id, "book_ref": copy.book_ref, "venue_ids": [copy.venue_id]}
++    payload.update(extra)
++    events.publish(session, topic, payload)
++
++
++async def _open_transfer(session: AsyncSession, copy_id: int) -> Transfer | None:
++    return await session.scalar(
++        select(Transfer).where(Transfer.copy_id == copy_id, Transfer.status.in_(OPEN_TRANSFER))
++    )
++
++
++# Экземпляры и остатки ---------------------------------------------------------
++
++
++async def add_custodian(session: AsyncSession, venue_id: int, employee_id: int) -> None:
++    await session.merge(Custodian(venue_id=venue_id, employee_id=employee_id))
++
++
++async def register_copy(
++    session: AsyncSession, *, custodian_id: int, venue_id: int, book_ref: int, inventory_no: str
++) -> Copy:
++    await _require_custodian(session, venue_id, custodian_id)
++    inventory_no = inventory_no.strip().upper()
++    if not INVENTORY_NO.match(inventory_no):
++        raise DomainError("инвентарный номер должен иметь вид «ШИФР-00000»")
++    if await session.scalar(select(Copy.id).where(Copy.inventory_no == inventory_no)):
++        raise DomainError(f"инвентарный номер {inventory_no} уже занят")
++    now = clock.now()
++    copy = Copy(
++        inventory_no=inventory_no,
++        book_ref=book_ref,
++        venue_id=venue_id,
++        state="available",
++        acquired_at=now,
++        updated_at=now,
++    )
++    session.add(copy)
++    await session.flush()
++    _stock_event(session, "inventory.copy_registered", copy, inventory_no=inventory_no)
++    return copy
++
++
++async def get_copy(session: AsyncSession, copy_id: int) -> Copy:
++    copy = await session.get(Copy, copy_id)
++    if copy is None:
++        raise NotFound(f"экземпляр {copy_id}")
++    return copy
++
++
++async def recount_stock(session: AsyncSession, book_ref: int, venue_id: int) -> StockLevel:
++    total, available = (
++        await session.execute(
++            select(
++                func.count().filter(Copy.state.in_(ON_BALANCE)),
++                func.count().filter(Copy.state == "available"),
++            ).where(Copy.book_ref == book_ref, Copy.venue_id == venue_id)
++        )
++    ).one()
++    now = clock.now()
++    stmt = insert(StockLevel).values(
++        book_ref=book_ref, venue_id=venue_id, total=total, available=available, updated_at=now
++    )
++    await session.execute(
++        stmt.on_conflict_do_update(
++            index_elements=[StockLevel.book_ref, StockLevel.venue_id],
++            set_={"total": total, "available": available, "updated_at": now},
++        )
++    )
++    return await session.get(StockLevel, (book_ref, venue_id), populate_existing=True)
++
++
++async def stock(session: AsyncSession, book_ref: int, venue_id: int) -> tuple[int, int]:
++    level = await session.get(StockLevel, (book_ref, venue_id))
++    return (level.total, level.available) if level else (0, 0)
++
++
++async def reconcile_venue(session: AsyncSession, copy_id: int, venue_id: int, custodian_id: int) -> Copy:
++    """Исправление места хранения по итогам инвентаризации, без оформления перемещения."""
++    copy = await _copy(session, copy_id)
++    await _require_custodian(session, venue_id, custodian_id)
++    if copy.venue_id == venue_id:
++        return copy
++    if await _open_transfer(session, copy.id):
++        raise DomainError("по экземпляру оформлено перемещение")
++    previous = copy.venue_id
++    copy.venue_id = venue_id
++    copy.updated_at = clock.now()
++    await session.flush()
++    _stock_event(session, "inventory.copy_relocated", copy, venue_ids=[previous, venue_id])
++    return copy
++
++
++# Перемещения ------------------------------------------------------------------
++
++
++async def request_transfer(
++    session: AsyncSession, copy_id: int, to_venue_id: int, custodian_id: int
++) -> Transfer:
++    copy = await _copy(session, copy_id)
++    await _require_custodian(session, copy.venue_id, custodian_id)
++    if copy.venue_id == to_venue_id:
++        raise DomainError("экземпляр уже находится на этой площадке")
++    if copy.state == "on_loan":
++        raise DomainError("экземпляр выдан, перемещение невозможно до возврата")
++    if copy.state != "available":
++        raise DomainError("перемещать можно только экземпляр, доступный на площадке")
++    if await _open_transfer(session, copy.id):
++        raise DomainError("по экземпляру уже есть незавершённое перемещение")
++    remaining = await session.scalar(
++        select(func.count()).where(
++            Copy.book_ref == copy.book_ref,
++            Copy.venue_id == copy.venue_id,
++            Copy.state == "available",
++            Copy.id != copy.id,
++        )
++    )
++    if remaining < settings.MIN_COPIES_ON_VENUE:
++        raise DomainError("на площадке должен остаться хотя бы один экземпляр издания")
++    transfer = Transfer(
++        copy_id=copy.id,
++        from_venue_id=copy.venue_id,
++        to_venue_id=to_venue_id,
++        status="requested",
++        requested_by=custodian_id,
++        requested_at=clock.now(),
++    )
++    session.add(transfer)
++    await session.flush()
++    return transfer
++
++
++async def _transfer(session: AsyncSession, transfer_id: int) -> Transfer:
++    transfer = await session.get(Transfer, transfer_id, with_for_update=True)
++    if transfer is None:
++        raise NotFound(f"перемещение {transfer_id}")
++    return transfer
++
++
++async def ship_transfer(session: AsyncSession, transfer_id: int, custodian_id: int) -> Transfer:
++    transfer = await _transfer(session, transfer_id)
++    await _require_custodian(session, transfer.from_venue_id, custodian_id)
++    if transfer.status != "requested":
++        raise DomainError("отправить можно только оформленное перемещение")
++    copy = await _copy(session, transfer.copy_id)
++    if copy.state != "available":
++        raise DomainError("экземпляр недоступен для отправки")
++    _set_state(copy, "in_transit")
++    transfer.status = "in_transit"
++    transfer.shipped_at = clock.now()
++    _stock_event(session, "inventory.transfer_shipped", copy, transfer_id=transfer.id)
++    return transfer
++
++
++async def receive_transfer(session: AsyncSession, transfer_id: int, custodian_id: int) -> Transfer:
++    transfer = await _transfer(session, transfer_id)
++    await _require_custodian(session, transfer.to_venue_id, custodian_id)
++    if transfer.status != "in_transit":
++        raise DomainError("принять можно только отправленный экземпляр")
++    copy = await _copy(session, transfer.copy_id)
++    copy.venue_id = transfer.to_venue_id
++    _set_state(copy, "available")
++    transfer.status = "received"
++    transfer.closed_at = clock.now()
++    await session.flush()
++    _stock_event(
++        session,
++        "inventory.transfer_received",
++        copy,
++        transfer_id=transfer.id,
++        venue_ids=[transfer.from_venue_id, transfer.to_venue_id],
++    )
++    return transfer
++
++
++async def cancel_transfer(
++    session: AsyncSession, transfer_id: int, custodian_id: int | None, *, reason: str
++) -> Transfer:
++    """custodian_id=None — отмена системой (истёк срок заявки)."""
++    transfer = await _transfer(session, transfer_id)
++    if custodian_id is not None and not await session.scalar(
++        select(func.count()).where(
++            Custodian.employee_id == custodian_id,
++            Custodian.venue_id.in_((transfer.from_venue_id, transfer.to_venue_id)),
++        )
++    ):
++        raise AccessDenied("отменить перемещение может хранитель одной из площадок")
++    if transfer.status not in OPEN_TRANSFER:
++        raise DomainError("перемещение уже завершено")
++    copy = await _copy(session, transfer.copy_id)
++    if transfer.status == "in_transit":
++        _set_state(copy, "available")
++    transfer.status = "cancelled"
++    transfer.cancel_reason = reason
++    transfer.closed_at = clock.now()
++    _stock_event(session, "inventory.transfer_cancelled", copy, transfer_id=transfer.id, reason=reason)
++    return transfer
++
++
++# МБА --------------------------------------------------------------------------
++
++
++async def register_partner(
++    session: AsyncSession, *, code: str, name: str, daily_penalty: Decimal, max_active_loans: int = 5
++) -> PartnerLibrary:
++    if await session.scalar(select(PartnerLibrary.id).where(PartnerLibrary.code == code)):
++        raise DomainError(f"библиотека с кодом {code} уже зарегистрирована")
++    partner = PartnerLibrary(
++        code=code, name=name, daily_penalty=daily_penalty, max_active_loans=max_active_loans
++    )
++    session.add(partner)
++    await session.flush()
++    return partner
++
++
++async def partner_debt(session: AsyncSession, partner_id: int) -> Decimal:
++    return await session.scalar(
++        select(func.coalesce(func.sum(IllPenalty.amount), 0)).where(
++            IllPenalty.partner_id == partner_id, IllPenalty.status != "paid"
++        )
++    )
++
++
++async def issue_ill(session: AsyncSession, copy_id: int, partner_id: int, custodian_id: int) -> IllLoan:
++    copy = await _copy(session, copy_id)
++    await _require_custodian(session, copy.venue_id, custodian_id)
++    partner = await session.get(PartnerLibrary, partner_id)
++    if partner is None:
++        raise NotFound(f"библиотека {partner_id}")
++    if partner.suspended:
++        raise DomainError("выдачи библиотеке приостановлены")
++    if copy.state != "available":
++        raise DomainError("экземпляр недоступен для выдачи")
++    if await _open_transfer(session, copy.id):
++        raise DomainError("по экземпляру оформлено перемещение")
++
++    now = clock.now()
++    active = (
++        await session.scalars(
++            select(IllLoan).where(IllLoan.partner_id == partner_id, IllLoan.status == "out")
++        )
++    ).all()
++    if any(loan.due_at < now for loan in active):
++        raise DomainError("у библиотеки есть просроченные выдачи")
++    if len(active) >= partner.max_active_loans:
++        raise DomainError("превышен лимит одновременных выдач библиотеке")
++    if await partner_debt(session, partner_id) > settings.ILL_PARTNER_DEBT_LIMIT:
++        raise DomainError("у библиотеки неоплаченные пени сверх лимита")
++
++    loan = IllLoan(
++        copy_id=copy.id,
++        partner_id=partner_id,
++        issued_by=custodian_id,
++        issued_at=now,
++        due_at=now + timedelta(days=settings.ILL_LOAN_PERIOD_DAYS),
++        status="out",
++    )
++    session.add(loan)
++    _set_state(copy, "on_loan")
++    await session.flush()
++    _stock_event(session, "inventory.ill_issued", copy, ill_loan_id=loan.id, partner_id=partner_id)
++    return loan
++
++
++async def _out_loan(session: AsyncSession, loan_id: int, custodian_id: int) -> tuple[IllLoan, Copy]:
++    loan = await session.get(IllLoan, loan_id, with_for_update=True)
++    if loan is None:
++        raise NotFound(f"выдача по МБА {loan_id}")
++    copy = await _copy(session, loan.copy_id)
++    await _require_custodian(session, copy.venue_id, custodian_id)
++    if loan.status != "out":
++        raise DomainError("выдача уже закрыта")
++    return loan, copy
++
++
++async def renew_ill(session: AsyncSession, loan_id: int, custodian_id: int) -> IllLoan:
++    loan, _ = await _out_loan(session, loan_id, custodian_id)
++    if loan.due_at < clock.now():
++        raise DomainError("просроченную выдачу продлить нельзя")
++    max_due = loan.issued_at + timedelta(
++        days=settings.ILL_LOAN_PERIOD_DAYS + settings.ILL_RENEWAL_DAYS * settings.ILL_MAX_RENEWALS
++    )
++    new_due = loan.due_at + timedelta(days=settings.ILL_RENEWAL_DAYS)
++    if new_due > max_due:
++        raise DomainError("выдача уже продлевалась")
++    loan.due_at = new_due
++    return loan
++
++
++async def return_ill(
++    session: AsyncSession, loan_id: int, custodian_id: int, *, damaged: bool = False
++) -> IllLoan:
++    loan, copy = await _out_loan(session, loan_id, custodian_id)
++    now = clock.now()
++    loan.status = "returned"
++    loan.returned_at = now
++    _set_state(copy, "damaged" if damaged else "available")
++    _stock_event(
++        session,
++        "inventory.ill_returned",
++        copy,
++        ill_loan_id=loan.id,
++        partner_id=loan.partner_id,
++        due_at=loan.due_at.isoformat(),
++        returned_at=now.isoformat(),
++    )
++    if damaged:
++        _stock_event(session, "inventory.copy_damaged", copy, ill_loan_id=loan.id, note="возврат по МБА")
++    return loan
++
++
++async def report_ill_lost(session: AsyncSession, loan_id: int, custodian_id: int) -> IllLoan:
++    loan, copy = await _out_loan(session, loan_id, custodian_id)
++    loan.status = "lost"
++    _set_state(copy, "lost")
++    _stock_event(
++        session, "inventory.copy_lost", copy, ill_loan_id=loan.id, note="утеряна библиотекой-партнёром"
++    )
++    return loan
++
++
++# Утеря, порча, списание -------------------------------------------------------
++
++
++async def _on_shelf(session: AsyncSession, copy_id: int, custodian_id: int) -> Copy:
++    copy = await _copy(session, copy_id)
++    await _require_custodian(session, copy.venue_id, custodian_id)
++    if copy.state == "on_loan":
++        raise DomainError("экземпляр выдан по МБА, оформите утерю или возврат по выдаче")
++    if copy.state != "available":
++        raise DomainError("экземпляр уже выбыл из фонда или находится в пути")
++    if await _open_transfer(session, copy.id):
++        raise DomainError("по экземпляру оформлено перемещение")
++    return copy
++
++
++async def mark_lost(session: AsyncSession, copy_id: int, custodian_id: int, note: str | None = None) -> Copy:
++    copy = await _on_shelf(session, copy_id, custodian_id)
++    _set_state(copy, "lost")
++    _stock_event(session, "inventory.copy_lost", copy, custodian_id=custodian_id, note=note)
++    return copy
++
++
++async def mark_damaged(
++    session: AsyncSession, copy_id: int, custodian_id: int, note: str | None = None
++) -> Copy:
++    copy = await _on_shelf(session, copy_id, custodian_id)
++    _set_state(copy, "damaged")
++    _stock_event(session, "inventory.copy_damaged", copy, custodian_id=custodian_id, note=note)
++    return copy
++
++
++async def write_off_worn(
++    session: AsyncSession, copy_id: int, custodian_id: int, note: str | None = None
++) -> WriteOff:
++    copy = await _on_shelf(session, copy_id, custodian_id)
++    return await write_off(session, copy, "worn_out", by=custodian_id, note=note)
++
++
++async def write_off(
++    session: AsyncSession,
++    copy: Copy,
++    reason: str,
++    *,
++    by: int | None = None,
++    ill_loan_id: int | None = None,
++    note: str | None = None,
++) -> WriteOff:
++    existing = await session.scalar(select(WriteOff).where(WriteOff.copy_id == copy.id))
++    if existing is not None:
++        return existing
++    now = clock.now()
++    act = WriteOff(
++        copy_id=copy.id,
++        reason=reason,
++        act_no=f"СП-{now.year}-{copy.id:06d}",
++        ill_loan_id=ill_loan_id,
++        note=note,
++        created_by=by,
++        created_at=now,
++    )
++    session.add(act)
++    _set_state(copy, "written_off")
++    await session.flush()
++    _stock_event(session, "inventory.copy_written_off", copy, write_off_id=act.id, reason=reason)
++    return act
++
++
++# Пени по МБА ------------------------------------------------------------------
++
++
++async def _penalty(session: AsyncSession, loan: IllLoan, kind: str) -> IllPenalty:
++    penalty = await session.scalar(
++        select(IllPenalty).where(IllPenalty.ill_loan_id == loan.id, IllPenalty.kind == kind)
++    )
++    if penalty is None:
++        now = clock.now()
++        penalty = IllPenalty(
++            ill_loan_id=loan.id,
++            partner_id=loan.partner_id,
++            kind=kind,
++            days=0,
++            amount=Decimal(0),
++            status="accruing",
++            created_at=now,
++            updated_at=now,
++        )
++        session.add(penalty)
++    return penalty
++
++
++async def accrue_overdue(
++    session: AsyncSession, loan_id: int, days: int, *, final: bool = False
++) -> IllPenalty:
++    loan = await session.get(IllLoan, loan_id)
++    partner = await session.get(PartnerLibrary, loan.partner_id)
++    penalty = await _penalty(session, loan, "overdue")
++    if penalty.status != "accruing":
++        return penalty
++    penalty.days = min(days, settings.ILL_PENALTY_MAX_DAYS)
++    penalty.amount = partner.daily_penalty * penalty.days
++    penalty.updated_at = clock.now()
++    if final:
++        penalty.status = "final"
++    await session.flush()
++    events.publish(
++        session,
++        "inventory.ill_penalty_accrued",
++        {"penalty_id": penalty.id, "partner_id": loan.partner_id, "ill_loan_id": loan.id},
++    )
++    return penalty
++
++
++async def charge_lost_copy(session: AsyncSession, loan_id: int) -> IllPenalty:
++    loan = await session.get(IllLoan, loan_id)
++    overdue = await session.scalar(
++        select(IllPenalty).where(IllPenalty.ill_loan_id == loan.id, IllPenalty.kind == "overdue")
++    )
++    if overdue is not None and overdue.status == "accruing":
++        overdue.status = "final"
++    penalty = await _penalty(session, loan, "lost")
++    penalty.amount = settings.ILL_LOST_COMPENSATION
++    penalty.status = "final"
++    penalty.updated_at = clock.now()
++    await session.flush()
++    events.publish(
++        session,
++        "inventory.ill_penalty_accrued",
++        {"penalty_id": penalty.id, "partner_id": loan.partner_id, "ill_loan_id": loan.id},
++    )
++    return penalty
++
++
++async def penalties(session: AsyncSession, partner_id: int) -> list[IllPenalty]:
++    rows = await session.scalars(
++        select(IllPenalty).where(IllPenalty.partner_id == partner_id).order_by(IllPenalty.id)
++    )
++    return list(rows.all())
++
++
++async def settle_penalty(session: AsyncSession, penalty_id: int) -> IllPenalty:
++    penalty = await session.get(IllPenalty, penalty_id, with_for_update=True)
++    if penalty is None:
++        raise NotFound(f"пени {penalty_id}")
++    if penalty.status == "accruing":
++        raise DomainError("пени ещё начисляются: экземпляр не возвращён")
++    if penalty.status == "paid":
++        raise DomainError("пени уже оплачены")
++    penalty.status = "paid"
++    penalty.updated_at = clock.now()
++    partner = await session.get(PartnerLibrary, penalty.partner_id)
++    await session.flush()
++    if partner.suspended and await partner_debt(session, partner.id) <= settings.ILL_PARTNER_DEBT_LIMIT:
++        partner.suspended = False
++        events.publish(session, "inventory.partner_resumed", {"partner_id": partner.id})
++    return penalty
++
++
++async def review_partner_debt(session: AsyncSession, partner_id: int) -> PartnerLibrary:
++    partner = await session.get(PartnerLibrary, partner_id, with_for_update=True)
++    if not partner.suspended and await partner_debt(session, partner_id) > settings.ILL_PARTNER_DEBT_LIMIT:
++        partner.suspended = True
++        events.publish(session, "inventory.partner_suspended", {"partner_id": partner_id})
++    return partner
+diff --git a/services/inventory/settings.py b/services/inventory/settings.py
+new file mode 100644
+index 0000000..c064679
+--- /dev/null
++++ b/services/inventory/settings.py
+@@ -0,0 +1,18 @@
++from decimal import Decimal
++
++# Срок выдачи экземпляра другой библиотеке по МБА.
++ILL_LOAN_PERIOD_DAYS = 30
++# Продление выдачи по МБА: на сколько дней и сколько раз.
++ILL_RENEWAL_DAYS = 14
++ILL_MAX_RENEWALS = 1
++# Пени начисляются не более чем за столько дней просрочки.
++ILL_PENALTY_MAX_DAYS = 90
++# Компенсация за экземпляр, утерянный библиотекой-партнёром.
++ILL_LOST_COMPENSATION = Decimal("1500.00")
++# Партнёр с неоплаченными пенями больше этой суммы не получает новых выдач.
++ILL_PARTNER_DEBT_LIMIT = Decimal("1000.00")
++
++# Заявка на перемещение, не отправленная за столько дней, отменяется.
++TRANSFER_REQUEST_TTL_DAYS = 14
++# Сколько экземпляров одного издания площадка обязана оставить у себя при перемещении.
++MIN_COPIES_ON_VENUE = 1
+diff --git a/tests/inventory_factories.py b/tests/inventory_factories.py
+new file mode 100644
+index 0000000..9fb2235
+--- /dev/null
++++ b/tests/inventory_factories.py
+@@ -0,0 +1,69 @@
++"""Данные книжного фонда для тестов inventory."""
++
++from decimal import Decimal
++from itertools import count
++
++from libs import db
++from services.inventory import service as inventory
++from services.inventory.models import Copy, IllLoan, Transfer
++from tests.factories import BOOK_H1, KZN, MSK, TVR, act, read
++
++KEEPER = {MSK: 701, KZN: 702, TVR: 703}
++OUTSIDER = 799
++
++_numbers = count(1)
++
++
++async def staff() -> None:
++    async with db.sessionmaker().begin() as s:
++        for venue_id, employee_id in KEEPER.items():
++            await inventory.add_custodian(s, venue_id, employee_id)
++
++
++async def copy(venue: int = MSK, book: int = BOOK_H1, inventory_no: str | None = None) -> int:
++    created = await act(
++        inventory.register_copy,
++        custodian_id=KEEPER[venue],
++        venue_id=venue,
++        book_ref=book,
++        inventory_no=inventory_no or f"ИН-{next(_numbers):05d}",
++    )
++    return created.id
++
++
++async def copies(n: int, venue: int = MSK, book: int = BOOK_H1) -> list[int]:
++    return [await copy(venue, book) for _ in range(n)]
++
++
++async def partner(code: str = "SPB-01", daily_penalty: str = "20.00", max_active_loans: int = 5) -> int:
++    created = await act(
++        inventory.register_partner,
++        code=code,
++        name=f"Библиотека {code}",
++        daily_penalty=Decimal(daily_penalty),
++        max_active_loans=max_active_loans,
++    )
++    return created.id
++
++
++async def lend(copy_id: int, partner_id: int, venue: int = MSK) -> int:
++    loan = await act(inventory.issue_ill, copy_id, partner_id, KEEPER[venue])
++    return loan.id
++
++
++async def transfer(copy_id: int, to: int = KZN, frm: int = MSK) -> int:
++    created = await act(inventory.request_transfer, copy_id, to, KEEPER[frm])
++    return created.id
++
++
++async def state(copy_id: int) -> str:
++    return (await read(inventory.get_copy, copy_id)).state
++
++
++async def get(model: type[Copy | IllLoan | Transfer], pk: int):
++    async with db.sessionmaker()() as s:
++        return await s.get(model, pk)
++
++
++async def stock(venue: int = MSK, book: int = BOOK_H1) -> tuple[int, int]:
++    return await read(inventory.stock, book, venue)
+diff --git a/tests/test_inventory_api.py b/tests/test_inventory_api.py
+new file mode 100644
+index 0000000..098a0aa
+--- /dev/null
++++ b/tests/test_inventory_api.py
+@@ -0,0 +1,49 @@
++import httpx
++import pytest
++
++from libs import events
++from services.inventory.app import app
++from tests import inventory_factories as inv
++from tests.factories import BOOK_L1, KZN, MSK
++
++
++@pytest.fixture(autouse=True)
++async def custodians(world: None) -> None:
++    await inv.staff()
++
++
++@pytest.fixture
++async def client():
++    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://inventory") as c:
++        yield c
++
++
++async def test_register_and_read_stock(client: httpx.AsyncClient) -> None:
++    body = {"custodian_id": inv.KEEPER[MSK], "venue_id": MSK, "book_ref": BOOK_L1, "inventory_no": "ПР-00001"}
++    r = await client.post("/copies", json=body)
++    assert r.status_code == 201
++    assert r.json()["state"] == "available"
++    await events.dispatch_pending()
++    r = await client.get(f"/venues/{MSK}/stock/{BOOK_L1}")
++    assert r.json() == {"total": 1, "available": 1}
++
++    r = await client.post("/copies", json=body | {"venue_id": KZN, "custodian_id": inv.KEEPER[KZN]})
++    assert r.status_code == 409
++
++
++async def test_lend_and_return_over_http(client: httpx.AsyncClient) -> None:
++    copy_id = await inv.copy()
++    partner_id = await inv.partner()
++    r = await client.post(
++        "/ill-loans", json={"custodian_id": inv.KEEPER[MSK], "copy_id": copy_id, "partner_id": partner_id}
++    )
++    assert r.status_code == 201
++    loan_id = r.json()["id"]
++    r = await client.post(
++        f"/copies/{copy_id}/transfers", json={"custodian_id": inv.KEEPER[MSK], "to_venue_id": KZN}
++    )
++    assert r.status_code == 409
++    r = await client.post(f"/ill-loans/{loan_id}/return", json={"custodian_id": inv.KEEPER[MSK]})
++    assert r.json()["status"] == "returned"
++    r = await client.get("/copies/999999")
++    assert r.status_code == 404
+diff --git a/tests/test_inventory_copies.py b/tests/test_inventory_copies.py
+new file mode 100644
+index 0000000..c553540
+--- /dev/null
++++ b/tests/test_inventory_copies.py
+@@ -0,0 +1,80 @@
++import pytest
++from sqlalchemy import select, update
++from sqlalchemy.exc import DBAPIError
++
++from libs import db
++from libs.errors import AccessDenied, DomainError
++from services.inventory import service as inventory
++from services.inventory.models import Copy, WriteOff
++from tests import inventory_factories as inv
++from tests.factories import BOOK_H2, KZN, MSK, act
++
++
++@pytest.fixture(autouse=True)
++async def custodians(world: None) -> None:
++    await inv.staff()
++
++
++async def _write_off(copy_id: int) -> WriteOff | None:
++    async with db.sessionmaker()() as s:
++        return await s.scalar(select(WriteOff).where(WriteOff.copy_id == copy_id))
++
++
++async def test_registered_copies_counted_in_stock() -> None:
++    await inv.copies(3)
++    await inv.copy(KZN)
++    assert await inv.stock(MSK) == (3, 3)
++    assert await inv.stock(KZN) == (1, 1)
++    assert await inv.stock(MSK, BOOK_H2) == (0, 0)
++
++
++async def test_inventory_number_is_normalized_and_unique() -> None:
++    copy_id = await inv.copy(inventory_no=" ab-00017 ")
++    assert (await inv.get(Copy, copy_id)).inventory_no == "AB-00017"
++    with pytest.raises(DomainError, match="уже занят"):
++        await inv.copy(KZN, inventory_no="AB-00017")
++    with pytest.raises(DomainError, match="ШИФР"):
++        await inv.copy(inventory_no="17")
++
++
++async def test_lost_copy_is_written_off_and_leaves_stock() -> None:
++    lost, _ = await inv.copies(2)
++    await act(inventory.mark_lost, lost, inv.KEEPER[MSK], "не найден при инвентаризации")
++    assert await inv.state(lost) == "written_off"
++    act_ = await _write_off(lost)
++    assert act_.reason == "lost"
++    assert act_.created_by == inv.KEEPER[MSK]
++    assert act_.act_no == f"СП-2026-{lost:06d}"
++    assert await inv.stock() == (1, 1)
++
++
++async def test_damaged_copy_is_written_off() -> None:
++    copy_id = await inv.copy()
++    await act(inventory.mark_damaged, copy_id, inv.KEEPER[MSK], "залит водой")
++    assert (await _write_off(copy_id)).reason == "damaged"
++    assert await inv.stock() == (0, 0)
++
++
++async def test_worn_out_write_off_by_custodian_only() -> None:
++    copy_id = await inv.copy()
++    with pytest.raises(AccessDenied):
++        await act(inventory.write_off_worn, copy_id, inv.OUTSIDER)
++    await act(inventory.write_off_worn, copy_id, inv.KEEPER[MSK], "ветхость")
++    assert (await _write_off(copy_id)).reason == "worn_out"
++    with pytest.raises(DomainError, match="выбыл"):
++        await act(inventory.mark_lost, copy_id, inv.KEEPER[MSK])
++
++
++async def test_written_off_copy_cannot_be_changed() -> None:
++    copy_id = await inv.copy()
++    await act(inventory.write_off_worn, copy_id, inv.KEEPER[MSK])
++    async with db.sessionmaker().begin() as s:
++        with pytest.raises(DBAPIError, match="written off"):
++            await s.execute(update(Copy).where(Copy.id == copy_id).values(state="available"))
++
++
++async def test_state_is_constrained() -> None:
++    copy_id = await inv.copy()
++    async with db.sessionmaker().begin() as s:
++        with pytest.raises(DBAPIError, match="copies_state_check"):
++            await s.execute(update(Copy).where(Copy.id == copy_id).values(state="stolen"))
+diff --git a/tests/test_inventory_ill.py b/tests/test_inventory_ill.py
+new file mode 100644
+index 0000000..6173671
+--- /dev/null
++++ b/tests/test_inventory_ill.py
+@@ -0,0 +1,150 @@
++from datetime import timedelta
++from decimal import Decimal
++
++import pytest
++from sqlalchemy import select
++
++from libs import db
++from libs.errors import DomainError
++from services.inventory import jobs, settings
++from services.inventory import service as inventory
++from services.inventory.models import IllLoan, PartnerLibrary, WriteOff
++from tests import inventory_factories as inv
++from tests.factories import MSK, T0, act, read, travel
++
++
++@pytest.fixture(autouse=True)
++async def custodians(world: None) -> None:
++    await inv.staff()
++
++
++async def _penalties(partner_id: int) -> dict[str, tuple[int, Decimal, str]]:
++    return {p.kind: (p.days, p.amount, p.status) for p in await read(inventory.penalties, partner_id)}
++
++
++async def test_ill_loan_due_in_thirty_days() -> None:
++    copy_id = await inv.copy()
++    loan_id = await inv.lend(copy_id, await inv.partner())
++    loan = await inv.get(IllLoan, loan_id)
++    assert loan.due_at == T0 + timedelta(days=settings.ILL_LOAN_PERIOD_DAYS)
++    assert await inv.state(copy_id) == "on_loan"
++    assert await inv.stock() == (1, 0)
++
++
++async def test_overdue_flag_accrues_penalty() -> None:
++    copy_id = await inv.copy()
++    partner_id = await inv.partner(daily_penalty="20.00")
++    loan_id = await inv.lend(copy_id, partner_id)
++    now = T0 + timedelta(days=30, hours=5)
++    assert await act(jobs.flag_overdue_ill, now=T0 + timedelta(days=29)) == []
++    assert await act(jobs.flag_overdue_ill, now=now) == [loan_id]
++    assert await act(jobs.flag_overdue_ill, now=now) == []
++    assert await _penalties(partner_id) == {"overdue": (1, Decimal("20.00"), "accruing")}
++
++    await act(jobs.accrue_ill_penalties, now=T0 + timedelta(days=40))
++    assert await _penalties(partner_id) == {"overdue": (10, Decimal("200.00"), "accruing")}
++
++
++async def test_penalty_is_capped() -> None:
++    partner_id = await inv.partner(daily_penalty="1.00")
++    await inv.lend(await inv.copy(), partner_id)
++    await act(jobs.flag_overdue_ill, now=T0 + timedelta(days=30 + 200))
++    days, amount, _ = (await _penalties(partner_id))["overdue"]
++    assert days == settings.ILL_PENALTY_MAX_DAYS
++    assert amount == Decimal(settings.ILL_PENALTY_MAX_DAYS)
++
++
++async def test_late_return_finalizes_penalty() -> None:
++    copy_id = await inv.copy()
++    partner_id = await inv.partner(daily_penalty="20.00")
++    loan_id = await inv.lend(copy_id, partner_id)
++    await act(jobs.flag_overdue_ill, now=T0 + timedelta(days=31))
++    travel(T0 + timedelta(days=33, hours=1))
++    await act(inventory.return_ill, loan_id, inv.KEEPER[MSK])
++    assert await _penalties(partner_id) == {"overdue": (4, Decimal("80.00"), "final")}
++    assert await inv.state(copy_id) == "available"
++    assert await inv.stock() == (1, 1)
++
++
++async def test_late_return_before_job_still_charges() -> None:
++    partner_id = await inv.partner(daily_penalty="20.00")
++    loan_id = await inv.lend(await inv.copy(), partner_id)
++    travel(T0 + timedelta(days=32))
++    await act(inventory.return_ill, loan_id, inv.KEEPER[MSK])
++    assert await _penalties(partner_id) == {"overdue": (2, Decimal("40.00"), "final")}
++
++
++async def test_timely_return_has_no_penalty() -> None:
++    partner_id = await inv.partner()
++    loan_id = await inv.lend(await inv.copy(), partner_id)
++    travel(T0 + timedelta(days=30))
++    await act(inventory.return_ill, loan_id, inv.KEEPER[MSK])
++    assert await _penalties(partner_id) == {}
++    with pytest.raises(DomainError, match="закрыта"):
++        await act(inventory.return_ill, loan_id, inv.KEEPER[MSK])
++
++
++async def test_partner_with_overdue_loan_gets_nothing_new() -> None:
++    first, second = await inv.copies(2)
++    partner_id = await inv.partner()
++    await inv.lend(first, partner_id)
++    travel(T0 + timedelta(days=31))
++    with pytest.raises(DomainError, match="просроченные"):
++        await inv.lend(second, partner_id)
++
++
++async def test_active_loans_limit() -> None:
++    first, second = await inv.copies(2)
++    partner_id = await inv.partner(max_active_loans=1)
++    await inv.lend(first, partner_id)
++    with pytest.raises(DomainError, match="лимит"):
++        await inv.lend(second, partner_id)
++
++
++async def test_renewal_only_once_and_not_when_overdue() -> None:
++    partner_id = await inv.partner()
++    loan_id = await inv.lend(await inv.copy(), partner_id)
++    await act(inventory.renew_ill, loan_id, inv.KEEPER[MSK])
++    assert (await inv.get(IllLoan, loan_id)).due_at == T0 + timedelta(days=44)
++    with pytest.raises(DomainError, match="продлевалась"):
++        await act(inventory.renew_ill, loan_id, inv.KEEPER[MSK])
++
++    other = await inv.lend(await inv.copy(), partner_id)
++    travel(T0 + timedelta(days=31))
++    with pytest.raises(DomainError, match="просроченную"):
++        await act(inventory.renew_ill, other, inv.KEEPER[MSK])
++
++
++async def test_damaged_on_return_is_written_off() -> None:
++    copy_id = await inv.copy()
++    loan_id = await inv.lend(copy_id, await inv.partner())
++    await act(inventory.return_ill, loan_id, inv.KEEPER[MSK], damaged=True)
++    async with db.sessionmaker()() as s:
++        act_ = await s.scalar(select(WriteOff).where(WriteOff.copy_id == copy_id))
++    assert (act_.reason, act_.ill_loan_id) == ("damaged", loan_id)
++    assert await inv.state(copy_id) == "written_off"
++    assert await inv.stock() == (0, 0)
++
++
++async def test_loss_by_partner_charges_and_suspends() -> None:
++    lost, spare = await inv.copies(2)
++    partner_id = await inv.partner()
++    loan_id = await inv.lend(lost, partner_id)
++    await act(inventory.report_ill_lost, loan_id, inv.KEEPER[MSK])
++
++    assert await inv.state(lost) == "written_off"
++    assert await _penalties(partner_id) == {"lost": (0, settings.ILL_LOST_COMPENSATION, "final")}
++    assert (await inv.get(PartnerLibrary, partner_id)).suspended
++    assert await inv.stock() == (1, 1)
++    with pytest.raises(DomainError, match="приостановлены"):
++        await inv.lend(spare, partner_id)
++
++
++async def test_settling_debt_resumes_partner() -> None:
++    copies = await inv.copies(2)
++    partner_id = await inv.partner()
++    await act(inventory.report_ill_lost, await inv.lend(copies[0], partner_id), inv.KEEPER[MSK])
++    (penalty,) = await read(inventory.penalties, partner_id)
++    await act(inventory.settle_penalty, penalty.id)
++    assert not (await inv.get(PartnerLibrary, partner_id)).suspended
++    await inv.lend(copies[1], partner_id)
+diff --git a/tests/test_inventory_transfers.py b/tests/test_inventory_transfers.py
+new file mode 100644
+index 0000000..c1e8f8a
+--- /dev/null
++++ b/tests/test_inventory_transfers.py
+@@ -0,0 +1,116 @@
++from datetime import timedelta
++
++import pytest
++from sqlalchemy.exc import DBAPIError
++
++from libs import db
++from libs.errors import AccessDenied, DomainError
++from services.inventory import jobs
++from services.inventory import service as inventory
++from services.inventory.models import Copy, Transfer
++from tests import inventory_factories as inv
++from tests.factories import KZN, MSK, T0, TVR, act, travel
++
++
++@pytest.fixture(autouse=True)
++async def custodians(world: None) -> None:
++    await inv.staff()
++
++
++async def test_transfer_moves_copy_and_stock() -> None:
++    moving, _ = await inv.copies(2)
++    transfer_id = await inv.transfer(moving)
++    await act(inventory.ship_transfer, transfer_id, inv.KEEPER[MSK])
++    assert await inv.state(moving) == "in_transit"
++    assert await inv.stock(MSK) == (2, 1)
++
++    with pytest.raises(AccessDenied):
++        await act(inventory.receive_transfer, transfer_id, inv.KEEPER[MSK])
++    await act(inventory.receive_transfer, transfer_id, inv.KEEPER[KZN])
++    copy = await inv.get(Copy, moving)
++    assert (copy.venue_id, copy.state) == (KZN, "available")
++    assert await inv.stock(MSK) == (1, 1)
++    assert await inv.stock(KZN) == (1, 1)
++
++
++async def test_last_copy_stays_on_venue() -> None:
++    only = await inv.copy()
++    with pytest.raises(DomainError, match="хотя бы один"):
++        await inv.transfer(only)
++
++
++async def test_one_open_transfer_per_copy() -> None:
++    moving, _ = await inv.copies(2)
++    await inv.transfer(moving)
++    with pytest.raises(DomainError, match="незавершённое"):
++        await inv.transfer(moving, to=TVR)
++    async with db.sessionmaker().begin() as s:
++        s.add(
++            Transfer(
++                copy_id=moving,
++                from_venue_id=MSK,
++                to_venue_id=TVR,
++                status="requested",
++                requested_by=inv.KEEPER[MSK],
++                requested_at=T0,
++            )
++        )
++        with pytest.raises(DBAPIError, match="uq_transfers_one_open"):
++            await s.flush()
++
++
++async def test_transfer_must_start_where_copy_is() -> None:
++    copy_id = await inv.copy()
++    async with db.sessionmaker().begin() as s:
++        s.add(
++            Transfer(
++                copy_id=copy_id,
++                from_venue_id=KZN,
++                to_venue_id=TVR,
++                status="requested",
++                requested_by=inv.KEEPER[KZN],
++                requested_at=T0,
++            )
++        )
++        with pytest.raises(DBAPIError, match="is not at venue"):
++            await s.flush()
++
++
++async def test_loaned_copy_cannot_be_transferred() -> None:
++    loaned, _ = await inv.copies(2)
++    partner_id = await inv.partner()
++    await inv.lend(loaned, partner_id)
++    with pytest.raises(DomainError, match="выдан"):
++        await inv.transfer(loaned)
++
++
++async def test_loaned_copy_cannot_change_venue_even_on_reconciliation() -> None:
++    loaned = await inv.copy()
++    await inv.lend(loaned, await inv.partner())
++    with pytest.raises(DBAPIError, match="on loan"):
++        await act(inventory.reconcile_venue, loaned, KZN, inv.KEEPER[KZN])
++    assert (await inv.get(Copy, loaned)).venue_id == MSK
++
++
++async def test_cancel_in_transit_returns_copy_to_shelf() -> None:
++    moving, _ = await inv.copies(2)
++    transfer_id = await inv.transfer(moving)
++    await act(inventory.ship_transfer, transfer_id, inv.KEEPER[MSK])
++    with pytest.raises(AccessDenied):
++        await act(inventory.cancel_transfer, transfer_id, inv.KEEPER[TVR], reason="ошибка")
++    await act(inventory.cancel_transfer, transfer_id, inv.KEEPER[KZN], reason="не дошло")
++    assert await inv.state(moving) == "available"
++    assert await inv.stock(MSK) == (2, 2)
++    # после отмены можно оформить новое перемещение
++    await inv.transfer(moving, to=TVR)
++
++
++async def test_stale_requests_expire() -> None:
++    first, second, _ = await inv.copies(3)
++    stale = await inv.transfer(first)
++    travel(T0 + timedelta(days=10))
++    fresh = await inv.transfer(second)
++    expired = await act(jobs.expire_stale_transfers, now=T0 + timedelta(days=15))
++    assert expired == [stale]
++    assert (await inv.get(Transfer, stale)).cancel_reason == "expired"
++    assert (await inv.get(Transfer, fresh)).status == "requested"

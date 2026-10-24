@@ -1,0 +1,51 @@
+id: T06
+prompt_file: T06.prompt.md
+summary: шаблоны писем для долга
+expected_nodes:
+- ref: GT-NOT-03
+  kind: rule
+  role: change
+  hidden: H4
+- ref: services/notifications/config.py::TEMPLATE_GROUP
+  kind: config
+  role: change
+  hidden: H4
+- ref: services/notifications/service.py::find_template
+  kind: code
+  role: change
+- ref: GT-NOT-02
+  kind: rule
+  role: change
+  hidden: H1
+- ref: templates_kind_group_check
+  kind: db
+  role: change
+  hidden: H1
+- ref: services/notifications/service.py::set_template
+  kind: code
+  role: affected
+- ref: GT-NOT-01
+  kind: rule
+  role: affected
+- ref: services/notifications/service.py::send
+  kind: code
+  role: affected
+  source: blind_audit
+- ref: services/notifications/consumers.py::on_booking_created
+  kind: code
+  role: affected
+  source: blind_audit
+  hidden: H2
+- ref: services/notifications/consumers.py::on_booking_cancelled
+  kind: code
+  role: affected
+  source: blind_audit
+  hidden: H2
+- ref: notifications.templates
+  kind: db
+  role: affected
+  source: blind_audit
+hidden_tests:
+- hidden_tests/tasks/test_t06.py
+supersedes: []
+reference: reference/T06.patch

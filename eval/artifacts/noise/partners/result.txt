@@ -1,0 +1,4 @@
+success err=false cost=2.2915105999999996 Готово: сервис `services/partners/` работает, все три проверки проходят.
+
+- `uv run pytest tests/test_partners_*.py -q -p no:cacheprovider`: 30 passed.
+- `uv run ruff check services/partners tests`: ч

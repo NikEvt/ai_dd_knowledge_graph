@@ -1,0 +1,33 @@
+Transformers.js loaded: Xenova/all-MiniLM-L6-v2
+
+Memory Statistics
+
+Overview
++---------------+--------------------------------+
+| Metric        |                          Value |
++---------------+--------------------------------+
+| Backend       | sqlite (bridge, brute-force... |
+| Version       |                        unknown |
+| Total Entries |                              0 |
+| Total Storage |                       466944 B |
+| Location      | ~/work/ai-d... |
++---------------+--------------------------------+
+
+Timeline
++--------------+-------+
+| Metric       | Value |
++--------------+-------+
+| Oldest Entry |   N/A |
+| Newest Entry |   N/A |
++--------------+-------+
+Transformers.js loaded: Xenova/all-MiniLM-L6-v2
+
+Embedding
++-----------------+-------------------------+
+| Metric          |                   Value |
++-----------------+-------------------------+
+| Provider        | Xenova/all-MiniLM-L6-v2 |
+| Dimensions      |                     384 |
+| Semantic Search |                     yes |
+| HNSW Index      |              not active |
++-----------------+-------------------------+

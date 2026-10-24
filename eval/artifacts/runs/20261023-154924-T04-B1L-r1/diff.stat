@@ -1,0 +1,6 @@
+ docs/reconciliation.md             |  7 +++--
+ docs/rules/applications.md         |  7 ++---
+ services/applications/consumers.py |  2 +-
+ services/applications/dedup.py     |  6 -----
+ tests/test_dedup.py                | 53 ++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 61 insertions(+), 14 deletions(-)

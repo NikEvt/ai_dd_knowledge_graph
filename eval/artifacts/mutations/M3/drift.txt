@@ -1,0 +1,10 @@
+ERROR: новое ограничение БД без правила (enforced_by_db): fines_amount_cap
+## Модель знаний: drift и покрытие
+
+- правил: 162 (draft: 140, verified: 22)
+- drift (-> suspect): 0
+- без implemented_by/enforced_by_db: 7
+- без tested_by: 82
+- ограничения БД без правил: 1 из 49
+- suspect старше 14 дней: 0
+

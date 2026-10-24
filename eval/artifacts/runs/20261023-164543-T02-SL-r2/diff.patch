@@ -1,0 +1,1101 @@
+diff --git a/AGENTS.md b/AGENTS.md
+index 8cffa20..0f73183 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -101,5 +101,5 @@ args = ["run", "--quiet", "python", "mcp/knowledge_server.py"]
+ 
+ События: `application.archived`, `application.closed_duplicate`, `application.ready_for_booking`, `application.review_passed`, `application.stage_changed`, `application.unarchived`, `application.venue_changed`, `booking.cancelled`, `booking.created`, `books.issued`, `client.updated`, `halls.booking_cancelled`, `halls.booking_confirmed`, `halls.booking_created`, `halls.booking_held`, `halls.booking_prepaid`, `halls.invoice_issued`, `halls.payment_received`, `halls.venue_changed`, `inventory.copy_damaged`, `inventory.copy_lost`, `inventory.copy_registered`, `inventory.copy_relocated`, `inventory.copy_written_off`, `inventory.ill_issued`, `inventory.ill_overdue`, `inventory.ill_penalty_accrued`, `inventory.ill_returned`, `inventory.partner_resumed`, `inventory.partner_suspended`, `inventory.transfer_cancelled`, `inventory.transfer_received`, `inventory.transfer_shipped`, `invoice.cancelled`, `invoice.issued`, `lectures.capacity_increased`, `lectures.event_cancelled`, `lectures.event_moved`, `lectures.registration_cancelled`, `lectures.registration_created`, `lectures.seat_released`, `lectures.venue_limit_changed`, `lectures.waitlist_expired`, `lectures.waitlist_promoted`, `loan.damaged`, `loan.lost`, `loan.overdue`, `marketing.campaign_finished`, `marketing.campaign_launched`, `marketing.campaign_prepared`, `marketing.message_bounced`, `marketing.unsubscribed`, `partners.commission_accrued`, `partners.contract_activated`, `partners.contract_expired`, `partners.contract_rate_changed`, `partners.contract_resumed`, `partners.contract_suspended`, `partners.contract_terminated`, `partners.credit_overdue`, `partners.deal_cancelled`, `partners.deal_closed`, `partners.deal_created`, `partners.deal_paid`, `partners.partner_onboarded`, `partners.payout_closed`, `partners.request_approved`, `partners.request_closed_duplicate`, `partners.request_rejected`, `partners.request_submitted`, `payment.fully_paid`, `payment.linked`, `payment.refunded`, `reports.definition_deactivated`, `reports.run_cancelled`, `reports.run_completed`, `reports.run_failed`, `reports.run_requested`, `staff.clearance_expired`, `staff.clearance_granted`, `staff.clearance_revoked`, `staff.employee_dismissed`, `staff.employee_hired`, `staff.employee_transferred`, `staff.employee_updated`, `staff.shift_member_removed`, `staff.shift_understaffed`, `subscriptions.activated`, `subscriptions.closed_duplicate`, `subscriptions.created`, `subscriptions.expired`, `subscriptions.grace_started`, `subscriptions.holder_rejected`, `subscriptions.holder_updated`, `subscriptions.invoice_issued`, `subscriptions.payment_completed`, `subscriptions.refund_required`, `subscriptions.renewed`, `venue.settings_changed`.
+ 
+-Правил в модели: 478 (draft: 456, verified: 22).
++Правил в модели: 478 (draft: 450, suspect: 6, verified: 22).
+ <!-- END L0 -->
+diff --git a/docs/README.md b/docs/README.md
+index dc1a666..9895745 100644
+--- a/docs/README.md
++++ b/docs/README.md
+@@ -34,6 +34,6 @@
+ | status | 10 |
+ | symbol | 732 |
+ | table | 81 |
+-| test | 284 |
++| test | 286 |
+ 
+-Правила по статусу: draft — 456, verified — 22
++Правила по статусу: draft — 450, suspect — 6, verified — 22
+diff --git a/docs/config.md b/docs/config.md
+index a583dd7..a70e65f 100644
+--- a/docs/config.md
++++ b/docs/config.md
+@@ -11,7 +11,7 @@
+ | [`settings.py::CLIENT_RESCHEDULE_MIN_DAYS`](../libs/settings.py#L14) | `2` | Клиент может перенести или отменить визит не позднее чем за столько дней. | [`service.py::cancel_booking`](../services/scheduling/service.py#L193) |
+ | [`settings.py::DATABASE_URL`](../libs/settings.py#L4) | `os.environ.get('DATABASE_URL', f'postgresql+asyncpg://erp:erp@localhost:{DB_POR…` |  | [`db.py::engine`](../libs/db.py#L27) |
+ | [`settings.py::DB_PORT`](../libs/settings.py#L3) | `os.environ.get('DB_PORT', '55432')` |  | — |
+-| [`settings.py::LOAN_PERIOD_DAYS`](../libs/settings.py#L8) | `30` | Срок пользования книгами с даты выдачи. | [`service.py::issue_books`](../services/scheduling/service.py#L223) |
++| [`settings.py::LOAN_PERIOD_DAYS`](../libs/settings.py#L8) | `21` | Срок пользования книгами с даты выдачи. | [`service.py::issue_books`](../services/scheduling/service.py#L223) |
+ | [`settings.py::PAYMENT_ARCHIVE_DAYS`](../libs/settings.py#L12) | `30` | Платная заявка уходит в архив, если счёт не оплачен за столько дней. | [`jobs.py::archive_stale`](../services/applications/jobs.py#L14) |
+ | [`settings.py::REDIS_URL`](../libs/settings.py#L5) | `os.environ.get('REDIS_URL', f"redis://localhost:{os.environ.get('REDIS_PORT', '…` |  | [`relay.py::consume_forever`](../libs/events/relay.py#L39)<br>[`relay.py::relay_forever`](../libs/events/relay.py#L16) |
+ | [`settings.py::REVIEW_ARCHIVE_DAYS`](../libs/settings.py#L10) | `30` | Заявка уходит в архив, если с начала проверки прошло столько дней, а данные не получены. | [`jobs.py::archive_stale`](../services/applications/jobs.py#L14) |
+@@ -238,7 +238,7 @@
+ - настройки: —
+ - события: —; вызывает: service.py::advance, service.py::request_run
+ 
+-### [`services/scheduling/jobs.py::flag_overdue`](../services/scheduling/jobs.py#L10)
++### [`services/scheduling/jobs.py::flag_overdue`](../services/scheduling/jobs.py#L11)
+ 
+ - без описания
+ - настройки: —
+diff --git a/docs/coverage.md b/docs/coverage.md
+index 3732683..2686054 100644
+--- a/docs/coverage.md
++++ b/docs/coverage.md
+@@ -4,14 +4,19 @@
+ 
+ - Правил: 478; verified: 22
+ - Без реализации (implemented_by / enforced_by_db): 8
+-- Без тестов (tested_by): 129
+-- suspect: 0
++- Без тестов (tested_by): 128
++- suspect: 6
+ - Ограничения БД без правил: 9
+ - Проверки в коде без правил: 1
+ 
+-## suspect (0)
++## suspect (6)
+ 
+-- нет
++- R-CHAT-EVENTS-08 (с 2026-10-23) Срыв срока возврата книги пишется в чат
++- R-SCHED-ISSUE-01 (с 2026-10-23) Выдача книг — только по записи, на этапе «Ожидает выдачи», в выбранную дату
++- R-SCHED-ISSUE-02 (с 2026-10-23) Срок возврата — LOAN_PERIOD_DAYS от момента выдачи
++- R-SCHED-ISSUE-03 (с 2026-10-23) После выдачи — запись выполнена, книги откреплены, ссылка на сдачу, этап «Книги у клиента»
++- R-SCHED-OVERDUE-01 (с 2026-10-23) Фоновая задача отмечает просрочку после срока возврата (due_at) и создаёт штраф
++- R-SCHEMA-FINE-01 (с 2026-10-23) О просрочке представителю сообщает оператор по почте
+ 
+ ## Правила без реализации (8)
+ 
+@@ -24,7 +29,7 @@
+ - R-SCHEMA-ROLE-01 Один сотрудник — одна роль
+ - R-SUBSCRIPTIONS-REMIND-01 Напоминание перед концом льготного периода не реализовано
+ 
+-## Правила без тестов (129)
++## Правила без тестов (128)
+ 
+ - R-APP-CREATE-03 В заявке есть книги, и все они из сферы заявки и прайса площадки
+ - R-APP-CORE-01 Сферу и представителя заявки сменить нельзя
+@@ -129,7 +134,6 @@
+ - R-SCHED-HOLD-02 Отмена, перенос и неявка не освобождают книги
+ - R-SCHED-OPERATOR-BOOK-01 Оператор записывает клиента только по своей заявке и при активной ссылке
+ - R-SCHED-FINE-01 Порча и утеря книги порождают штраф в billing
+-- R-SCHED-OVERDUE-01 Фоновая задача отмечает просрочку через 30 дней с выдачи и создаёт штраф
+ - R-SCHED-RESET-01 Архив и закрытие дублем сбрасывают записи, книги и ссылку
+ - R-SCHED-VENUE-CHANGE-01 Смена площадки отменяет запись и выдаёт новую ссылку
+ - R-SCHEMA-NOTIF-01 Ссылка на запись уходит клиенту и представителю письмом
+diff --git a/docs/entities/applications.applications.md b/docs/entities/applications.applications.md
+index 72629cd..8e77844 100644
+--- a/docs/entities/applications.applications.md
++++ b/docs/entities/applications.applications.md
+@@ -94,5 +94,5 @@
+ - R-BILL-CANCEL-03 [draft] Аннулирование счёта за книги возвращает заявку в «Ожидает счёта»
+ - R-BILL-INVOICE-08 [verified] Выставление счёта за книги переводит заявку в «Ожидает оплаты»
+ - R-BILL-PROCESS-01 [draft] Полная оплата счёта за книги открывает выдачу и закрывает дубли
+-- R-SCHED-ISSUE-03 [draft] После выдачи — запись выполнена, книги откреплены, ссылка на сдачу, этап «Книги у клиента»
++- R-SCHED-ISSUE-03 [suspect] После выдачи — запись выполнена, книги откреплены, ссылка на сдачу, этап «Книги у клиента»
+ - R-SCHEMA-APP-01 [draft] Оператора заявки переназначить нельзя
+diff --git a/docs/entities/scheduling.bookings.md b/docs/entities/scheduling.bookings.md
+index 7a99401..b680a87 100644
+--- a/docs/entities/scheduling.bookings.md
++++ b/docs/entities/scheduling.bookings.md
+@@ -37,9 +37,9 @@
+ - R-SCHED-CANCEL-01 [draft] Отмена записи — письмо об отмене и событие в чате
+ - R-SCHED-HOLD-01 [draft] Книги закрепляются за заявкой при записи за книгами
+ - R-SCHED-HOLD-02 [draft] Отмена, перенос и неявка не освобождают книги
+-- R-SCHED-ISSUE-01 [draft] Выдача книг — только по записи, на этапе «Ожидает выдачи», в выбранную дату
+-- R-SCHED-ISSUE-02 [draft] Срок возврата — LOAN_PERIOD_DAYS от момента выдачи
+-- R-SCHED-ISSUE-03 [draft] После выдачи — запись выполнена, книги откреплены, ссылка на сдачу, этап «Книги у клиента»
++- R-SCHED-ISSUE-01 [suspect] Выдача книг — только по записи, на этапе «Ожидает выдачи», в выбранную дату
++- R-SCHED-ISSUE-02 [suspect] Срок возврата — LOAN_PERIOD_DAYS от момента выдачи
++- R-SCHED-ISSUE-03 [suspect] После выдачи — запись выполнена, книги откреплены, ссылка на сдачу, этап «Книги у клиента»
+ - R-SCHED-NO-SHOW-01 [draft] Неявка отменяет запись, клиент может записаться снова
+ - R-SCHED-RESCHEDULE-01 [draft] Перенос — это отмена и новая запись
+ - R-SCHED-SLOT-05 [draft] Удаление окна отменяет записи на него
+diff --git a/docs/entities/scheduling.holds.md b/docs/entities/scheduling.holds.md
+index 9277311..ca6a1d5 100644
+--- a/docs/entities/scheduling.holds.md
++++ b/docs/entities/scheduling.holds.md
+@@ -21,8 +21,8 @@
+ - R-SCHED-BOOK-03 [draft] Цель записи берётся из ссылки, кто записал — из запроса
+ - R-SCHED-BOOK-EVENT-01 [verified] Запись на визит — письмо клиенту и представителю, событие в чате
+ - R-SCHED-HOLD-01 [draft] Книги закрепляются за заявкой при записи за книгами
+-- R-SCHED-ISSUE-01 [draft] Выдача книг — только по записи, на этапе «Ожидает выдачи», в выбранную дату
+-- R-SCHED-ISSUE-02 [draft] Срок возврата — LOAN_PERIOD_DAYS от момента выдачи
+-- R-SCHED-ISSUE-03 [draft] После выдачи — запись выполнена, книги откреплены, ссылка на сдачу, этап «Книги у клиента»
++- R-SCHED-ISSUE-01 [suspect] Выдача книг — только по записи, на этапе «Ожидает выдачи», в выбранную дату
++- R-SCHED-ISSUE-02 [suspect] Срок возврата — LOAN_PERIOD_DAYS от момента выдачи
++- R-SCHED-ISSUE-03 [suspect] После выдачи — запись выполнена, книги откреплены, ссылка на сдачу, этап «Книги у клиента»
+ - R-SCHED-RESET-01 [draft] Архив и закрытие дублем сбрасывают записи, книги и ссылку
+ - R-SCHED-VENUE-CHANGE-01 [draft] Смена площадки отменяет запись и выдаёт новую ссылку
+diff --git a/docs/entities/scheduling.loans.md b/docs/entities/scheduling.loans.md
+index c899ec5..7fe4142 100644
+--- a/docs/entities/scheduling.loans.md
++++ b/docs/entities/scheduling.loans.md
+@@ -27,11 +27,11 @@
+ - services/scheduling/service.py::return_book [damaged, returned_at, status]
+ 
+ ## Правила
+-- R-CHAT-EVENTS-08 [draft] Срыв срока возврата книги пишется в чат
++- R-CHAT-EVENTS-08 [suspect] Срыв срока возврата книги пишется в чат
+ - R-SCHED-FINE-01 [verified] Порча и утеря книги порождают штраф в billing
+-- R-SCHED-ISSUE-01 [draft] Выдача книг — только по записи, на этапе «Ожидает выдачи», в выбранную дату
+-- R-SCHED-ISSUE-02 [draft] Срок возврата — LOAN_PERIOD_DAYS от момента выдачи
+-- R-SCHED-ISSUE-03 [draft] После выдачи — запись выполнена, книги откреплены, ссылка на сдачу, этап «Книги у клиента»
+-- R-SCHED-OVERDUE-01 [draft] Фоновая задача отмечает просрочку через 30 дней с выдачи и создаёт штраф
++- R-SCHED-ISSUE-01 [suspect] Выдача книг — только по записи, на этапе «Ожидает выдачи», в выбранную дату
++- R-SCHED-ISSUE-02 [suspect] Срок возврата — LOAN_PERIOD_DAYS от момента выдачи
++- R-SCHED-ISSUE-03 [suspect] После выдачи — запись выполнена, книги откреплены, ссылка на сдачу, этап «Книги у клиента»
++- R-SCHED-OVERDUE-01 [suspect] Фоновая задача отмечает просрочку после срока возврата (due_at) и создаёт штраф
+ - R-SCHED-RETURN-01 [draft] Возврат и утерю отмечает проверяющий оператор площадки заявки по каждой книге
+-- R-SCHEMA-FINE-01 [draft] О просрочке представителю сообщает оператор по почте
++- R-SCHEMA-FINE-01 [suspect] О просрочке представителю сообщает оператор по почте
+diff --git a/docs/events.md b/docs/events.md
+index c9993e8..3c2082e 100644
+--- a/docs/events.md
++++ b/docs/events.md
+@@ -211,7 +211,7 @@ flowchart LR
+ | `lectures.waitlist_promoted` | [`service.py::fill_from_waitlist`](../services/lectures/service.py#L436) | [`consumers.py::on_waitlist_promoted`](../services/lectures/consumers.py#L71) | event_id, listener_id, registration_id, waitlist_id | — |
+ | `loan.damaged` | [`service.py::return_book`](../services/scheduling/service.py#L267) | [`consumers.py::on_loan_damaged`](../services/billing/consumers.py#L49) | application_id, loan_id | — |
+ | `loan.lost` | [`service.py::mark_lost`](../services/scheduling/service.py#L279) | [`consumers.py::on_loan_lost`](../services/billing/consumers.py#L44) | application_id, loan_id | — |
+-| `loan.overdue` | [`jobs.py::flag_overdue`](../services/scheduling/jobs.py#L10) | [`consumers.py::on_loan_overdue`](../services/billing/consumers.py#L39)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23) | application_id, book_id, loan_id | effect:chat.event_log |
++| `loan.overdue` | [`jobs.py::flag_overdue`](../services/scheduling/jobs.py#L11) | [`consumers.py::on_loan_overdue`](../services/billing/consumers.py#L39)<br>[`consumers.py::_handler`](../services/chat/consumers.py#L23) | application_id, book_id, loan_id | effect:chat.event_log |
+ | `marketing.campaign_finished` | [`service.py::deliver_messages`](../services/marketing/service.py#L382) | [`consumers.py::on_campaign_finished`](../services/marketing/consumers.py#L20) | audience_id, campaign_id, finished_at | — |
+ | `marketing.campaign_launched` | [`service.py::start`](../services/marketing/service.py#L295) | [`consumers.py::on_campaign_launched`](../services/marketing/consumers.py#L10) | audience_id, campaign_id, venue_id | — |
+ | `marketing.campaign_prepared` | [`service.py::prepare_messages`](../services/marketing/service.py#L330) | [`consumers.py::on_campaign_prepared`](../services/marketing/consumers.py#L15) | campaign_id, queued | — |
+diff --git a/docs/reconciliation.md b/docs/reconciliation.md
+index 2cd6fe9..7e2796f 100644
+--- a/docs/reconciliation.md
++++ b/docs/reconciliation.md
+@@ -61,11 +61,10 @@
+ 
+ - services/reports/builders.py::build:181 DomainError: f'неизвестный тип отчёта: {other}'
+ 
+-### Литералы вместо настроек (5)
++### Литералы вместо настроек (4)
+ 
+ - services/partners/service.py::add_to_payout:498: литерал 32 совпадает с 
+-- services/scheduling/jobs.py::flag_overdue:16: литерал 30 совпадает с services/inventory/settings.py::ILL_LOAN_PERIOD_DAYS, libs/settings.py::LOAN_PERIOD_DAYS, services/subscriptions/settings.py::GRACE_DAYS, services/staff/settings.py::BRIEFING_VALID_DAYS, services/reports/settings.py::RETENTION_DAYS, services/partners/settings.py::ONBOARDING_REQUEST_TTL_DAYS, services/halls/settings.py::UNPAID_CANCEL_DAYS, libs/settings.py::REVIEW_ARCHIVE_DAYS, libs/settings.py::PAYMENT_ARCHIVE_DAYS
+-- services/subscriptions/jobs.py::expire_overdue:19: литерал 30 совпадает с services/subscriptions/settings.py::GRACE_DAYS, services/staff/settings.py::BRIEFING_VALID_DAYS, services/reports/settings.py::RETENTION_DAYS, services/partners/settings.py::ONBOARDING_REQUEST_TTL_DAYS, services/inventory/settings.py::ILL_LOAN_PERIOD_DAYS, services/halls/settings.py::UNPAID_CANCEL_DAYS, libs/settings.py::REVIEW_ARCHIVE_DAYS, libs/settings.py::PAYMENT_ARCHIVE_DAYS, libs/settings.py::LOAN_PERIOD_DAYS (вероятно services/subscriptions/settings.py::GRACE_DAYS)
++- services/subscriptions/jobs.py::expire_overdue:19: литерал 30 совпадает с services/subscriptions/settings.py::GRACE_DAYS, services/staff/settings.py::BRIEFING_VALID_DAYS, services/reports/settings.py::RETENTION_DAYS, services/partners/settings.py::ONBOARDING_REQUEST_TTL_DAYS, services/inventory/settings.py::ILL_LOAN_PERIOD_DAYS, services/halls/settings.py::UNPAID_CANCEL_DAYS, libs/settings.py::REVIEW_ARCHIVE_DAYS, libs/settings.py::PAYMENT_ARCHIVE_DAYS (вероятно services/subscriptions/settings.py::GRACE_DAYS)
+ - services/subscriptions/jobs.py::issue_renewal_invoices:82: литерал 1 совпадает с 
+ - services/subscriptions/service.py::period_for:34: литерал 1 совпадает с 
+ 
+@@ -153,7 +152,7 @@
+ - services/subscriptions/jobs.py::expire_stale_pending: фоновая задача не вызывается из кода (только из тестов) — планировщик вне репозитория
+ - services/subscriptions/jobs.py::issue_renewal_invoices: фоновая задача не вызывается из кода (только из тестов) — планировщик вне репозитория
+ 
+-### Правила с расхождением со схемой (62)
++### Правила с расхождением со схемой (63)
+ 
+ - R-APP-ARCHIVE-01: Схема: месяц. Код: фиксированные 30 дней из настройки. Схема §9 (платная): уходит в архив, если за месяц не получены данные для счёта — заявки на awaiting_invoice (без выставленного счёта) задача не архивирует никогда.
+ - R-APP-ARCHIVE-02: Код архивирует и частично оплаченные заявки (paid_amount < amount) как unpaid; возврат поступившей части платежа при этом не инициируется — схема этот случай не описывает.
+@@ -202,9 +201,10 @@
+ - R-SCHED-BOOK-03: Схема: оператор записывает в системе, клиент и представитель — по ссылке. Код: публичный эндпоинт POST /links/{token}/bookings принимает booked_by=operator от кого угодно с токеном.
+ - R-SCHED-CANCEL-02: Схема: менее чем за два дня отменить или перенести визит может только оператор. Код: роль определяется параметром by из запроса DELETE /bookings/{booking_id}?by=..., без проверки, кто вызывает. Любой, передав by=operator, обходит ограничение, и личность оператора не сверяется. Текст ошибки «за два дня» зашит в строку и не зависит от настройки.
+ - R-SCHED-FINE-01: Схема (§15): в чат попадают все события заявки. Код: loan.damaged и loan.lost в EVENT_TEXT чата нет, в чат они не попадают.
++- R-SCHED-ISSUE-02: Схема (§14): срок пользования — месяц с даты выдачи. Срок сокращён до 21 дня; схему нужно обновить. Уже выданные книги сохраняют due_at, рассчитанный при выдаче (30 дней).
+ - R-SCHED-ISSUE-03: Схема (§8): книги освобождаются после отметки о возврате. Код: holds удаляются уже при выдаче. Открытые выдачи учитываются только в scheduling.loans.
+ - R-SCHED-LINK-03: Схема: по закрытой заявке ссылка не работает. Код: на закрытие заявки (books_out->closed) модуль не подписан, ссылка на сдачу (purpose=return) после закрытия остаётся активной.
+-- R-SCHED-OVERDUE-01: Срок просрочки зашит литералом timedelta(days=30), а не берётся из LOAN_PERIOD_DAYS или loans.due_at. Если настройку изменить, due_at и момент начисления штрафа разойдутся. Схема: «месяц с выдачи», а не фиксированные 30 дней. Книга, возвращённая с опозданием до запуска задачи, штраф не получает.
++- R-SCHED-OVERDUE-01: Схема: «месяц с выдачи», код: 21 день (due_at). Книга, возвращённая с опозданием до запуска задачи, штраф не получает.
+ - R-SCHED-RETURN-01: Возврат не связан с записью на сдачу: return_book не требует записи и не закрывает её, поэтому запись с purpose=return остаётся в статусе active после приёма книг.
+ - R-SCHED-VENUE-CHANGE-01: Схема: у социальных заявок и заявок в долг площадку меняют только до формирования ссылки, после выдачи — никогда. Код change_venue блокирует смену только для paid на awaiting_issue и books_out. У debt/social на этапе books_out смена проходит: записи на сдачу отменяются, ссылка на сдачу гаснет, а новая не выпускается (выпуск только при awaiting_issue) — клиент не может записаться на сдачу. Письмо об отмене уходит по шаблону старой площадки (venue_id окна).
+ - R-SCHEMA-ACCESS-01: в проекте не реализовано: GET /applications/{application_id} (services/applications/api.py::get) отдаёт заявку без идентификации и проверки роли
+diff --git a/docs/roles.md b/docs/roles.md
+index 0f69d8d..afb3a04 100644
+--- a/docs/roles.md
++++ b/docs/roles.md
+@@ -46,7 +46,7 @@
+ - R-SCHEMA-NOTIF-02 [draft] Оператор может повторно отправить письмо со ссылкой
+ - R-SCHEMA-CLIENT-01 [draft] Клиент заводится один раз оператором, данные общие для всех заявок
+ - R-SCHEMA-APP-01 [draft] Оператора заявки переназначить нельзя
+-- R-SCHEMA-FINE-01 [draft] О просрочке представителю сообщает оператор по почте
++- R-SCHEMA-FINE-01 [suspect] О просрочке представителю сообщает оператор по почте
+ 
+ ### Руководитель проверяющих (`reviewer_lead`)
+ 
+@@ -130,9 +130,9 @@
+ - R-SCHED-HOLD-02 [draft] Отмена, перенос и неявка не освобождают книги
+ - R-SCHED-CANCEL-01 [draft] Отмена записи — письмо об отмене и событие в чате
+ - R-SCHED-NO-SHOW-01 [draft] Неявка отменяет запись, клиент может записаться снова
+-- R-SCHED-ISSUE-01 [draft] Выдача книг — только по записи, на этапе «Ожидает выдачи», в выбранную дату
+-- R-SCHED-ISSUE-02 [draft] Срок возврата — LOAN_PERIOD_DAYS от момента выдачи
+-- R-SCHED-ISSUE-03 [draft] После выдачи — запись выполнена, книги откреплены, ссылка на сдачу, этап «Книги у клиента»
++- R-SCHED-ISSUE-01 [suspect] Выдача книг — только по записи, на этапе «Ожидает выдачи», в выбранную дату
++- R-SCHED-ISSUE-02 [suspect] Срок возврата — LOAN_PERIOD_DAYS от момента выдачи
++- R-SCHED-ISSUE-03 [suspect] После выдачи — запись выполнена, книги откреплены, ссылка на сдачу, этап «Книги у клиента»
+ - R-SCHED-RETURN-01 [draft] Возврат и утерю отмечает проверяющий оператор площадки заявки по каждой книге
+ - R-SCHED-FINE-01 [verified] Порча и утеря книги порождают штраф в billing
+ - R-SCHED-CLOSE-01 [draft] Заявку нельзя закрыть, пока есть книги на руках
+@@ -245,7 +245,7 @@
+ - R-CHAT-EVENTS-05 [draft] События пишутся в чат и после закрытия заявки
+ - R-CHAT-EVENTS-06 [verified] Запись, отмена, перенос и неявка видны в чате как события брони
+ - R-CHAT-EVENTS-07 [draft] Часть событий заявки в чат не попадает
+-- R-CHAT-EVENTS-08 [draft] Срыв срока возврата книги пишется в чат
++- R-CHAT-EVENTS-08 [suspect] Срыв срока возврата книги пишется в чат
+ - R-HALLS-INVOICE-04 [draft] При выставлении счёта клиенту уходит письмо со счётом
+ - R-HALLS-PAYMENT-04 [draft] Полная оплата закрывает счёт, любой платёж пересчитывает статус брони
+ - R-HALLS-STATUS-01 [draft] Полностью оплаченная бронь подтверждается, клиенту уходит письмо
+@@ -338,7 +338,7 @@
+ - R-SCHED-LINK-01 [draft] Ссылка на запись за книгами выдаётся при готовности к записи
+ - R-SCHED-LINK-02 [draft] У заявки только одна действующая ссылка
+ - R-SCHED-CANCEL-01 [draft] Отмена записи — письмо об отмене и событие в чате
+-- R-SCHED-OVERDUE-01 [draft] Фоновая задача отмечает просрочку через 30 дней с выдачи и создаёт штраф
++- R-SCHED-OVERDUE-01 [suspect] Фоновая задача отмечает просрочку после срока возврата (due_at) и создаёт штраф
+ - R-SCHED-RESET-01 [draft] Архив и закрытие дублем сбрасывают записи, книги и ссылку
+ - R-SCHEMA-NOTIF-01 [draft] Ссылка на запись уходит клиенту и представителю письмом
+ - R-STAFF-SITE-RESP-04 [draft] При переводе ответственного создаётся уведомление «нет ответственного» без адресата
+diff --git a/docs/rules/README.md b/docs/rules/README.md
+index 2073b20..bad09d9 100644
+--- a/docs/rules/README.md
++++ b/docs/rules/README.md
+@@ -6,7 +6,7 @@
+ |---|---|---|---|---|
+ | [applications](applications.md) | 40 | 5 | 35 | 0 |
+ | [billing](billing.md) | 36 | 6 | 30 | 0 |
+-| [chat](chat.md) | 22 | 5 | 17 | 0 |
++| [chat](chat.md) | 22 | 5 | 16 | 1 |
+ | [halls](halls.md) | 35 | 0 | 35 | 0 |
+ | [inventory](inventory.md) | 39 | 0 | 39 | 0 |
+ | [lectures](lectures.md) | 44 | 0 | 44 | 0 |
+@@ -14,7 +14,7 @@
+ | [notifications](notifications.md) | 21 | 4 | 17 | 0 |
+ | [partners](partners.md) | 38 | 0 | 38 | 0 |
+ | [reports](reports.md) | 41 | 0 | 41 | 0 |
+-| [scheduling](scheduling.md) | 31 | 2 | 29 | 0 |
+-| [schema](schema.md) | 12 | 0 | 12 | 0 |
++| [scheduling](scheduling.md) | 31 | 2 | 25 | 4 |
++| [schema](schema.md) | 12 | 0 | 11 | 1 |
+ | [staff](staff.md) | 44 | 0 | 44 | 0 |
+ | [subscriptions](subscriptions.md) | 35 | 0 | 35 | 0 |
+diff --git a/docs/rules/chat.md b/docs/rules/chat.md
+index 87b77ab..9ea6c3b 100644
+--- a/docs/rules/chat.md
++++ b/docs/rules/chat.md
+@@ -237,11 +237,11 @@ log_event, в отличие от post_message, не проверяет этап
+ 
+ ## R-CHAT-EVENTS-08 — Срыв срока возврата книги пишется в чат
+ 
+-`draft` · timer · §15 Чат заявки
++`suspect` · timer · §15 Чат заявки
+ 
+-Фоновая задача scheduling flag_overdue отмечает выданные книги (status=out), у которых с issued_at прошло больше 30 дней, и публикует loan.overdue. Чат записывает «Срыв срока возврата книги {book_id}». Срок 30 дней задан литералом timedelta(days=30) в jobs.py, а не настройкой.
++Фоновая задача scheduling flag_overdue отмечает выданные книги (status=out), у которых истёк срок возврата due_at (выдача + LOAN_PERIOD_DAYS, 21 день), и публикует loan.overdue. Чат записывает «Срыв срока возврата книги {book_id}».
+ 
+-- Реализация: [`services/scheduling/jobs.py::flag_overdue:11-26`](../../services/scheduling/jobs.py#L11), [`services/chat/consumers.py::_handler:24-25`](../../services/chat/consumers.py#L24)
++- Реализация: [`services/scheduling/jobs.py::flag_overdue:12-27`](../../services/scheduling/jobs.py#L12), [`services/chat/consumers.py::_handler:24-25`](../../services/chat/consumers.py#L24)
+ - Настройки: `services/chat/consumers.py::EVENT_TEXT`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-CHAT-EVENTS-01
+diff --git a/docs/rules/scheduling.md b/docs/rules/scheduling.md
+index 5697d25..e474b66 100644
+--- a/docs/rules/scheduling.md
++++ b/docs/rules/scheduling.md
+@@ -254,7 +254,7 @@ reschedule отменяет текущую запись через cancel_bookin
+ 
+ ## R-SCHED-ISSUE-01 — Выдача книг — только по записи, на этапе «Ожидает выдачи», в выбранную дату
+ 
+-`draft` · guard · §14 Выдача, возврат и штрафы
++`suspect` · guard · §14 Выдача, возврат и штрафы
+ 
+ issue_books требует действующую запись с purpose=issue («нет действующей записи за книгами»). Выдаёт проверяющий оператор площадки заявки («книги выдаёт проверяющий оператор площадки заявки»). Заявка должна быть на этапе awaiting_issue («выдача возможна только на этапе «Ожидает выдачи»»), а дата окна — совпадать с текущей датой («выдача только в выбранную дату»).
+ 
+@@ -265,20 +265,21 @@ issue_books требует действующую запись с purpose=issue
+ 
+ ## R-SCHED-ISSUE-02 — Срок возврата — LOAN_PERIOD_DAYS от момента выдачи
+ 
+-`draft` · calculation · §14 Выдача, возврат и штрафы
++`suspect` · calculation · §14 Выдача, возврат и штрафы
+ 
+-На каждую книгу заявки создаётся выдача (loan) со статусом out, issued_at = now и due_at = now + LOAN_PERIOD_DAYS (30) дней.
++На каждую книгу заявки создаётся выдача (loan) со статусом out, issued_at = now и due_at = now + LOAN_PERIOD_DAYS (21) день. По due_at фоновая задача flag_overdue отмечает просрочку.
+ 
+ - Реализация: [`services/scheduling/service.py::issue_books:237-247`](../../services/scheduling/service.py#L237)
+ - БД: [`loans_status_check`](../../migrations/versions/0001_initial.py#L298)
+ - Настройки: `libs/settings.py::LOAN_PERIOD_DAYS`
+-- Тесты: `tests/test_paid_flow.py::test_paid_application_full_path`
++- Тесты: `tests/test_paid_flow.py::test_paid_application_full_path`, `tests/test_loans.py::test_loan_due_in_21_days_from_issue`
+ - Роли: Проверяющий оператор
+ - Связанные: R-SCHED-OVERDUE-01
++- ⚠ Расхождение со схемой: Схема (§14): срок пользования — месяц с даты выдачи. Срок сокращён до 21 дня; схему нужно обновить. Уже выданные книги сохраняют due_at, рассчитанный при выдаче (30 дней).
+ 
+ ## R-SCHED-ISSUE-03 — После выдачи — запись выполнена, книги откреплены, ссылка на сдачу, этап «Книги у клиента»
+ 
+-`draft` · effect · §4 Порядок прохождения заявки; §13 Запись на визит и письма
++`suspect` · effect · §4 Порядок прохождения заявки; §13 Запись на визит и письма
+ 
+ После выдачи запись получает статус done, все holds заявки удаляются и выпускается новая ссылка с purpose=return (прежняя гаснет). Публикуется books.issued: подписчик applications переводит заявку awaiting_issue->books_out от имени site_checker.
+ 
+@@ -312,17 +313,18 @@ issue_books требует действующую запись с purpose=issue
+ - Связанные: R-SCHED-RETURN-01, R-SCHED-OVERDUE-01
+ - ⚠ Расхождение со схемой: Схема (§15): в чат попадают все события заявки. Код: loan.damaged и loan.lost в EVENT_TEXT чата нет, в чат они не попадают.
+ 
+-## R-SCHED-OVERDUE-01 — Фоновая задача отмечает просрочку через 30 дней с выдачи и создаёт штраф
++## R-SCHED-OVERDUE-01 — Фоновая задача отмечает просрочку после срока возврата (due_at) и создаёт штраф
+ 
+-`draft` · timer · §14 Выдача, возврат и штрафы
++`suspect` · timer · §14 Выдача, возврат и штрафы
+ 
+-flag_overdue выбирает выдачи со статусом out без флага overdue_flagged, у которых issued_at < now - 30 дней. Каждой ставится overdue_flagged=true (один раз) и публикуется loan.overdue: billing создаёт штраф overdue, chat пишет «Срыв срока возврата книги {book_id}». Срок задан литералом 30, а не настройкой LOAN_PERIOD_DAYS, и считается от issued_at, а не от due_at.
++flag_overdue выбирает выдачи со статусом out без флага overdue_flagged, у которых due_at < now (due_at = выдача + LOAN_PERIOD_DAYS, 21 день). Каждой ставится overdue_flagged=true (один раз) и публикуется loan.overdue: billing создаёт штраф overdue, chat пишет «Срыв срока возврата книги {book_id}».
+ 
+-- Реализация: [`services/scheduling/jobs.py::flag_overdue:10-27`](../../services/scheduling/jobs.py#L10), [`services/billing/consumers.py::on_loan_overdue:38-40`](../../services/billing/consumers.py#L38)
++- Реализация: [`services/scheduling/jobs.py::flag_overdue:11-28`](../../services/scheduling/jobs.py#L11), [`services/billing/consumers.py::on_loan_overdue:38-40`](../../services/billing/consumers.py#L38)
+ - Настройки: `libs/settings.py::LOAN_PERIOD_DAYS`
++- Тесты: `tests/test_loans.py::test_overdue_flagged_after_due_date`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-SCHED-ISSUE-02, R-SCHED-FINE-01
+-- ⚠ Расхождение со схемой: Срок просрочки зашит литералом timedelta(days=30), а не берётся из LOAN_PERIOD_DAYS или loans.due_at. Если настройку изменить, due_at и момент начисления штрафа разойдутся. Схема: «месяц с выдачи», а не фиксированные 30 дней. Книга, возвращённая с опозданием до запуска задачи, штраф не получает.
++- ⚠ Расхождение со схемой: Схема: «месяц с выдачи», код: 21 день (due_at). Книга, возвращённая с опозданием до запуска задачи, штраф не получает.
+ 
+ ## R-SCHED-RESET-01 — Архив и закрытие дублем сбрасывают записи, книги и ссылку
+ 
+diff --git a/docs/rules/schema.md b/docs/rules/schema.md
+index 363a192..945ae57 100644
+--- a/docs/rules/schema.md
++++ b/docs/rules/schema.md
+@@ -95,11 +95,11 @@
+ 
+ ## R-SCHEMA-FINE-01 — О просрочке представителю сообщает оператор по почте
+ 
+-`draft` · obligation · §2 Оператор; §14 Штрафы
++`suspect` · obligation · §2 Оператор; §14 Штрафы
+ 
+ Когда система отметила срыв срока возврата, оператор вручную сообщает о просрочке представителю по почте вне системы.
+ 
+-- Реализация: [`services/scheduling/jobs.py::flag_overdue`](../../services/scheduling/jobs.py#L10), [`services/chat/consumers.py::_handler`](../../services/chat/consumers.py#L23)
++- Реализация: [`services/scheduling/jobs.py::flag_overdue`](../../services/scheduling/jobs.py#L11), [`services/chat/consumers.py::_handler`](../../services/chat/consumers.py#L23)
+ - Роли: Оператор
+ - ⚠ Расхождение со схемой: реализовано частично: система только пишет в чат «Срыв срока возврата книги»; задачи или напоминания оператору нет, факт уведомления не фиксируется
+ 
+diff --git a/knowledge/model/code.json b/knowledge/model/code.json
+index f46dac8..faea167 100644
+--- a/knowledge/model/code.json
++++ b/knowledge/model/code.json
+@@ -9592,10 +9592,10 @@
+   {
+    "dst": "scheduling.loans",
+    "lines": [
+-    13,
+     14,
+     15,
+-    16
++    16,
++    17
+    ],
+    "src": "services/scheduling/jobs.py::flag_overdue",
+    "type": "reads"
+@@ -11569,6 +11569,16 @@
+    "src": "services/applications/service.py::approve",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_loans.py::test_loan_due_in_21_days_from_issue",
++   "src": "services/applications/service.py::approve",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_loans.py::test_overdue_flagged_after_due_date",
++   "src": "services/applications/service.py::approve",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_notifications.py::test_booking_email_goes_to_client_and_representative",
+    "src": "services/applications/service.py::approve",
+@@ -11699,6 +11709,16 @@
+    "src": "services/applications/service.py::assign_reviewer",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_loans.py::test_loan_due_in_21_days_from_issue",
++   "src": "services/applications/service.py::assign_reviewer",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_loans.py::test_overdue_flagged_after_due_date",
++   "src": "services/applications/service.py::assign_reviewer",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_notifications.py::test_booking_email_goes_to_client_and_representative",
+    "src": "services/applications/service.py::assign_reviewer",
+@@ -11869,6 +11889,16 @@
+    "src": "services/applications/service.py::create_application",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_loans.py::test_loan_due_in_21_days_from_issue",
++   "src": "services/applications/service.py::create_application",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_loans.py::test_overdue_flagged_after_due_date",
++   "src": "services/applications/service.py::create_application",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_notifications.py::test_booking_email_goes_to_client_and_representative",
+    "src": "services/applications/service.py::create_application",
+@@ -12074,6 +12104,16 @@
+    "src": "services/applications/service.py::submit_for_review",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_loans.py::test_loan_due_in_21_days_from_issue",
++   "src": "services/applications/service.py::submit_for_review",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_loans.py::test_overdue_flagged_after_due_date",
++   "src": "services/applications/service.py::submit_for_review",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_notifications.py::test_booking_email_goes_to_client_and_representative",
+    "src": "services/applications/service.py::submit_for_review",
+@@ -12184,6 +12224,11 @@
+    "src": "services/billing/public.py::active_books_invoice",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_loans.py::test_overdue_flagged_after_due_date",
++   "src": "services/billing/public.py::open_fines_count",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_archive.py::test_unpaid_invoice_goes_to_archive_after_month",
+    "src": "services/billing/service.py::issue_books_invoice",
+@@ -12194,6 +12239,16 @@
+    "src": "services/billing/service.py::issue_books_invoice",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_loans.py::test_loan_due_in_21_days_from_issue",
++   "src": "services/billing/service.py::issue_books_invoice",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_loans.py::test_overdue_flagged_after_due_date",
++   "src": "services/billing/service.py::issue_books_invoice",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_notifications.py::test_booking_email_goes_to_client_and_representative",
+    "src": "services/billing/service.py::issue_books_invoice",
+@@ -12244,6 +12299,16 @@
+    "src": "services/billing/service.py::issue_books_invoice",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_loans.py::test_loan_due_in_21_days_from_issue",
++   "src": "services/billing/service.py::link_payment",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_loans.py::test_overdue_flagged_after_due_date",
++   "src": "services/billing/service.py::link_payment",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_notifications.py::test_booking_email_goes_to_client_and_representative",
+    "src": "services/billing/service.py::link_payment",
+@@ -12294,6 +12359,16 @@
+    "src": "services/billing/service.py::take_application",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_loans.py::test_loan_due_in_21_days_from_issue",
++   "src": "services/billing/service.py::take_application",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_loans.py::test_overdue_flagged_after_due_date",
++   "src": "services/billing/service.py::take_application",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_notifications.py::test_booking_email_goes_to_client_and_representative",
+    "src": "services/billing/service.py::take_application",
+@@ -15729,6 +15804,11 @@
+    "src": "services/reports/service.py::update_definition",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_loans.py::test_overdue_flagged_after_due_date",
++   "src": "services/scheduling/jobs.py::flag_overdue",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_kinds.py::test_debt_application_skips_invoice",
+    "src": "services/scheduling/service.py::active_link",
+@@ -15739,6 +15819,16 @@
+    "src": "services/scheduling/service.py::active_link",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_loans.py::test_loan_due_in_21_days_from_issue",
++   "src": "services/scheduling/service.py::active_link",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_loans.py::test_overdue_flagged_after_due_date",
++   "src": "services/scheduling/service.py::active_link",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_notifications.py::test_booking_email_goes_to_client_and_representative",
+    "src": "services/scheduling/service.py::active_link",
+@@ -15789,6 +15879,16 @@
+    "src": "services/scheduling/service.py::book",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_loans.py::test_loan_due_in_21_days_from_issue",
++   "src": "services/scheduling/service.py::book",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_loans.py::test_overdue_flagged_after_due_date",
++   "src": "services/scheduling/service.py::book",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_notifications.py::test_booking_email_goes_to_client_and_representative",
+    "src": "services/scheduling/service.py::book",
+@@ -15844,6 +15944,16 @@
+    "src": "services/scheduling/service.py::create_slot",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_loans.py::test_loan_due_in_21_days_from_issue",
++   "src": "services/scheduling/service.py::create_slot",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_loans.py::test_overdue_flagged_after_due_date",
++   "src": "services/scheduling/service.py::create_slot",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_notifications.py::test_booking_email_goes_to_client_and_representative",
+    "src": "services/scheduling/service.py::create_slot",
+@@ -15914,6 +16024,16 @@
+    "src": "services/scheduling/service.py::issue_books",
+    "type": "tested_by"
+   },
++  {
++   "dst": "tests/test_loans.py::test_loan_due_in_21_days_from_issue",
++   "src": "services/scheduling/service.py::issue_books",
++   "type": "tested_by"
++  },
++  {
++   "dst": "tests/test_loans.py::test_overdue_flagged_after_due_date",
++   "src": "services/scheduling/service.py::issue_books",
++   "type": "tested_by"
++  },
+   {
+    "dst": "tests/test_paid_flow.py::test_cannot_close_with_books_out",
+    "src": "services/scheduling/service.py::issue_books",
+@@ -19425,7 +19545,7 @@
+    ],
+    "dst": "scheduling.loans",
+    "lines": [
+-    21
++    22
+    ],
+    "src": "services/scheduling/jobs.py::flag_overdue",
+    "type": "writes"
+@@ -19930,23 +20050,6 @@
+    "symbol": "services/partners/service.py::add_to_payout",
+    "value": 32
+   },
+-  {
+-   "candidates": [
+-    "services/inventory/settings.py::ILL_LOAN_PERIOD_DAYS",
+-    "libs/settings.py::LOAN_PERIOD_DAYS",
+-    "services/subscriptions/settings.py::GRACE_DAYS",
+-    "services/staff/settings.py::BRIEFING_VALID_DAYS",
+-    "services/reports/settings.py::RETENTION_DAYS",
+-    "services/partners/settings.py::ONBOARDING_REQUEST_TTL_DAYS",
+-    "services/halls/settings.py::UNPAID_CANCEL_DAYS",
+-    "libs/settings.py::REVIEW_ARCHIVE_DAYS",
+-    "libs/settings.py::PAYMENT_ARCHIVE_DAYS"
+-   ],
+-   "likely": null,
+-   "line": 16,
+-   "symbol": "services/scheduling/jobs.py::flag_overdue",
+-   "value": 30
+-  },
+   {
+    "candidates": [
+     "services/subscriptions/settings.py::GRACE_DAYS",
+@@ -19956,8 +20059,7 @@
+     "services/inventory/settings.py::ILL_LOAN_PERIOD_DAYS",
+     "services/halls/settings.py::UNPAID_CANCEL_DAYS",
+     "libs/settings.py::REVIEW_ARCHIVE_DAYS",
+-    "libs/settings.py::PAYMENT_ARCHIVE_DAYS",
+-    "libs/settings.py::LOAN_PERIOD_DAYS"
++    "libs/settings.py::PAYMENT_ARCHIVE_DAYS"
+    ],
+    "likely": "services/subscriptions/settings.py::GRACE_DAYS",
+    "line": 19,
+@@ -20034,13 +20136,13 @@
+   {
+    "doc": "Срок пользования книгами с даты выдачи.",
+    "end_line": 8,
+-   "hash": "384b23b3482d",
++   "hash": "9267de9d610c",
+    "id": "libs/settings.py::LOAN_PERIOD_DAYS",
+    "line": 8,
+    "name": "LOAN_PERIOD_DAYS",
+    "path": "libs/settings.py",
+    "type": "config",
+-   "value": 30
++   "value": 21
+   },
+   {
+    "doc": "Платная заявка уходит в архив, если счёт не оплачен за столько дней.",
+@@ -21682,12 +21784,12 @@
+    "type": "job"
+   },
+   {
+-   "end_line": 27,
+-   "hash": "60a1ef28c116",
+-   "hash_own": "40a8df8b7358",
++   "end_line": 28,
++   "hash": "57e4c1a7e5cc",
++   "hash_own": "2e0670a4e05f",
+    "id": "services/scheduling/jobs.py::flag_overdue",
+    "kind": "job",
+-   "line": 10,
++   "line": 11,
+    "name": "flag_overdue",
+    "path": "services/scheduling/jobs.py",
+    "service": "scheduling",
+@@ -31089,7 +31191,7 @@
+     }
+    ],
+    "end_line": 252,
+-   "hash": "9edf671be6de",
++   "hash": "06612dcd1432",
+    "hash_own": "c1d36987a342",
+    "id": "services/scheduling/service.py::issue_books",
+    "kind": "function",
+@@ -33313,50 +33415,50 @@
+    "type": "symbol"
+   },
+   {
+-   "end_line": 103,
++   "end_line": 108,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_bpm_layer_links_guards_and_code",
+    "kind": "test",
+-   "line": 94,
++   "line": 99,
+    "name": "test_bpm_layer_links_guards_and_code",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 80,
++   "end_line": 85,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_code_layer_finds_links_invisible_to_imports",
+    "kind": "test",
+-   "line": 59,
++   "line": 64,
+    "name": "test_code_layer_finds_links_invisible_to_imports",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(code_model)",
+    "type": "test"
+   },
+   {
+-   "end_line": 132,
++   "end_line": 137,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_entity_resolves_russian_term",
+    "kind": "test",
+-   "line": 129,
++   "line": 134,
+    "name": "test_entity_resolves_russian_term",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(g)",
+    "type": "test"
+   },
+   {
+-   "end_line": 91,
++   "end_line": 96,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_event_layer_resolves_dynamic_subscribers",
+    "kind": "test",
+-   "line": 83,
++   "line": 88,
+    "name": "test_event_layer_resolves_dynamic_subscribers",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "()",
+    "type": "test"
+   },
+   {
+-   "end_line": 115,
++   "end_line": 120,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_find_entry_maps_russian_task_to_setting",
+    "kind": "test",
+-   "line": 113,
++   "line": 118,
+    "name": "test_find_entry_maps_russian_task_to_setting",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(g)",
+@@ -33373,30 +33475,30 @@
+    "type": "test"
+   },
+   {
+-   "end_line": 126,
++   "end_line": 131,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_impact_respects_budget_and_crosses_services",
+    "kind": "test",
+-   "line": 119,
++   "line": 124,
+    "name": "test_impact_respects_budget_and_crosses_services",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(g, budget)",
+    "type": "test"
+   },
+   {
+-   "end_line": 153,
++   "end_line": 158,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_mcp_log_line",
+    "kind": "test",
+-   "line": 135,
++   "line": 140,
+    "name": "test_mcp_log_line",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "(monkeypatch, tmp_path, g)",
+    "type": "test"
+   },
+   {
+-   "end_line": 160,
++   "end_line": 165,
+    "id": "tests/knowledge/test_knowledge_tools.py::test_rule_annotation_binds_to_function",
+    "kind": "test",
+-   "line": 156,
++   "line": 161,
+    "name": "test_rule_annotation_binds_to_function",
+    "path": "tests/knowledge/test_knowledge_tools.py",
+    "signature": "()",
+@@ -34392,6 +34494,26 @@
+    "signature": "()",
+    "type": "test"
+   },
++  {
++   "end_line": 20,
++   "id": "tests/test_loans.py::test_loan_due_in_21_days_from_issue",
++   "kind": "test",
++   "line": 15,
++   "name": "test_loan_due_in_21_days_from_issue",
++   "path": "tests/test_loans.py",
++   "signature": "()",
++   "type": "test"
++  },
++  {
++   "end_line": 33,
++   "id": "tests/test_loans.py::test_overdue_flagged_after_due_date",
++   "kind": "test",
++   "line": 24,
++   "name": "test_overdue_flagged_after_due_date",
++   "path": "tests/test_loans.py",
++   "signature": "()",
++   "type": "test"
++  },
+   {
+    "end_line": 103,
+    "id": "tests/test_marketing_api.py::test_access_and_missing_campaign",
+diff --git a/knowledge/model/events.json b/knowledge/model/events.json
+index bf77ce8..7f77249 100644
+--- a/knowledge/model/events.json
++++ b/knowledge/model/events.json
+@@ -1688,7 +1688,7 @@
+   {
+    "dst": "loan.overdue",
+    "lines": [
+-    22
++    23
+    ],
+    "src": "services/scheduling/jobs.py::flag_overdue",
+    "type": "publishes"
+diff --git a/knowledge/reconciliation.yaml b/knowledge/reconciliation.yaml
+index 690ad6a..cc9fd94 100644
+--- a/knowledge/reconciliation.yaml
++++ b/knowledge/reconciliation.yaml
+@@ -232,6 +232,8 @@ discrepancies:
+   - R-CHAT-EVENTS-08
+   severity: medium
+   question: Считать ли просрочку по loans.due_at и начислять ли штраф при позднем возврате в return_book?
++  resolution: flag_overdue считает просрочку по loans.due_at (срок сокращён до 21 дня, LOAN_PERIOD_DAYS);
++    вопрос о штрафе при позднем возврате до запуска задачи остаётся открытым
+ - id: D-17
+   title: Фоновые задачи не запускаются из репозитория
+   schema: '§5, §14: автоархив и отметка срыва срока выполняются автоматически'
+diff --git a/knowledge/rules/chat.yaml b/knowledge/rules/chat.yaml
+index 43bef1f..5086023 100644
+--- a/knowledge/rules/chat.yaml
++++ b/knowledge/rules/chat.yaml
+@@ -564,9 +564,9 @@ rules:
+ - id: R-CHAT-EVENTS-08
+   title: Срыв срока возврата книги пишется в чат
+   text: >
+-    Фоновая задача scheduling flag_overdue отмечает выданные книги (status=out), у которых с issued_at
+-    прошло больше 30 дней, и публикует loan.overdue. Чат записывает «Срыв срока возврата книги {book_id}».
+-    Срок 30 дней задан литералом timedelta(days=30) в jobs.py, а не настройкой.
++    Фоновая задача scheduling flag_overdue отмечает выданные книги (status=out), у которых истёк срок
++    возврата due_at (выдача + LOAN_PERIOD_DAYS, 21 день), и публикует loan.overdue. Чат записывает «Срыв
++    срока возврата книги {book_id}».
+   kind: timer
+   applies_to:
+   - table:chat.messages
+@@ -579,12 +579,13 @@ rules:
+   - R-CHAT-EVENTS-01
+   implemented_by:
+   - symbol: services/scheduling/jobs.py::flag_overdue
+-    lines: 11-26
+-    hash: 60a1ef28c116
++    lines: 12-27
++    hash: 57e4c1a7e5cc
+   - symbol: services/chat/consumers.py::_handler
+     lines: 24-25
+     hash: f46c9b143853
+   config:
+   - services/chat/consumers.py::EVENT_TEXT
+   schema_ref: §15 Чат заявки
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+diff --git a/knowledge/rules/scheduling.yaml b/knowledge/rules/scheduling.yaml
+index a3955d7..2a50ada 100644
+--- a/knowledge/rules/scheduling.yaml
++++ b/knowledge/rules/scheduling.yaml
+@@ -666,17 +666,18 @@ rules:
+   implemented_by:
+   - symbol: services/scheduling/service.py::issue_books
+     lines: 224-235
+-    hash: 9edf671be6de
++    hash: 06612dcd1432
+   tested_by:
+   - tests/test_paid_flow.py::test_issue_only_on_booked_date
+   - tests/test_paid_flow.py::test_paid_application_full_path
+   schema_ref: §14 Выдача, возврат и штрафы
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-SCHED-ISSUE-02
+   title: Срок возврата — LOAN_PERIOD_DAYS от момента выдачи
+   text: >
+     На каждую книгу заявки создаётся выдача (loan) со статусом out, issued_at = now и due_at = now + LOAN_PERIOD_DAYS
+-    (30) дней.
++    (21) день. По due_at фоновая задача flag_overdue отмечает просрочку.
+   kind: calculation
+   applies_to:
+   - table:scheduling.loans
+@@ -690,7 +691,7 @@ rules:
+   implemented_by:
+   - symbol: services/scheduling/service.py::issue_books
+     lines: 237-247
+-    hash: 9edf671be6de
++    hash: 06612dcd1432
+   enforced_by_db:
+   - constraint: loans_status_check
+     hash: 93d592b55f0f
+@@ -698,8 +699,13 @@ rules:
+   - libs/settings.py::LOAN_PERIOD_DAYS
+   tested_by:
+   - tests/test_paid_flow.py::test_paid_application_full_path
++  - tests/test_loans.py::test_loan_due_in_21_days_from_issue
+   schema_ref: §14 Выдача, возврат и штрафы
+-  status: draft
++  discrepancy: >
++    Схема (§14): срок пользования — месяц с даты выдачи. Срок сокращён до 21 дня; схему нужно обновить.
++    Уже выданные книги сохраняют due_at, рассчитанный при выдаче (30 дней).
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-SCHED-ISSUE-03
+   title: После выдачи — запись выполнена, книги откреплены, ссылка на сдачу, этап «Книги у клиента»
+   text: >
+@@ -727,7 +733,7 @@ rules:
+   implemented_by:
+   - symbol: services/scheduling/service.py::issue_books
+     lines: 248-251
+-    hash: 9edf671be6de
++    hash: 06612dcd1432
+   - symbol: services/applications/consumers.py::on_books_issued
+     lines: 67-69
+     hash: 8df2e69239a7
+@@ -740,7 +746,8 @@ rules:
+   discrepancy: >
+     Схема (§8): книги освобождаются после отметки о возврате. Код: holds удаляются уже при выдаче. Открытые
+     выдачи учитываются только в scheduling.loans.
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-SCHED-RETURN-01
+   title: Возврат и утерю отмечает проверяющий оператор площадки заявки по каждой книге
+   text: >
+@@ -818,12 +825,11 @@ rules:
+   status: verified
+   verified_at: '2026-10-23'
+ - id: R-SCHED-OVERDUE-01
+-  title: Фоновая задача отмечает просрочку через 30 дней с выдачи и создаёт штраф
++  title: Фоновая задача отмечает просрочку после срока возврата (due_at) и создаёт штраф
+   text: >
+-    flag_overdue выбирает выдачи со статусом out без флага overdue_flagged, у которых issued_at < now
+-    - 30 дней. Каждой ставится overdue_flagged=true (один раз) и публикуется loan.overdue: billing создаёт
+-    штраф overdue, chat пишет «Срыв срока возврата книги {book_id}». Срок задан литералом 30, а не настройкой
+-    LOAN_PERIOD_DAYS, и считается от issued_at, а не от due_at.
++    flag_overdue выбирает выдачи со статусом out без флага overdue_flagged, у которых due_at < now (due_at
++    = выдача + LOAN_PERIOD_DAYS, 21 день). Каждой ставится overdue_flagged=true (один раз) и публикуется
++    loan.overdue: billing создаёт штраф overdue, chat пишет «Срыв срока возврата книги {book_id}».
+   kind: timer
+   applies_to:
+   - table:scheduling.loans
+@@ -840,19 +846,21 @@ rules:
+   - R-SCHED-FINE-01
+   implemented_by:
+   - symbol: services/scheduling/jobs.py::flag_overdue
+-    lines: 10-27
+-    hash: 60a1ef28c116
++    lines: 11-28
++    hash: 57e4c1a7e5cc
+   - symbol: services/billing/consumers.py::on_loan_overdue
+     lines: 38-40
+     hash: 602403bac5f9
+   config:
+   - libs/settings.py::LOAN_PERIOD_DAYS
++  tested_by:
++  - tests/test_loans.py::test_overdue_flagged_after_due_date
+   schema_ref: §14 Выдача, возврат и штрафы
+   discrepancy: >
+-    Срок просрочки зашит литералом timedelta(days=30), а не берётся из LOAN_PERIOD_DAYS или loans.due_at.
+-    Если настройку изменить, due_at и момент начисления штрафа разойдутся. Схема: «месяц с выдачи», а
+-    не фиксированные 30 дней. Книга, возвращённая с опозданием до запуска задачи, штраф не получает.
+-  status: draft
++    Схема: «месяц с выдачи», код: 21 день (due_at). Книга, возвращённая с опозданием до запуска задачи,
++    штраф не получает.
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-SCHED-RESET-01
+   title: Архив и закрытие дублем сбрасывают записи, книги и ссылку
+   text: >
+diff --git a/knowledge/rules/schema.yaml b/knowledge/rules/schema.yaml
+index bd493cb..50ec4e3 100644
+--- a/knowledge/rules/schema.yaml
++++ b/knowledge/rules/schema.yaml
+@@ -149,14 +149,15 @@ rules:
+   - operator
+   implemented_by:
+   - symbol: services/scheduling/jobs.py::flag_overdue
+-    hash: 60a1ef28c116
++    hash: 57e4c1a7e5cc
+   - symbol: services/chat/consumers.py::_handler
+     hash: f46c9b143853
+   schema_ref: §2 Оператор; §14 Штрафы
+   discrepancy: >
+     реализовано частично: система только пишет в чат «Срыв срока возврата книги»; задачи или напоминания
+     оператору нет, факт уведомления не фиксируется
+-  status: draft
++  status: suspect
++  suspect_since: '2026-10-23'
+ - id: R-SCHEMA-SPHERE-01
+   title: Название сферы уникально
+   text: >
+diff --git a/libs/settings.py b/libs/settings.py
+index e4debd2..ebc7031 100644
+--- a/libs/settings.py
++++ b/libs/settings.py
+@@ -5,7 +5,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL", f"postgresql+asyncpg://erp:erp@loc
+ REDIS_URL = os.environ.get("REDIS_URL", f"redis://localhost:{os.environ.get('REDIS_PORT', '56379')}/0")
+ 
+ # Срок пользования книгами с даты выдачи.
+-LOAN_PERIOD_DAYS = 30
++LOAN_PERIOD_DAYS = 21
+ # Заявка уходит в архив, если с начала проверки прошло столько дней, а данные не получены.
+ REVIEW_ARCHIVE_DAYS = 30
+ # Платная заявка уходит в архив, если счёт не оплачен за столько дней.
+diff --git a/services/scheduling/jobs.py b/services/scheduling/jobs.py
+index e275da8..76b35ff 100644
+--- a/services/scheduling/jobs.py
++++ b/services/scheduling/jobs.py
+@@ -1,4 +1,4 @@
+-from datetime import datetime, timedelta
++from datetime import datetime
+ 
+ from sqlalchemy import select
+ from sqlalchemy.ext.asyncio import AsyncSession
+@@ -7,13 +7,14 @@ from libs import events
+ from services.scheduling.models import Loan
+ 
+ 
++# @rule R-SCHED-OVERDUE-01
+ async def flag_overdue(session: AsyncSession, now: datetime) -> list[int]:
+     loans = (
+         await session.scalars(
+             select(Loan).where(
+                 Loan.status == "out",
+                 Loan.overdue_flagged.is_(False),
+-                Loan.issued_at < now - timedelta(days=30),
++                Loan.due_at < now,
+             )
+         )
+     ).all()
+diff --git a/services/scheduling/service.py b/services/scheduling/service.py
+index 7cb7b5e..767dec6 100644
+--- a/services/scheduling/service.py
++++ b/services/scheduling/service.py
+@@ -239,7 +239,7 @@ async def issue_books(session: AsyncSession, booking_id: int, site_checker_id: i
+             application_id=brief.id,
+             book_id=book_id,
+             issued_at=now,
+-            due_at=now + timedelta(days=settings.LOAN_PERIOD_DAYS),
++            due_at=now + timedelta(days=settings.LOAN_PERIOD_DAYS),  # @rule R-SCHED-ISSUE-02
+             status="out",
+         )
+         for book_id in brief.book_ids
+diff --git a/tests/test_loans.py b/tests/test_loans.py
+new file mode 100644
+index 0000000..47eb6d9
+--- /dev/null
++++ b/tests/test_loans.py
+@@ -0,0 +1,33 @@
++from datetime import timedelta
++
++from libs import settings
++from services.billing import public as billing_public
++from services.scheduling import jobs
++from services.scheduling.models import Loan
++from tests.factories import act, issue, paid_application, read
++
++
++async def _loan(loan_id: int) -> Loan:
++    return await read(lambda s: s.get(Loan, loan_id))
++
++
++# @rule R-SCHED-ISSUE-02
++async def test_loan_due_in_21_days_from_issue() -> None:
++    app_id, _ = await paid_application()
++    [loan_id] = await issue(app_id)
++    loan = await _loan(loan_id)
++    assert settings.LOAN_PERIOD_DAYS == 21
++    assert loan.due_at == loan.issued_at + timedelta(days=21)
++
++
++# @rule R-SCHED-OVERDUE-01
++async def test_overdue_flagged_after_due_date() -> None:
++    app_id, _ = await paid_application()
++    [loan_id] = await issue(app_id)
++    due_at = (await _loan(loan_id)).due_at
++
++    assert await act(jobs.flag_overdue, now=due_at - timedelta(minutes=1)) == []
++    assert await act(jobs.flag_overdue, now=due_at + timedelta(minutes=1)) == [loan_id]
++    assert await act(jobs.flag_overdue, now=due_at + timedelta(days=1)) == []
++    assert (await _loan(loan_id)).overdue_flagged
++    assert await read(billing_public.open_fines_count, app_id) == 1

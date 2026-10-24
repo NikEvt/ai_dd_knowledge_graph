@@ -1,0 +1,154 @@
+diff --git a/docs/reconciliation.md b/docs/reconciliation.md
+index 2cd6fe9..53c0180 100644
+--- a/docs/reconciliation.md
++++ b/docs/reconciliation.md
+@@ -5,11 +5,11 @@
+ Проект реализует подмножество общей схемы (`knowledge/sources/erp-library.md`) с упрощениями.
+ Расхождения фиксируются здесь и в `knowledge/reconciliation.yaml`; код не исправляется.
+ 
+-## Расхождения (29)
++## Расхождения (28)
+ 
+ | ID | Важность | Расхождение | Схема | Код / БД | Правила | Вопрос |
+ |---|---|---|---|---|---|---|
+-| D-01 | high | Дедупликация закрывает заявку, которая уже дошла до записи | §6: остаётся та заявка, что первой дошла до записи (платная — при полной оплате, в долг — при прохождении проверки) | services/applications/dedup.py::OPEN_STAGES:10 включает awaiting_issue; dedup.py::close_duplicates:25 вызывается из consumers.py::on_review_passed:43 и on_fully_paid:31 без проверки, что у других заявок booking_reached_at пуст<br>БД: ix_applications_client_sphere — обычный индекс, не уникальный | R-APP-DEDUP-01, R-APP-DEDUP-02, R-BILL-PROCESS-01 | Если у клиента уже есть оплаченная заявка на «Ожидает выдачи», должна ли более поздняя заявка в долг закрыться сама как дубль, а не закрывать оплаченную? |
++| D-01 | high | Дедупликация закрывает заявку, которая уже дошла до записи | §6: остаётся та заявка, что первой дошла до записи (платная — при полной оплате, в долг и социальная — при прохождении проверки) | services/applications/dedup.py::OPEN_STAGES:10 включает awaiting_issue; dedup.py::close_duplicates:25 вызывается из consumers.py::on_review_passed:43 и on_fully_paid:31 без проверки, что у других заявок booking_reached_at пуст<br>БД: ix_applications_client_sphere — обычный индекс, не уникальный | R-APP-DEDUP-01, R-APP-DEDUP-02, R-BILL-PROCESS-01 | Если у клиента уже есть оплаченная заявка на «Ожидает выдачи», должна ли более поздняя заявка в долг закрыться сама как дубль, а не закрывать оплаченную? |
+ | D-02 | high | Ссылка на запись нигде не отправляется клиенту | §13: ссылка формируется и уходит на «Ожидает выдачи» и когда книги у клиента; §1: клиент работает только по ссылке из письма | services/scheduling/consumers.py::on_ready_for_booking:12 и scheduling/service.py::issue_books:223 создают ссылку; notifications подписан только на booking.created и booking.cancelled (notifications/consumers.py:9,20)<br>БД: emails_type_check, templates_type_check — только booking и cancel | R-SCHEMA-NOTIF-01, R-SCHEMA-NOTIF-02, R-SCHED-LINK-01, R-NOTIF-TYPES-01, R-NOTIF-RENDER-02 | Как клиент получает токен ссылки — нужен ли тип письма «ссылка на запись» (за книгами и на сдачу), в том числе после смены площадки? |
+ | D-03 | high | Роли и закрепление сотрудников в большинстве действий не проверяются | §2, §3, §17: проверяющего назначает только руководитель проверяющих; привязку, отвязку и возврат платежа выполняет только главный бухгалтер; аннулирует счёт закреплённый бухгалтер; данные клиента обновляет проверяющий | applications/service.py::assign_reviewer:122 (без исполнителя); update_client:131 (без source_application_id проверки нет); billing/service.py::link_payment:98 (chief_id из тела запроса), unlink_payment:132, refund_payment:143, cancel_invoice:75 (без исполнителя); chat/api.py::list_:35 (role из query) | R-APP-REVIEW-02, R-APP-CLIENT-01, R-BILL-PAYMENT-03, R-BILL-REFUND-01, R-BILL-UNLINK-01, R-BILL-CANCEL-02, R-CHAT-AUTH-01, R-SCHEMA-ROLE-01 | Где должна проверяться роль — в сервисах (тогда нужен справочник сотрудников) или во внешнем шлюзе аутентификации, которому сервисы доверяют? |
+ | D-04 | high | Ограничение «за два дня» и признак оператора обходятся параметром запроса | §2 Клиент, §13: менее чем за два дня переносит или отменяет только оператор; оператор записывает в системе, клиент и представитель — по ссылке | services/scheduling/api.py::cancel:41 — by из query; scheduling/service.py::cancel_booking:193 доверяет by; api.py::book:35 — booked_by=operator принимается от любого обладателя токена<br>БД: bookings_booked_by_check — только допустимые значения, не источник | R-SCHED-CANCEL-02, R-SCHED-BOOK-03, R-SCHED-RESCHEDULE-01 | Нужно ли закрыть публичным эндпоинтам значения by и booked_by, отличные от client и representative, и пускать оператора только через book_by_operator с проверкой закрепления? |
+@@ -29,7 +29,6 @@
+ | D-18 | medium | Окно можно переполнить параллельными записями | §12: максимум мест на окно задаёт администратор; §2 Клиент: нельзя записаться на занятое время | services/scheduling/service.py::book:136 считает записи без блокировки<br>БД: ограничения на число записей в окне нет; trg_slot_capacity_limit проверяет только capacity окна, а не записи | R-SCHED-BOOK-01, R-SCHED-SLOT-03 | Нужна ли блокировка окна (SELECT … FOR UPDATE) или триггер на bookings? |
+ | D-19 | medium | После закрытия заявки ссылка на сдачу и запись на сдачу остаются активными | §13: по закрытой заявке ссылка не работает | scheduling не подписан на переход books_out->closed; services/scheduling/service.py::return_book:267 не закрывает запись с purpose=return<br>БД: uq_booking_links_one_active | R-SCHED-LINK-03, R-SCHED-RETURN-01 | Гасить ли ссылку и записи на сдачу при закрытии заявки (или при возврате последней книги)? |
+ | D-20 | low | Бухгалтер может взять заявку любого этапа и вида, кроме debt | §2 Бухгалтер: берёт в работу платные заявки, прошедшие проверку; §3: у социальной заявки бухгалтера нет, пока не понадобится штраф | services/billing/service.py::take_application:17 проверяет только kind≠debt<br>БД: PK billing.accountant_assignments(application_id) | R-BILL-ASSIGN-01, R-BILL-ASSIGN-02 | Ограничить ли закрепление этапами от awaiting_invoice (для paid) и наличием штрафа (для social)? |
+-| D-21 | medium | Социальные заявки между собой не дедуплицируются | §6: две заявки клиента по одной сфере — остаётся одна; исключение только между социальными и платными | services/applications/consumers.py::on_review_passed:43 вызывает close_duplicates только для debt; для social вызова нет | R-APP-DEDUP-01 | Должна ли вторая социальная заявка клиента по той же сфере закрываться как дубль? |
+ | D-22 | medium | Нет истории действий «кто и когда» | §16: все значимые действия сохраняются в истории заявки, удалить её нельзя | libs/bpm/engine.py::transition:53 не сохраняет actor; services/applications/listeners.py::_domain_events пишет stage_changed без исполнителя<br>БД: неизменяем только chat.messages (trg_chat_messages_immutable) | R-SCHEMA-HIST-01, R-CHAT-EVENTS-02, R-CHAT-EVENTS-07 | Считать ли ленту чата историей заявки (тогда в событиях нужен исполнитель) или нужен отдельный журнал аудита? |
+ | D-23 | medium | Заявку и данные клиента видит кто угодно; клиент заводится повторно | §16: проверяющий оператор видит только свою площадку; §2 Клиент: заявку не видит; §6: клиент заводится один раз | services/applications/api.py::get:55 без проверки; services/applications/service.py::create_client:63 без проверки дублей и роли<br>БД: у applications.clients нет уникальных ключей | R-SCHEMA-ACCESS-01, R-SCHEMA-CLIENT-01 | По какому признаку считать клиента тем же (паспорт, ФИО и дата рождения), и нужен ли уникальный индекс? |
+ | D-24 | low | Письма об отмене уходят по архивной заявке и не содержат новой ссылки | §5: пока заявка в архиве, письма не отправляются; §7: при смене площадки — письмо об отмене и новая ссылка | services/notifications/consumers.py::on_booking_cancelled:21 передаёт только starts_at; services/notifications/service.py::send:42 не проверяет этап | R-NOTIF-RESET-01, R-NOTIF-RENDER-02 | Отправлять ли письмо об отмене в момент архивации и добавлять ли в письмо после смены площадки новую ссылку? |
+@@ -160,7 +159,7 @@
+ - R-APP-BOOKS-01: Схема (§4): если после выставления счёта до оплаты меняются книги, счёт аннулируется и выставляется заново. Код: после проверки книги меняются только через архив и возврат из него (R-APP-UNARCHIVE-02); других путей смены книг нет.
+ - R-APP-CLIENT-01: Схема: данные клиента обновляет только проверяющий. Код: при вызове без source_application_id роль и закрепление не проверяются — обновить данные может кто угодно.
+ - R-APP-CLIENT-03: Схема: перепроверка не должна приводить к потере заявки. Код: review_started_at остаётся от первой проверки, поэтому возвращённая на проверку заявка, у которой проверка началась больше REVIEW_ARCHIVE_DAYS назад, при ближайшем запуске archive_stale уходит в архив с outcome=no_data.
+-- R-APP-DEDUP-01: Схема: остаётся та заявка, что первой дошла до записи. Код: OPEN_STAGES включает awaiting_issue, поэтому более поздний «победитель» (например, заявка в долг, прошедшая проверку после оплаты платной) закрывает уже дошедшую до записи и оплаченную заявку. Для социальных заявок дедупликация не запускается вообще.
++- R-APP-DEDUP-01: Схема: остаётся та заявка, что первой дошла до записи. Код: OPEN_STAGES включает awaiting_issue, поэтому более поздний «победитель» (например, заявка в долг или социальная, прошедшая проверку после оплаты платной) закрывает уже дошедшую до записи и оплаченную заявку.
+ - R-APP-REVIEW-02: Схема: назначает и переназначает только руководитель проверяющих. Код: роль вызывающего не проверяется, назначить может любой вызывающий.
+ - R-APP-UNARCHIVE-03: Схема: новый счёт выставляется после проверки, если сумма изменилась. Код: счёт аннулируется сразу при возврате из архива, до проверки; сравнивается только цена по прайсу без надбавки.
+ - R-APP-VENUE-CHANGE-02: Схема: social/debt меняют площадку только до формирования ссылки на запись. Код сервиса этого не проверяет — запрет срабатывает только в триггере БД на flush, без доменного сообщения.
+diff --git a/docs/rules/applications.md b/docs/rules/applications.md
+index 50fc264..fb918be 100644
+--- a/docs/rules/applications.md
++++ b/docs/rules/applications.md
+@@ -366,14 +366,15 @@ unarchive сравнивает стоимость книг по прайсу п
+ 
+ `draft` · effect · §6 Клиент и проверка данных
+ 
+-close_duplicates вызывается при полной оплате платной заявки и при прохождении проверки заявки в долг (подписчик application.review_passed с kind=debt). Все другие заявки клиента по той же сфере на этапах OPEN_STAGES (включая awaiting_issue и archived) того же трека (не-social с не-social) переводятся в closed_duplicate; незакрытая попытка закрывается с outcome=duplicate.
++close_duplicates вызывается при полной оплате платной заявки и при прохождении проверки заявки в долг или социальной (подписчик application.review_passed с kind=debt или kind=social). Все другие заявки клиента по той же сфере на этапах OPEN_STAGES (включая awaiting_issue и archived) переводятся в closed_duplicate независимо от вида: социальная закрывает платные и в долг, и наоборот, а также другие социальные. Незакрытая попытка дубля закрывается с outcome=duplicate.
+ 
+-- Реализация: [`services/applications/dedup.py::close_duplicates:26-50`](../../services/applications/dedup.py#L26), [`services/applications/dedup.py::_same_track:22-22`](../../services/applications/dedup.py#L22), [`services/applications/consumers.py::on_review_passed:44-47`](../../services/applications/consumers.py#L44), [`services/applications/consumers.py::on_fully_paid:39-39`](../../services/applications/consumers.py#L39), [`awaiting_issue->closed_duplicate`](../../bpm/application_process.yaml#L43)
++- Реализация: [`services/applications/dedup.py::close_duplicates:21-45`](../../services/applications/dedup.py#L21), [`services/applications/consumers.py::on_review_passed:44-47`](../../services/applications/consumers.py#L44), [`services/applications/consumers.py::on_fully_paid:39-39`](../../services/applications/consumers.py#L39), [`awaiting_issue->closed_duplicate`](../../bpm/application_process.yaml#L43)
+ - БД: [`ix_applications_client_sphere`](../../migrations/versions/0001_initial.py#L94), [`attempts_outcome_check`](../../migrations/versions/0001_initial.py#L108)
+ - Настройки: `services/applications/dedup.py::OPEN_STAGES`
++- Тесты: `tests/test_dedup.py::test_social_review_closes_paid_duplicate`, `tests/test_dedup.py::test_full_payment_closes_social_duplicate`, `tests/test_dedup.py::test_debt_review_closes_social_duplicate`, `tests/test_dedup.py::test_second_social_application_is_duplicate`, `tests/test_dedup.py::test_other_sphere_and_client_are_not_duplicates`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-APP-PAY-03, R-APP-REVIEW-05, R-APP-DEDUP-02
+-- ⚠ Расхождение со схемой: Схема: остаётся та заявка, что первой дошла до записи. Код: OPEN_STAGES включает awaiting_issue, поэтому более поздний «победитель» (например, заявка в долг, прошедшая проверку после оплаты платной) закрывает уже дошедшую до записи и оплаченную заявку. Для социальных заявок дедупликация не запускается вообще.
++- ⚠ Расхождение со схемой: Схема: остаётся та заявка, что первой дошла до записи. Код: OPEN_STAGES включает awaiting_issue, поэтому более поздний «победитель» (например, заявка в долг или социальная, прошедшая проверку после оплаты платной) закрывает уже дошедшую до записи и оплаченную заявку.
+ 
+ ## R-APP-DEDUP-02 — Закрытие дубля аннулирует его неоплаченные счета и сбрасывает записи
+ 
+diff --git a/services/applications/consumers.py b/services/applications/consumers.py
+index 7066240..e08a67f 100644
+--- a/services/applications/consumers.py
++++ b/services/applications/consumers.py
+@@ -41,7 +41,7 @@ async def on_fully_paid(session: AsyncSession, payload: dict[str, Any]) -> None:
+ 
+ @subscribe("application.review_passed")
+ async def on_review_passed(session: AsyncSession, payload: dict[str, Any]) -> None:
+-    if payload["kind"] != "debt":
++    if payload["kind"] not in ("debt", "social"):
+         return
+     app = await service.load(session, payload["application_id"])
+     await dedup.close_duplicates(session, app)
+diff --git a/services/applications/dedup.py b/services/applications/dedup.py
+index 4e69ded..52be72e 100644
+--- a/services/applications/dedup.py
++++ b/services/applications/dedup.py
+@@ -18,10 +18,6 @@ OPEN_STAGES = (
+ )
+ 
+ 
+-def _same_track(a: Application, b: Application) -> bool:
+-    return (a.kind == "social") == (b.kind == "social")
+-
+-
+ async def close_duplicates(session: AsyncSession, winner: Application) -> list[int]:
+     others = (
+         await session.scalars(
+@@ -35,8 +31,6 @@ async def close_duplicates(session: AsyncSession, winner: Application) -> list[i
+     ).all()
+     closed: list[int] = []
+     for other in others:
+-        if not _same_track(winner, other):
+-            continue
+         await bpm.transition(session, other, "closed_duplicate", actor="system")
+         attempt = other.attempts[-1]
+         if attempt.ended_at is None:
+diff --git a/tests/test_dedup.py b/tests/test_dedup.py
+new file mode 100644
+index 0000000..46aeac1
+--- /dev/null
++++ b/tests/test_dedup.py
+@@ -0,0 +1,53 @@
++from tests.factories import (
++    BOOK_L1,
++    CLIENT_B,
++    LAW,
++    REP_DEBT,
++    application,
++    new_application,
++    paid_application,
++    pass_review,
++    stage,
++    submit,
++)
++
++
++async def test_social_review_closes_paid_duplicate() -> None:
++    paid_id = await new_application()
++    await submit(paid_id)
++    social_id = await new_application(social=True)
++    await pass_review(social_id)
++    assert await stage(social_id) == "awaiting_issue"
++    assert await stage(paid_id) == "closed_duplicate"
++    assert (await application(paid_id)).attempts[-1].outcome == "duplicate"
++
++
++async def test_full_payment_closes_social_duplicate() -> None:
++    social_id = await new_application(social=True)
++    await submit(social_id)
++    paid_id, _ = await paid_application()
++    assert await stage(paid_id) == "awaiting_issue"
++    assert await stage(social_id) == "closed_duplicate"
++
++
++async def test_debt_review_closes_social_duplicate() -> None:
++    social_id = await new_application(social=True)
++    debt_id = await new_application(rep=REP_DEBT)
++    await pass_review(debt_id)
++    assert await stage(social_id) == "closed_duplicate"
++
++
++async def test_second_social_application_is_duplicate() -> None:
++    first = await new_application(social=True)
++    second = await new_application(social=True)
++    await pass_review(first)
++    assert await stage(second) == "closed_duplicate"
++
++
++async def test_other_sphere_and_client_are_not_duplicates() -> None:
++    other_sphere = await new_application(sphere=LAW, books=(BOOK_L1,))
++    other_client = await new_application(client=CLIENT_B)
++    social_id = await new_application(social=True)
++    await pass_review(social_id)
++    assert await stage(other_sphere) == "draft"
++    assert await stage(other_client) == "draft"

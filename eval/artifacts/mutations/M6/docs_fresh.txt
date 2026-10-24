@@ -1,0 +1,25 @@
+diff --git a/docs/config.md b/docs/config.md
+index 500660c..f93c081 100644
+--- a/docs/config.md
++++ b/docs/config.md
+@@ -38,6 +38,6 @@
+ 
+ ### [`services/scheduling/jobs.py::flag_overdue`](../services/scheduling/jobs.py#L10)
+ 
+-- без описания
++- Отмечает просроченные выдачи и публикует loan.overdue.
+ - настройки: `libs/settings.py::LOAN_PERIOD_DAYS`
+ - события: `loan.overdue`; вызывает: —
+diff --git a/docs/reconciliation.md b/docs/reconciliation.md
+index f987325..c953bcc 100644
+--- a/docs/reconciliation.md
++++ b/docs/reconciliation.md
+@@ -55,7 +55,7 @@
+ 
+ ### Литералы вместо настроек (1)
+ 
+-- services/scheduling/jobs.py::flag_overdue:16: литерал 30 совпадает с libs/settings.py::LOAN_PERIOD_DAYS, libs/settings.py::REVIEW_ARCHIVE_DAYS, libs/settings.py::PAYMENT_ARCHIVE_DAYS (вероятно libs/settings.py::LOAN_PERIOD_DAYS)
++- services/scheduling/jobs.py::flag_overdue:18: литерал 30 совпадает с libs/settings.py::LOAN_PERIOD_DAYS, libs/settings.py::REVIEW_ARCHIVE_DAYS, libs/settings.py::PAYMENT_ARCHIVE_DAYS (вероятно libs/settings.py::LOAN_PERIOD_DAYS)
+ 
+ ### События без подписчиков или публикаторов (0)
+ 

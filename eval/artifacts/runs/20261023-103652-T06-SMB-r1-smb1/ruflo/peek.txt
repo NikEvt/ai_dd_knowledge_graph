@@ -1,0 +1,14 @@
+
+Memory Peek
+
+cwd: ~/work/ai-dd/wt/series-smb1
+root: ~/work/ai-dd/wt/series-smb1/.swarm (source: default)
+
++------+------------------------------------------+--------+------+--------------------------+
+| Role | Path                                     | Exists | Rows | Last Write               |
++------+------------------------------------------+--------+------+--------------------------+
+| cli  | ~/work/ai-dd/wt/serie... | yes    |    4 | 2026-10-23T07:39:22.291Z |
+| mcp  | ~/work/ai-dd/wt/serie... | yes    |    4 | 2026-10-23T07:39:22.373Z |
++------+------------------------------------------+--------+------+--------------------------+
+
+Shared keys (same namespace+key in both stores): 4

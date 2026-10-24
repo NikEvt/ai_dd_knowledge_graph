@@ -1,0 +1,47 @@
+id: T07
+prompt_file: T07.prompt.md
+summary: новый максимум мест для будущих окон
+expected_nodes:
+- ref: GT-SCH-01
+  kind: rule
+  role: change
+  hidden: H1
+- ref: services/applications/admin.py::set_venue_max_capacity
+  kind: code
+  role: affected
+- ref: venue.settings_changed
+  kind: event
+  role: affected
+  hidden: H2
+- ref: services/scheduling/consumers.py::on_venue_settings_changed
+  kind: code
+  role: change
+  hidden: H2
+- ref: scheduling.venue_limits
+  kind: db
+  role: affected
+  hidden: H1
+- ref: trg_slot_capacity_limit
+  kind: db
+  role: affected
+  hidden: H1
+- ref: GT-SCH-02
+  kind: rule
+  role: keep
+- ref: scheduling.check_slot_capacity
+  kind: db
+  role: affected
+  source: blind_audit
+  hidden: H1
+- ref: services/scheduling/service.py::reduce_capacity
+  kind: code
+  role: affected
+  source: blind_audit
+- ref: services/scheduling/models.py::Slot
+  kind: code
+  role: affected
+  source: blind_audit
+hidden_tests:
+- hidden_tests/tasks/test_t07.py
+supersedes: []
+reference: reference/T07.patch

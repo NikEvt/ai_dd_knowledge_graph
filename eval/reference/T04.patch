@@ -1,0 +1,37 @@
+diff --git a/services/applications/consumers.py b/services/applications/consumers.py
+index 7066240..e08a67f 100644
+--- a/services/applications/consumers.py
++++ b/services/applications/consumers.py
+@@ -41,7 +41,7 @@ async def on_fully_paid(session: AsyncSession, payload: dict[str, Any]) -> None:
+ 
+ @subscribe("application.review_passed")
+ async def on_review_passed(session: AsyncSession, payload: dict[str, Any]) -> None:
+-    if payload["kind"] != "debt":
++    if payload["kind"] not in ("debt", "social"):
+         return
+     app = await service.load(session, payload["application_id"])
+     await dedup.close_duplicates(session, app)
+diff --git a/services/applications/dedup.py b/services/applications/dedup.py
+index 4e69ded..52be72e 100644
+--- a/services/applications/dedup.py
++++ b/services/applications/dedup.py
+@@ -18,10 +18,6 @@ OPEN_STAGES = (
+ )
+ 
+ 
+-def _same_track(a: Application, b: Application) -> bool:
+-    return (a.kind == "social") == (b.kind == "social")
+-
+-
+ async def close_duplicates(session: AsyncSession, winner: Application) -> list[int]:
+     others = (
+         await session.scalars(
+@@ -35,8 +31,6 @@ async def close_duplicates(session: AsyncSession, winner: Application) -> list[i
+     ).all()
+     closed: list[int] = []
+     for other in others:
+-        if not _same_track(winner, other):
+-            continue
+         await bpm.transition(session, other, "closed_duplicate", actor="system")
+         attempt = other.attempts[-1]
+         if attempt.ended_at is None:

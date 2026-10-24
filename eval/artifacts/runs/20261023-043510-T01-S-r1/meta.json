@@ -1,0 +1,2 @@
+{"run_id": "20261023-043510-T01-S-r1", "task_id": "T01", "variant": "S", "repeat": 1,
+ "worker_model": "claude-opus-5-5", "base": "796c9bd63754cb06bb844f8fe172902409fc0304", "workdir": "~/work/ai-dd/wt/20261023-043510-T01-S-r1"}

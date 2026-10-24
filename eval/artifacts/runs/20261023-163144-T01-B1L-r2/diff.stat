@@ -1,0 +1,10 @@
+ docs/config.md                                  |  5 +--
+ docs/entities/applications.applications.md      |  4 +--
+ docs/reconciliation.md                          |  5 ++-
+ docs/roles.md                                   |  2 +-
+ docs/rules/applications.md                      | 23 +++++++------
+ docs/rules/scheduling.md                        |  7 ++--
+ migrations/versions/0002_social_venue_change.py | 38 +++++++++++++++++++++
+ services/applications/service.py                |  6 ++++
+ tests/test_venue_change.py                      | 44 +++++++++++++++++++++++++
+ 9 files changed, 112 insertions(+), 22 deletions(-)

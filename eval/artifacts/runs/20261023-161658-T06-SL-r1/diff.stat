@@ -1,0 +1,21 @@
+ AGENTS.md                                  |   2 +-
+ docs/README.md                             |   6 +-
+ docs/config.md                             |   3 +-
+ docs/coverage.md                           |  20 +-
+ docs/entities/notifications.emails.md      |   2 +-
+ docs/entities/notifications.templates.md   |   6 +-
+ docs/entities/scheduling.bookings.md       |   4 +-
+ docs/entities/scheduling.holds.md          |   2 +-
+ docs/roles.md                              |  36 ++--
+ docs/rules/README.md                       |   4 +-
+ docs/rules/notifications.md                |  66 +++---
+ docs/rules/scheduling.md                   |   4 +-
+ knowledge/model/code.json                  | 328 ++++++++++++++++++++++++-----
+ knowledge/model/db.json                    |   8 +-
+ knowledge/rules/notifications.yaml         | 152 +++++++------
+ knowledge/rules/scheduling.yaml            |  10 +-
+ migrations/versions/0002_debt_templates.py |  33 +++
+ services/notifications/config.py           |   7 +-
+ services/notifications/service.py          |  26 ++-
+ tests/test_notifications.py                |  70 +++++-
+ 20 files changed, 585 insertions(+), 204 deletions(-)

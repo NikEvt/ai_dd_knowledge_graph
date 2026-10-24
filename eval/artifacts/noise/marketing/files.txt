@@ -1,0 +1,14 @@
+migrations/noise/marketing.sql
+services/marketing/__init__.py
+services/marketing/api.py
+services/marketing/app.py
+services/marketing/consumers.py
+services/marketing/jobs.py
+services/marketing/models.py
+services/marketing/service.py
+services/marketing/settings.py
+tests/marketing_factories.py
+tests/test_marketing_api.py
+tests/test_marketing_audiences.py
+tests/test_marketing_campaigns.py
+tests/test_marketing_templates.py

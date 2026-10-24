@@ -1,0 +1,2 @@
+usage: drift.py [-h] [--base BASE] [--write] [--skip-model-check]
+drift.py: error: unrecognized arguments: --json

@@ -1,0 +1,396 @@
+diff --git a/docs/config.md b/docs/config.md
+index a583dd7..b3a3ff0 100644
+--- a/docs/config.md
++++ b/docs/config.md
+@@ -67,7 +67,7 @@
+ | [`settings.py::MAX_TEST_MESSAGES`](../services/marketing/settings.py#L19) | `5` | Тестовых писем на одну кампанию. | [`service.py::send_test_message`](../services/marketing/service.py#L452) |
+ | [`settings.py::MIN_DAYS_BETWEEN_CAMPAIGNS`](../services/marketing/settings.py#L23) | `3` | Не чаще одной кампании в столько дней на аудиторию. | [`service.py::start`](../services/marketing/service.py#L295) |
+ | [`settings.py::TEST_MESSAGE_TTL_DAYS`](../services/marketing/settings.py#L21) | `14` | Тестовые письма удаляются через столько дней после отправки. | [`jobs.py::purge_test_messages`](../services/marketing/jobs.py#L36) |
+-| [`config.py::TEMPLATE_GROUP`](../services/notifications/config.py#L2) | `{'debt': 'paid', 'paid': 'paid', 'social': 'social'}` | Группа шаблонов писем по виду заявки. | [`service.py::find_template`](../services/notifications/service.py#L32) |
++| [`config.py::TEMPLATE_GROUPS`](../services/notifications/config.py#L2) | `{'debt': ('debt', 'paid'), 'paid': ('paid',), 'social': ('social',)}` | Группы шаблонов писем по виду заявки в порядке поиска: первая найденная на площадке. | [`service.py::find_template`](../services/notifications/service.py#L32) |
+ | [`service.py::CENT`](../services/partners/service.py#L25) | `Decimal('0.01')` |  | [`service.py::commission_amount`](../services/partners/service.py#L451) |
+ | [`service.py::CURRENT_CONTRACT`](../services/partners/service.py#L23) | `['draft', 'active', 'suspended']` |  | [`service.py::change_commission_rate`](../services/partners/service.py#L264)<br>[`service.py::current_contract`](../services/partners/service.py#L210)<br>[`service.py::onboard`](../services/partners/service.py#L147)<br>[`service.py::set_credit_terms`](../services/partners/service.py#L281)<br>[`service.py::terminate_contract`](../services/partners/service.py#L552) |
+ | [`service.py::EDITABLE_FIELDS`](../services/partners/service.py#L24) | `['kpp', 'legal_name', 'contact_name', 'contact_email', 'contact_phone']` |  | [`service.py::update_requisites`](../services/partners/service.py#L216) |
+diff --git a/docs/coverage.md b/docs/coverage.md
+index 3732683..83f2bf0 100644
+--- a/docs/coverage.md
++++ b/docs/coverage.md
+@@ -24,7 +24,7 @@
+ - R-SCHEMA-ROLE-01 Один сотрудник — одна роль
+ - R-SUBSCRIPTIONS-REMIND-01 Напоминание перед концом льготного периода не реализовано
+ 
+-## Правила без тестов (129)
++## Правила без тестов (128)
+ 
+ - R-APP-CREATE-03 В заявке есть книги, и все они из сферы заявки и прайса площадки
+ - R-APP-CORE-01 Сферу и представителя заявки сменить нельзя
+@@ -97,9 +97,8 @@
+ - R-NOTIF-SLOT-01 Удаление окна с записями рассылает письма об отмене
+ - R-NOTIF-RESET-01 Архивирование, дубль и смена площадки отправляют письмо об отмене
+ - R-NOTIF-CHAT-01 События записи параллельно попадают в чат заявки
+-- R-NOTIF-TEMPLATE-03 Вид заявки без записи в TEMPLATE_GROUP ломает отправку
++- R-NOTIF-TEMPLATE-03 Вид заявки без записи в TEMPLATE_GROUPS ломает отправку
+ - R-NOTIF-TEMPLATE-04 Один шаблон на площадку, группу и тип письма
+-- R-NOTIF-TEMPLATE-05 Допустимые группы шаблонов — paid и social, типы — booking и cancel
+ - R-NOTIF-TEMPLATE-06 Сохранение шаблона создаёт его или заменяет текст
+ - R-NOTIF-TEMPLATE-07 Настройка шаблонов не ограничена ролью администратора
+ - R-NOTIF-MISSING-01 Без шаблона письмо фиксируется со статусом no_template
+diff --git a/docs/entities/notifications.templates.md b/docs/entities/notifications.templates.md
+index aae5341..dba9c65 100644
+--- a/docs/entities/notifications.templates.md
++++ b/docs/entities/notifications.templates.md
+@@ -14,7 +14,7 @@
+ - notifications.emails.template_id → сюда
+ 
+ ## Ограничения и триггеры
+-- templates_kind_group_check (check на notifications.templates): CHECK ((kind_group = ANY (ARRAY['paid'::text, 'social'::text]))) (migrations/versions/0001_initial.py:308)
++- templates_kind_group_check (check на notifications.templates): CHECK ((kind_group = ANY (ARRAY['paid'::text, 'debt'::text, 'social'::text]))) (migrations/versions/0002_debt_templates.py:15)
+ - templates_type_check (check на notifications.templates): CHECK ((type = ANY (ARRAY['booking'::text, 'cancel'::text]))) (migrations/versions/0001_initial.py:309)
+ - templates_venue_id_kind_group_type_key (unique на notifications.templates): UNIQUE (venue_id, kind_group, type) (migrations/versions/0001_initial.py:311)
+ 
+@@ -26,7 +26,7 @@
+ 
+ ## Правила
+ - R-NOTIF-TEMPLATE-04 [draft] Один шаблон на площадку, группу и тип письма
+-- R-NOTIF-TEMPLATE-05 [draft] Допустимые группы шаблонов — paid и social, типы — booking и cancel
++- R-NOTIF-TEMPLATE-05 [draft] Допустимые группы шаблонов — paid, debt и social, типы — booking и cancel
+ - R-NOTIF-TEMPLATE-06 [draft] Сохранение шаблона создаёт его или заменяет текст
+ - R-NOTIF-TEMPLATE-07 [draft] Настройка шаблонов не ограничена ролью администратора
+ - R-NOTIF-TYPES-01 [draft] Существует только два типа писем — booking и cancel
+diff --git a/docs/reconciliation.md b/docs/reconciliation.md
+index 2cd6fe9..cfad18d 100644
+--- a/docs/reconciliation.md
++++ b/docs/reconciliation.md
+@@ -32,7 +32,7 @@
+ | D-21 | medium | Социальные заявки между собой не дедуплицируются | §6: две заявки клиента по одной сфере — остаётся одна; исключение только между социальными и платными | services/applications/consumers.py::on_review_passed:43 вызывает close_duplicates только для debt; для social вызова нет | R-APP-DEDUP-01 | Должна ли вторая социальная заявка клиента по той же сфере закрываться как дубль? |
+ | D-22 | medium | Нет истории действий «кто и когда» | §16: все значимые действия сохраняются в истории заявки, удалить её нельзя | libs/bpm/engine.py::transition:53 не сохраняет actor; services/applications/listeners.py::_domain_events пишет stage_changed без исполнителя<br>БД: неизменяем только chat.messages (trg_chat_messages_immutable) | R-SCHEMA-HIST-01, R-CHAT-EVENTS-02, R-CHAT-EVENTS-07 | Считать ли ленту чата историей заявки (тогда в событиях нужен исполнитель) или нужен отдельный журнал аудита? |
+ | D-23 | medium | Заявку и данные клиента видит кто угодно; клиент заводится повторно | §16: проверяющий оператор видит только свою площадку; §2 Клиент: заявку не видит; §6: клиент заводится один раз | services/applications/api.py::get:55 без проверки; services/applications/service.py::create_client:63 без проверки дублей и роли<br>БД: у applications.clients нет уникальных ключей | R-SCHEMA-ACCESS-01, R-SCHEMA-CLIENT-01 | По какому признаку считать клиента тем же (паспорт, ФИО и дата рождения), и нужен ли уникальный индекс? |
+-| D-24 | low | Письма об отмене уходят по архивной заявке и не содержат новой ссылки | §5: пока заявка в архиве, письма не отправляются; §7: при смене площадки — письмо об отмене и новая ссылка | services/notifications/consumers.py::on_booking_cancelled:21 передаёт только starts_at; services/notifications/service.py::send:42 не проверяет этап | R-NOTIF-RESET-01, R-NOTIF-RENDER-02 | Отправлять ли письмо об отмене в момент архивации и добавлять ли в письмо после смены площадки новую ссылку? |
++| D-24 | low | Письма об отмене уходят по архивной заявке и не содержат новой ссылки | §5: пока заявка в архиве, письма не отправляются; §7: при смене площадки — письмо об отмене и новая ссылка | services/notifications/consumers.py::on_booking_cancelled:21 передаёт только starts_at; services/notifications/service.py::send:47 не проверяет этап | R-NOTIF-RESET-01, R-NOTIF-RENDER-02 | Отправлять ли письмо об отмене в момент архивации и добавлять ли в письмо после смены площадки новую ссылку? |
+ | D-25 | low | Книги и заявка — упрощения в смене книг и освобождении книг | §4: смена книг после счёта до оплаты — аннулировать и выставить счёт заново; §8: книги освобождаются после отметки о возврате | services/applications/service.py::change_books:239 — только draft и needs_rework; services/scheduling/service.py::issue_books:223 удаляет holds при выдаче | R-APP-BOOKS-01, R-SCHED-ISSUE-03 | Достаточно ли менять книги после проверки только через архив, и подтверждаете ли, что после выдачи книги учитываются в scheduling.loans, а не в holds? |
+ | D-26 | low | Чат неполон относительно схемы | §15: в чат попадают все события (назначения, платежи, перенос, неявка); к сообщениям прикрепляют файлы | services/chat/consumers.py::EVENT_TEXT — нет payment.fully_paid, payment.refunded, loan.lost, loan.damaged, books.issued и назначений; у chat.messages только body<br>БД: messages_check | R-CHAT-EVENTS-06, R-CHAT-EVENTS-07, R-CHAT-POST-03, R-SCHED-FINE-01 | Какие события обязательны в чате для первой версии и нужны ли вложения? |
+ | D-27 | low | Ограничение БД без правила — уникальное имя сферы | §1: сфера — тематический раздел; об уникальности названия не сказано | <br>БД: spheres_name_key (UNIQUE spheres.name) | R-SCHEMA-SPHERE-01 | Подтверждаете ли, что название сферы глобально уникально (а не в пределах площадки)? |
+diff --git a/docs/roles.md b/docs/roles.md
+index 0f69d8d..16d1e36 100644
+--- a/docs/roles.md
++++ b/docs/roles.md
+@@ -148,7 +148,7 @@
+ - R-CHAT-READ-02 [draft] Чат видят участники заявки и администратор
+ - R-CHAT-READ-04 [draft] Администратор чат только читает
+ - R-NOTIF-TEMPLATE-04 [draft] Один шаблон на площадку, группу и тип письма
+-- R-NOTIF-TEMPLATE-05 [draft] Допустимые группы шаблонов — paid и social, типы — booking и cancel
++- R-NOTIF-TEMPLATE-05 [draft] Допустимые группы шаблонов — paid, debt и social, типы — booking и cancel
+ - R-NOTIF-TEMPLATE-06 [draft] Сохранение шаблона создаёт его или заменяет текст
+ - R-NOTIF-TEMPLATE-07 [draft] Настройка шаблонов не ограничена ролью администратора
+ - R-SCHED-VENUE-LIMIT-01 [draft] Максимум мест площадки реплицируется из админки событием
+@@ -297,8 +297,8 @@
+ - R-NOTIF-RESET-01 [verified] Архивирование, дубль и смена площадки отправляют письмо об отмене
+ - R-NOTIF-CHAT-01 [draft] События записи параллельно попадают в чат заявки
+ - R-NOTIF-TEMPLATE-01 [draft] Шаблон выбирается по площадке, группе вида заявки и типу письма
+-- R-NOTIF-TEMPLATE-02 [draft] Заявки в долг используют шаблоны платных заявок
+-- R-NOTIF-TEMPLATE-03 [draft] Вид заявки без записи в TEMPLATE_GROUP ломает отправку
++- R-NOTIF-TEMPLATE-02 [draft] Заявки в долг используют шаблоны группы debt, а без них — шаблоны платных заявок
++- R-NOTIF-TEMPLATE-03 [draft] Вид заявки без записи в TEMPLATE_GROUPS ломает отправку
+ - R-NOTIF-MISSING-01 [draft] Без шаблона письмо фиксируется со статусом no_template
+ - R-NOTIF-RENDER-01 [draft] Текст письма — шаблон с подстановкой $starts_at
+ - R-NOTIF-RENDER-02 [verified] В письмо об отмене не попадают причина и новая ссылка
+diff --git a/docs/rules/notifications.md b/docs/rules/notifications.md
+index 7531da3..84f211a 100644
+--- a/docs/rules/notifications.md
++++ b/docs/rules/notifications.md
+@@ -10,7 +10,7 @@
+ 
+ Подписчик notifications на событие booking.created (его публикует scheduling при записи по ссылке, записи оператором и при второй половине переноса) создаёт письмо типа booking. Площадка для поиска шаблона берётся из payload события, в контекст подстановки передаётся только starts_at.
+ 
+-- Реализация: [`services/notifications/consumers.py::on_booking_created:9-17`](../../services/notifications/consumers.py#L9), [`services/notifications/service.py::send:42-58`](../../services/notifications/service.py#L42)
++- Реализация: [`services/notifications/consumers.py::on_booking_created:9-17`](../../services/notifications/consumers.py#L9), [`services/notifications/service.py::send:47-63`](../../services/notifications/service.py#L47)
+ - Тесты: `tests/test_notifications.py::test_booking_email_goes_to_client_and_representative`, `tests/test_notifications.py::test_social_uses_social_templates`
+ - Роли: Клиент, Представитель клиента, Оператор
+ - Связанные: R-NOTIF-RECIPIENTS-01, R-NOTIF-TEMPLATE-01, R-NOTIF-RENDER-01
+@@ -21,7 +21,7 @@
+ 
+ Подписчик notifications на booking.cancelled создаёт письмо типа cancel. Событие публикуется при каждой отмене действующей записи: отмена клиентом, представителем или оператором, неявка (no_show), удаление окна (slot_removed), смена площадки (venue_changed), архивирование (archived), дубль (duplicate). Причину модуль не различает: на все случаи уходит одно и то же письмо об отмене.
+ 
+-- Реализация: [`services/notifications/consumers.py::on_booking_cancelled:20-28`](../../services/notifications/consumers.py#L20), [`services/notifications/service.py::send:42-58`](../../services/notifications/service.py#L42)
++- Реализация: [`services/notifications/consumers.py::on_booking_cancelled:20-28`](../../services/notifications/consumers.py#L20), [`services/notifications/service.py::send:47-63`](../../services/notifications/service.py#L47)
+ - Тесты: `tests/test_notifications.py::test_reschedule_sends_cancel_and_booking`
+ - Роли: Клиент, Представитель клиента, Оператор, Проверяющий оператор, Система (события и фоновые задачи)
+ - Связанные: R-NOTIF-RENDER-02, R-NOTIF-NOSHOW-01, R-NOTIF-RESET-01, R-NOTIF-SLOT-01
+@@ -63,7 +63,7 @@
+ 
+ При архивировании заявки, признании её дублем и смене площадки scheduling сбрасывает действующие записи (reset_bookings с reason archived, duplicate или venue_changed). На каждую отменённую запись notifications отправляет письмо об отмене. Сам метод send этап заявки не проверяет. То, что по заявке в архиве письма потом не идут, держится только на том, что scheduling гасит ссылку на запись.
+ 
+-- Реализация: [`services/notifications/consumers.py::on_booking_cancelled:20-28`](../../services/notifications/consumers.py#L20), [`services/notifications/service.py::send:42-58`](../../services/notifications/service.py#L42)
++- Реализация: [`services/notifications/consumers.py::on_booking_cancelled:20-28`](../../services/notifications/consumers.py#L20), [`services/notifications/service.py::send:47-63`](../../services/notifications/service.py#L47)
+ - Роли: Оператор, Система (события и фоновые задачи)
+ - Связанные: R-NOTIF-CANCEL-01
+ - ⚠ Расхождение со схемой: Схема (§5): пока заявка в архиве, письма не отправляются. Код: в момент архивирования письмо об отмене всё-таки уходит. В send нет проверки этапа и архивного статуса, поэтому любое событие booking.* по заявке в архиве тоже приведёт к письму.
+@@ -74,7 +74,7 @@
+ 
+ Получатели письма — email клиента и email представителя заявки, именно в этом порядке. Список берётся из applications.public.recipients в момент отправки и сохраняется в письме. Сотрудники писем не получают.
+ 
+-- Реализация: [`services/notifications/service.py::send:49-49`](../../services/notifications/service.py#L49), [`services/applications/public.py::recipients:83-90`](../../services/applications/public.py#L83)
++- Реализация: [`services/notifications/service.py::send:54-54`](../../services/notifications/service.py#L54), [`services/applications/public.py::recipients:83-90`](../../services/applications/public.py#L83)
+ - Тесты: `tests/test_notifications.py::test_booking_email_goes_to_client_and_representative`
+ - Роли: Клиент, Представитель клиента
+ - Связанные: R-NOTIF-CHAT-01
+@@ -93,34 +93,34 @@
+ 
+ `draft` · guard · §13 Запись на визит и письма
+ 
+-find_template ищет шаблон по тройке (venue_id из события, группа вида заявки через TEMPLATE_GROUP, тип письма booking или cancel). Вид заявки берётся из get_brief на момент отправки.
++find_template ищет шаблон по тройке (venue_id из события, группа вида заявки через TEMPLATE_GROUPS, тип письма booking или cancel). Если виду заявки сопоставлено несколько групп, берётся шаблон первой группы из списка, который есть на площадке. Вид заявки берётся из get_brief на момент отправки.
+ 
+-- Реализация: [`services/notifications/service.py::find_template:32-39`](../../services/notifications/service.py#L32), [`services/notifications/service.py::send:45-46`](../../services/notifications/service.py#L45)
+-- Настройки: `services/notifications/config.py::TEMPLATE_GROUP`
+-- Тесты: `tests/test_notifications.py::test_booking_email_goes_to_client_and_representative`, `tests/test_notifications.py::test_social_uses_social_templates`
++- Реализация: [`services/notifications/service.py::find_template:32-44`](../../services/notifications/service.py#L32), [`services/notifications/service.py::send:50-51`](../../services/notifications/service.py#L50)
++- Настройки: `services/notifications/config.py::TEMPLATE_GROUPS`
++- Тесты: `tests/test_notifications.py::test_booking_email_goes_to_client_and_representative`, `tests/test_notifications.py::test_social_uses_social_templates`, `tests/test_notifications.py::test_debt_uses_debt_templates`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-NOTIF-TEMPLATE-02, R-NOTIF-TEMPLATE-04, R-NOTIF-MISSING-01
+ 
+-## R-NOTIF-TEMPLATE-02 — Заявки в долг используют шаблоны платных заявок
++## R-NOTIF-TEMPLATE-02 — Заявки в долг используют шаблоны группы debt, а без них — шаблоны платных заявок
+ 
+ `draft` · config · §13 Запись на визит и письма
+ 
+-TEMPLATE_GROUP сопоставляет вид заявки группе шаблонов: paid→paid, debt→paid, social→social. Для заявок в долг отдельных шаблонов нет, берутся шаблоны платных.
++TEMPLATE_GROUPS сопоставляет вид заявки группам шаблонов в порядке поиска: paid→(paid), debt→(debt, paid), social→(social). Для заявки в долг сначала ищется шаблон группы debt на площадке; если на этой площадке шаблона debt нужного типа нет, берётся шаблон платных заявок (paid) той же площадки. Шаблон debt другой площадки не используется. Если нет ни debt, ни paid, письмо уходит со статусом no_template.
+ 
+-- Реализация: [`services/notifications/config.py::TEMPLATE_GROUP:2-6`](../../services/notifications/config.py#L2), [`services/notifications/service.py::find_template:36-36`](../../services/notifications/service.py#L36)
+-- Настройки: `services/notifications/config.py::TEMPLATE_GROUP`
+-- Тесты: `tests/test_notifications.py::test_social_uses_social_templates`
++- Реализация: [`services/notifications/config.py::TEMPLATE_GROUPS:2-6`](../../services/notifications/config.py#L2), [`services/notifications/service.py::find_template:32-44`](../../services/notifications/service.py#L32)
++- Настройки: `services/notifications/config.py::TEMPLATE_GROUPS`
++- Тесты: `tests/test_notifications.py::test_debt_uses_debt_templates`, `tests/test_notifications.py::test_debt_falls_back_to_paid_templates_per_venue`, `tests/test_notifications.py::test_social_uses_social_templates`
+ - Роли: Система (события и фоновые задачи)
+-- Связанные: R-NOTIF-TEMPLATE-01, R-NOTIF-TEMPLATE-03
++- Связанные: R-NOTIF-TEMPLATE-01, R-NOTIF-TEMPLATE-03, R-NOTIF-TEMPLATE-05, R-NOTIF-MISSING-01
+ 
+-## R-NOTIF-TEMPLATE-03 — Вид заявки без записи в TEMPLATE_GROUP ломает отправку
++## R-NOTIF-TEMPLATE-03 — Вид заявки без записи в TEMPLATE_GROUPS ломает отправку
+ 
+ `draft` · config
+ 
+-find_template обращается к TEMPLATE_GROUP[kind] напрямую, без значения по умолчанию. Если появится вид заявки, которого нет в словаре, обработчик booking.* упадёт с KeyError, а не создаст письмо со статусом no_template.
++find_template обращается к TEMPLATE_GROUPS[kind] напрямую, без значения по умолчанию. Если появится вид заявки, которого нет в словаре, обработчик booking.* упадёт с KeyError, а не создаст письмо со статусом no_template.
+ 
+-- Реализация: [`services/notifications/service.py::find_template:36-36`](../../services/notifications/service.py#L36)
+-- Настройки: `services/notifications/config.py::TEMPLATE_GROUP`
++- Реализация: [`services/notifications/service.py::find_template:33-33`](../../services/notifications/service.py#L33)
++- Настройки: `services/notifications/config.py::TEMPLATE_GROUPS`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-NOTIF-TEMPLATE-02, R-NOTIF-MISSING-01
+ 
+@@ -135,14 +135,15 @@ find_template обращается к TEMPLATE_GROUP[kind] напрямую, б
+ - Роли: Администратор
+ - Связанные: R-NOTIF-TEMPLATE-05, R-NOTIF-TEMPLATE-06
+ 
+-## R-NOTIF-TEMPLATE-05 — Допустимые группы шаблонов — paid и social, типы — booking и cancel
++## R-NOTIF-TEMPLATE-05 — Допустимые группы шаблонов — paid, debt и social, типы — booking и cancel
+ 
+ `draft` · invariant · §13 Запись на визит и письма
+ 
+-Ограничения CHECK в БД разрешают в notifications.templates только kind_group из {paid, social} и type из {booking, cancel}. Группы debt в БД нет: долговые заявки сводятся к paid через TEMPLATE_GROUP. set_template значения сам не проверяет, недопустимое отклонит БД.
++Ограничения CHECK в БД разрешают в notifications.templates только kind_group из {paid, debt, social} и type из {booking, cancel}. Шаблоны группы debt настраиваются через set_template так же, как paid и social (по площадке и типу письма). set_template значения сам не проверяет, недопустимое отклонит БД.
+ 
+ - Реализация: [`services/notifications/service.py::set_template:15-29`](../../services/notifications/service.py#L15)
+-- БД: [`templates_kind_group_check`](../../migrations/versions/0001_initial.py#L308), [`templates_type_check`](../../migrations/versions/0001_initial.py#L309)
++- БД: [`templates_kind_group_check`](../../migrations/versions/0002_debt_templates.py#L15), [`templates_type_check`](../../migrations/versions/0001_initial.py#L309)
++- Тесты: `tests/test_notifications.py::test_debt_uses_debt_templates`
+ - Роли: Администратор
+ - Связанные: R-NOTIF-TEMPLATE-02, R-NOTIF-TYPES-01
+ 
+@@ -174,7 +175,7 @@ set_template ищет шаблон по (venue_id, kind_group, type). Если 
+ 
+ Если для площадки, группы и типа шаблон не найден, send не бросает ошибку. Письмо сохраняется со status=no_template, template_id=NULL и пустым body. Запись или отмена визита при этом проходит.
+ 
+-- Реализация: [`services/notifications/service.py::send:51-53`](../../services/notifications/service.py#L51)
++- Реализация: [`services/notifications/service.py::send:56-58`](../../services/notifications/service.py#L56)
+ - БД: [`emails_status_check`](../../migrations/versions/0001_initial.py#L321)
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-NOTIF-TEMPLATE-01, R-NOTIF-LOG-02
+@@ -185,7 +186,7 @@ set_template ищет шаблон по (venue_id, kind_group, type). Если 
+ 
+ Тело письма собирается через string.Template.safe_substitute из тела шаблона и контекста. Обработчики передают в контекст только starts_at (время окна в ISO-формате). Неизвестные плейсхолдеры остаются в тексте как есть, ошибки нет.
+ 
+-- Реализация: [`services/notifications/service.py::send:52-52`](../../services/notifications/service.py#L52), [`services/notifications/consumers.py::on_booking_created:16-16`](../../services/notifications/consumers.py#L16), [`services/notifications/consumers.py::on_booking_cancelled:27-27`](../../services/notifications/consumers.py#L27)
++- Реализация: [`services/notifications/service.py::send:57-57`](../../services/notifications/service.py#L57), [`services/notifications/consumers.py::on_booking_created:16-16`](../../services/notifications/consumers.py#L16), [`services/notifications/consumers.py::on_booking_cancelled:27-27`](../../services/notifications/consumers.py#L27)
+ - Тесты: `tests/test_notifications.py::test_booking_email_goes_to_client_and_representative`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-NOTIF-RENDER-02
+@@ -219,7 +220,7 @@ notifications.emails и notifications.templates ограничением CHECK 
+ 
+ send записывает в notifications.emails заявку, список получателей, тип, ссылку на шаблон, готовый текст, статус и created_at (clock.now()). Запись идёт в той же сессии, что и обработка события. Реальной доставки (SMTP и т. п.) в модуле нет: status=sent значит «письмо сформировано».
+ 
+-- Реализация: [`services/notifications/service.py::send:47-57`](../../services/notifications/service.py#L47)
++- Реализация: [`services/notifications/service.py::send:52-62`](../../services/notifications/service.py#L52)
+ - Тесты: `tests/test_notifications.py::test_booking_email_goes_to_client_and_representative`
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-NOTIF-MISSING-01, R-NOTIF-LOG-02
+@@ -230,7 +231,7 @@ send записывает в notifications.emails заявку, список п
+ 
+ Ограничение CHECK в БД разрешает в notifications.emails.status только sent и no_template. Код выставляет sent, если шаблон найден, и no_template, если нет. Статусов доставки или ошибки отправки нет.
+ 
+-- Реализация: [`services/notifications/service.py::send:53-53`](../../services/notifications/service.py#L53)
++- Реализация: [`services/notifications/service.py::send:58-58`](../../services/notifications/service.py#L58)
+ - БД: [`emails_status_check`](../../migrations/versions/0001_initial.py#L321)
+ - Роли: Система (события и фоновые задачи)
+ - Связанные: R-NOTIF-MISSING-01, R-NOTIF-LOG-01
+diff --git a/migrations/versions/0002_debt_templates.py b/migrations/versions/0002_debt_templates.py
+new file mode 100644
+index 0000000..f8c0054
+--- /dev/null
++++ b/migrations/versions/0002_debt_templates.py
+@@ -0,0 +1,33 @@
++"""notifications: template group debt
++
++Revision ID: 0002
++Revises: 0001
++"""
++
++from alembic import op
++
++revision = "0002"
++down_revision = "0001"
++branch_labels = None
++depends_on = None
++
++
++def _set_groups(groups: str) -> None:
++    op.execute("ALTER TABLE notifications.templates DROP CONSTRAINT templates_kind_group_check")
++    op.execute(
++        "ALTER TABLE notifications.templates ADD CONSTRAINT templates_kind_group_check "
++        f"CHECK (kind_group IN ({groups}))"
++    )
++
++
++def upgrade() -> None:
++    _set_groups("'paid','debt','social'")
++
++
++def downgrade() -> None:
++    op.execute(
++        "UPDATE notifications.emails SET template_id = NULL WHERE template_id IN "
++        "(SELECT id FROM notifications.templates WHERE kind_group = 'debt')"
++    )
++    op.execute("DELETE FROM notifications.templates WHERE kind_group = 'debt'")
++    _set_groups("'paid','social'")
+diff --git a/services/notifications/config.py b/services/notifications/config.py
+index 6fa2e38..de6ec81 100644
+--- a/services/notifications/config.py
++++ b/services/notifications/config.py
+@@ -1,6 +1,6 @@
+-# Группа шаблонов писем по виду заявки.
+-TEMPLATE_GROUP = {
+-    "paid": "paid",
+-    "debt": "paid",
+-    "social": "social",
++# Группы шаблонов писем по виду заявки в порядке поиска: первая найденная на площадке.
++TEMPLATE_GROUPS = {
++    "paid": ("paid",),
++    "debt": ("debt", "paid"),
++    "social": ("social",),
+ }
+diff --git a/services/notifications/service.py b/services/notifications/service.py
+index 2160076..804adbc 100644
+--- a/services/notifications/service.py
++++ b/services/notifications/service.py
+@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+ from libs import clock
+ from services.applications import public as applications
+-from services.notifications.config import TEMPLATE_GROUP
++from services.notifications.config import TEMPLATE_GROUPS
+ from services.notifications.models import Email, Template
+ 
+ 
+@@ -30,13 +30,18 @@ async def set_template(
+ 
+ 
+ async def find_template(session: AsyncSession, venue_id: int, kind: str, type_: str) -> Template | None:
+-    return await session.scalar(
+-        select(Template).where(
+-            Template.venue_id == venue_id,
+-            Template.kind_group == TEMPLATE_GROUP[kind],
+-            Template.type == type_,
++    groups = TEMPLATE_GROUPS[kind]
++    found = {
++        tpl.kind_group: tpl
++        for tpl in await session.scalars(
++            select(Template).where(
++                Template.venue_id == venue_id,
++                Template.kind_group.in_(groups),
++                Template.type == type_,
++            )
+         )
+-    )
++    }
++    return next((found[group] for group in groups if group in found), None)
+ 
+ 
+ async def send(
+diff --git a/tests/test_notifications.py b/tests/test_notifications.py
+index 1d6e1c8..a3f6ee1 100644
+--- a/tests/test_notifications.py
++++ b/tests/test_notifications.py
+@@ -3,9 +3,22 @@ from datetime import timedelta
+ from sqlalchemy import select
+ 
+ from libs import db
++from services.notifications import service as notifications
+ from services.notifications.models import Email
+ from services.scheduling import service as scheduling
+-from tests.factories import HISTORY, MSK, T0, act, book, new_application, paid_application, pass_review, slot
++from tests.factories import (
++    HISTORY,
++    KZN,
++    MSK,
++    REP_DEBT,
++    T0,
++    act,
++    book,
++    new_application,
++    paid_application,
++    pass_review,
++    slot,
++)
+ 
+ 
+ async def emails(app_id: int) -> list[Email]:
+@@ -41,3 +54,34 @@ async def test_reschedule_sends_cancel_and_booking() -> None:
+     booking_id = await book(app_id, first)
+     await act(scheduling.reschedule, booking_id, second, by="client")
+     assert [e.type for e in await emails(app_id)] == ["booking", "cancel", "booking"]
++
++
++async def debt_booking(venue: int = MSK) -> list[Email]:
++    app_id = await new_application(rep=REP_DEBT, venue=venue)
++    await pass_review(app_id)
++    await book(app_id, await slot(venue, HISTORY, T0 + timedelta(days=5)))
++    return await emails(app_id)
++
++
++async def debt_template(venue: int, type_: str) -> None:
++    await act(
++        notifications.set_template,
++        venue_id=venue,
++        kind_group="debt",
++        type_=type_,
++        body=f"V{venue} debt {type_}: $starts_at",
++    )
++
++
++async def test_debt_uses_debt_templates() -> None:
++    await debt_template(MSK, "booking")
++    [email] = await debt_booking()
++    assert email.body.startswith("V1 debt booking")
++    assert email.status == "sent"
++
++
++async def test_debt_falls_back_to_paid_templates_per_venue() -> None:
++    await debt_template(KZN, "booking")
++    await debt_template(MSK, "cancel")
++    [email] = await debt_booking()
++    assert email.body.startswith("V1 paid booking")
