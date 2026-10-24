@@ -1,0 +1,1217 @@
+# Правила модуля staff: извлечены LLM (tools/knowledge/bootstrap_rules.sh) из кода и среза графа.
+# Статус verified ставит только человек. Хэши обновляет tools/knowledge/drift.py --write.
+rules:
+- id: R-STAFF-HR-01
+  title: Кадровые операции выполняет только действующий сотрудник отдела кадров
+  text: >
+    Приём, изменение карточки, увольнение, закрепление сотрудника за площадкой, назначение ответственного,
+    создание площадки, изменение максимума смены, выдача и ручной отзыв допуска проверяют автора через
+    `_require_hr`. Автор должен существовать, не быть уволенным и иметь должность из HR_ROLES (["hr"]).
+    Иначе AccessDenied «кадровые операции выполняет только отдел кадров», через API это HTTP 403.
+  kind: permission
+  applies_to:
+  - employee.role=hr
+  trigger: symbol:services/staff/service.py::_require_hr
+  related:
+  - R-STAFF-SITE-RESP-01
+  implemented_by:
+  - symbol: services/staff/service.py::_require_hr
+    lines: 51-55
+    hash: def094d25666
+  - symbol: services/staff/service.py::hire_employee
+    lines: 108-108
+    hash: 4686d2f1a764
+  - symbol: services/staff/service.py::dismiss_employee
+    lines: 141-141
+    hash: 452dfb5d0ed9
+  - symbol: services/staff/service.py::grant_clearance
+    lines: 497-497
+    hash: 2a3805e47403
+  config:
+  - services/staff/settings.py::HR_ROLES
+  tested_by:
+  - tests/test_staff_employees.py::test_only_hr_hires
+  - tests/test_staff_events.py::test_api_errors_map_to_statuses
+  status: draft
+- id: R-STAFF-SITE-RESP-01
+  title: Сменами и инструктажами площадки управляет только её ответственный
+  text: >
+    Создать, отменить смену, поставить или снять сотрудника со смены и провести инструктаж может только
+    сотрудник, указанный как ответственный площадки (`sites.responsible_id`). Иначе AccessDenied «сменами
+    площадки управляет только ответственный за площадку». У площадки без ответственного эти операции недоступны
+    никому. Должность и активность ответственного при этом заново не проверяются.
+  kind: permission
+  applies_to:
+  - table:staff.sites
+  trigger: symbol:services/staff/service.py::_require_responsible
+  related:
+  - R-STAFF-SITE-RESP-02
+  - R-STAFF-SITE-RESP-03
+  implemented_by:
+  - symbol: services/staff/service.py::_require_responsible
+    lines: 58-62
+    hash: 25cd53de7590
+  - symbol: services/staff/service.py::create_shift
+    lines: 252-252
+    hash: 0eb7faa19eee
+  - symbol: services/staff/service.py::assign_to_shift
+    lines: 328-328
+    hash: b93fbb9e3c37
+  - symbol: services/staff/service.py::remove_from_shift
+    lines: 377-377
+    hash: b9aaafece233
+  - symbol: services/staff/service.py::cancel_shift
+    lines: 392-392
+    hash: 75bd07ba1938
+  - symbol: services/staff/service.py::hold_briefing
+    lines: 469-469
+    hash: d9f1cd595a56
+  tested_by:
+  - tests/test_staff_shifts.py::test_only_site_responsible_plans_shifts
+  - tests/test_staff_events.py::test_transferred_responsible_leaves_site_without_one
+  status: draft
+- id: R-STAFF-SITE-RESP-02
+  title: Ответственным за площадку назначается руководитель, работающий на этой площадке
+  text: >
+    Отдел кадров назначает ответственного (`appoint_responsible`). Сотрудник должен иметь должность из
+    RESPONSIBLE_ROLES (["manager"]) и быть закреплён за этой площадкой. Иначе DomainError. Если позже
+    должность ответственного сменят, он останется ответственным: код это не перепроверяет.
+  kind: guard
+  applies_to:
+  - table:staff.sites
+  trigger: symbol:services/staff/service.py::appoint_responsible
+  effects:
+  - 'writes: table:staff.sites'
+  related:
+  - R-STAFF-HR-01
+  - R-STAFF-SITE-RESP-01
+  implemented_by:
+  - symbol: services/staff/service.py::appoint_responsible
+    lines: 229-233
+    hash: 5ddb44a1d24d
+  config:
+  - services/staff/settings.py::RESPONSIBLE_ROLES
+  tested_by:
+  - tests/test_staff_events.py::test_transferred_responsible_leaves_site_without_one
+  status: draft
+- id: R-STAFF-SITE-RESP-03
+  title: Перевод или увольнение ответственного оставляет площадку без ответственного
+  text: >
+    Когда закрывается текущее закрепление сотрудника (при переводе или увольнении), `_close_assignment`
+    обнуляет `sites.responsible_id`, если сотрудник был ответственным старой площадки. Пока отдел кадров
+    не назначит нового ответственного, сменами этой площадки никто управлять не может.
+  kind: effect
+  applies_to:
+  - table:staff.sites
+  trigger: symbol:services/staff/service.py::_close_assignment
+  effects:
+  - 'writes: table:staff.sites'
+  - 'writes: table:staff.assignments'
+  related:
+  - R-STAFF-SITE-RESP-04
+  - R-STAFF-TRANSFER-01
+  - R-STAFF-DISMISS-01
+  implemented_by:
+  - symbol: services/staff/service.py::_close_assignment
+    lines: 183-194
+    hash: cf883d87d633
+  - symbol: services/staff/service.py::transfer_employee
+    lines: 207-207
+    hash: d0cf8e4e4f6c
+  - symbol: services/staff/service.py::dismiss_employee
+    lines: 147-148
+    hash: 452dfb5d0ed9
+  tested_by:
+  - tests/test_staff_events.py::test_transferred_responsible_leaves_site_without_one
+  status: draft
+- id: R-STAFF-SITE-RESP-04
+  title: При переводе ответственного создаётся уведомление «нет ответственного» без адресата
+  text: >
+    Подписчик staff.employee_transferred при was_responsible=true создаёт на старой площадке уведомление
+    вида no_responsible. Адресатом берётся текущий responsible_id площадки, а он уже обнулён, поэтому
+    `recipient_id` = NULL. Уведомление привязано к площадке, а не к смене (shift_id NULL), поэтому защиты
+    от дублей нет ни в коде, ни в alerts_unread_uq. При увольнении ответственного такое уведомление не
+    создаётся.
+  kind: effect
+  applies_to:
+  - table:staff.alerts
+  trigger: event:staff.employee_transferred
+  effects:
+  - 'writes: table:staff.alerts'
+  roles:
+  - system
+  related:
+  - R-STAFF-SITE-RESP-03
+  - R-STAFF-ALERT-01
+  implemented_by:
+  - symbol: services/staff/consumers.py::on_employee_transferred
+    lines: 34-40
+    hash: acf284f0bdfe
+  - symbol: services/staff/service.py::raise_alert
+    lines: 599-616
+    hash: d75f48810276
+  enforced_by_db:
+  - constraint: alerts_kind_check
+    hash: 57ba92a0098e
+  tested_by:
+  - tests/test_staff_events.py::test_transferred_responsible_leaves_site_without_one
+  status: draft
+- id: R-STAFF-CARD-01
+  title: Должность сотрудника выбирается из закрытого списка
+  text: >
+    При приёме и изменении карточки должность проверяется по ROLES (librarian, cashier, guard, manager,
+    hr), иначе DomainError «неизвестная должность». Тот же список литералом повторён в CHECK employees_role_check,
+    и при изменении настройки его нужно менять в двух местах.
+  kind: invariant
+  applies_to:
+  - table:staff.employees
+  trigger: symbol:services/staff/service.py::_validate_card
+  related:
+  - R-STAFF-CARD-02
+  - R-STAFF-CARD-03
+  implemented_by:
+  - symbol: services/staff/service.py::_validate_card
+    lines: 81-83
+    hash: db3e8250a7fb
+  enforced_by_db:
+  - constraint: employees_role_check
+    hash: f4f1ff4e5954
+  config:
+  - services/staff/settings.py::ROLES
+  tested_by:
+  - tests/test_staff_employees.py::test_card_is_validated_on_hire
+  status: draft
+- id: R-STAFF-CARD-02
+  title: СНИЛС проверяется по контрольному числу в коде и по формату в БД
+  text: >
+    Если СНИЛС указан, код проверяет его контрольное число (`snils_valid`, взвешенная сумма по модулю
+    101), иначе DomainError. Формат «XXX-XXX-XXX YY» проверяет только CHECK employees_snils_format. `snils_valid`
+    сначала удаляет дефисы и пробелы, поэтому СНИЛС без разделителей проходит проверку в коде и отклоняется
+    БД (IntegrityError).
+  kind: invariant
+  applies_to:
+  - table:staff.employees
+  trigger: symbol:services/staff/service.py::_validate_card
+  related:
+  - R-STAFF-CARD-05
+  implemented_by:
+  - symbol: services/staff/service.py::snils_valid
+    lines: 69-77
+    hash: 8097e3de31c7
+  - symbol: services/staff/service.py::_validate_card
+    lines: 84-86
+    hash: db3e8250a7fb
+  enforced_by_db:
+  - constraint: employees_snils_format
+    hash: b3db7f3a80bc
+  tested_by:
+  - tests/test_staff_employees.py::test_card_is_validated_on_hire
+  status: draft
+- id: R-STAFF-CARD-03
+  title: Сотрудник должен быть не моложе 18 лет
+  text: >
+    При приёме и изменении карточки с указанной датой рождения возраст на текущую дату должен быть не
+    меньше MIN_EMPLOYEE_AGE (18), иначе DomainError. Независимо от этого CHECK employees_birth_date_check
+    требует дату рождения позже 1900-01-01.
+  kind: guard
+  applies_to:
+  - table:staff.employees
+  trigger: symbol:services/staff/service.py::_validate_card
+  related:
+  - R-STAFF-CARD-01
+  implemented_by:
+  - symbol: services/staff/service.py::_validate_card
+    lines: 87-92
+    hash: db3e8250a7fb
+  enforced_by_db:
+  - constraint: employees_birth_date_check
+    hash: bbacefb7ed75
+  config:
+  - services/staff/settings.py::MIN_EMPLOYEE_AGE
+  tested_by:
+  - tests/test_staff_employees.py::test_card_is_validated_on_hire
+  status: draft
+- id: R-STAFF-CARD-04
+  title: Формат паспорта проверяется только в БД
+  text: >
+    Паспорт должен соответствовать формату «NNNN NNNNNN» (CHECK employees_passport_format). Код формат
+    не проверяет. Неверное значение отклоняется при flush с IntegrityError, через API это HTTP 409.
+  kind: invariant
+  applies_to:
+  - table:staff.employees
+  trigger: table:staff.employees
+  related:
+  - R-STAFF-CARD-05
+  implemented_by:
+  - symbol: services/staff/service.py::hire_employee
+    lines: 117-120
+    hash: 4686d2f1a764
+  enforced_by_db:
+  - constraint: employees_passport_format
+    hash: 4719d2c5012f
+  tested_by:
+  - tests/test_staff_employees.py::test_card_is_validated_on_hire
+  status: draft
+- id: R-STAFF-CARD-05
+  title: Паспорт уникален среди работающих, СНИЛС уникален навсегда
+  text: >
+    Частичный уникальный индекс employees_passport_active_uq запрещает двух неуволенных сотрудников с
+    одним паспортом. После увольнения паспорт можно использовать снова. СНИЛС уникален по всей таблице
+    (employees_snils_key), включая уволенных, поэтому повторно принять уволенного сотрудника отдельной
+    карточкой с тем же СНИЛС нельзя. В коде этих проверок нет: ошибку выдаёт БД.
+  kind: invariant
+  applies_to:
+  - table:staff.employees
+  trigger: table:staff.employees
+  related:
+  - R-STAFF-CARD-02
+  - R-STAFF-CARD-04
+  - R-STAFF-DISMISS-01
+  implemented_by:
+  - symbol: services/staff/service.py::hire_employee
+    lines: 117-120
+    hash: 4686d2f1a764
+  enforced_by_db:
+  - constraint: employees_passport_active_uq
+    hash: 4c2a221355cc
+  - constraint: employees_snils_key
+    hash: 9d8a3c98fae9
+  tested_by:
+  - tests/test_staff_employees.py::test_passport_reused_only_after_dismissal
+  status: draft
+- id: R-STAFF-HIRE-01
+  title: Неполную карточку принимают, но такой сотрудник не допускается к сменам и допускам
+  text: >
+    `hire_employee` требует только должность. ФИО, паспорт, СНИЛС и дата рождения могут быть пустыми.
+    Карточка сохраняется, и публикуется staff.employee_hired, на которое никто не подписан. Незаполненные
+    поля из REQUIRED_EMPLOYEE_FIELDS возвращает `missing_fields`, API показывает их в missing_fields.
+    Приём не закрепляет сотрудника за площадкой, это отдельная операция.
+  kind: config
+  applies_to:
+  - table:staff.employees
+  trigger: symbol:services/staff/service.py::hire_employee
+  effects:
+  - 'writes: table:staff.employees'
+  - event:staff.employee_hired
+  related:
+  - R-STAFF-MEMBER-01
+  - R-STAFF-CLEARANCE-01
+  implemented_by:
+  - symbol: services/staff/service.py::hire_employee
+    lines: 108-121
+    hash: 4686d2f1a764
+  - symbol: services/staff/service.py::missing_fields
+    lines: 65-66
+    hash: d7db6b7ee1f1
+  config:
+  - services/staff/settings.py::REQUIRED_EMPLOYEE_FIELDS
+  tested_by:
+  - tests/test_staff_employees.py::test_incomplete_card_is_saved_but_lists_missing_fields
+  - tests/test_staff_events.py::test_api_hire_and_plan_shift
+  status: draft
+- id: R-STAFF-CARD-06
+  title: В карточке меняются только поля из белого списка, карточка уволенного закрыта
+  text: >
+    `update_employee` меняет только поля из EDITABLE_FIELDS (full_name, passport, snils, birth_date, role),
+    на остальные отвечает DomainError «поля нельзя изменить». Карточку уволенного сотрудника изменить
+    нельзя. Новые значения проходят ту же проверку, что и при приёме.
+  kind: guard
+  applies_to:
+  - table:staff.employees
+  trigger: symbol:services/staff/service.py::update_employee
+  effects:
+  - 'writes: table:staff.employees'
+  related:
+  - R-STAFF-RECHECK-01
+  implemented_by:
+  - symbol: services/staff/service.py::update_employee
+    lines: 127-136
+    hash: 912223ebf5f2
+  config:
+  - services/staff/service.py::EDITABLE_FIELDS
+  tested_by:
+  - tests/test_staff_employees.py::test_dismissal_closes_card_and_releases_everything
+  status: draft
+- id: R-STAFF-RECHECK-01
+  title: Изменение отслеживаемых полей карточки неявно публикует staff.employee_updated
+  text: >
+    Слушатель ORM `before_flush` проверяет каждую изменённую карточку Employee в сессии. Если значение
+    какого-либо поля из TRACKED_FIELDS действительно изменилось, он обновляет updated_at и публикует staff.employee_updated
+    со списком изменённых полей. Запись того же значения изменением не считается. Слушатель срабатывает
+    при любом flush, не только в `update_employee`. TRACKED_FIELDS дублирует EDITABLE_FIELDS из service.py.
+  kind: effect
+  applies_to:
+  - table:staff.employees
+  trigger: symbol:services/staff/listeners.py::_employee_changes
+  effects:
+  - event:staff.employee_updated
+  - 'writes: table:staff.employees'
+  roles:
+  - system
+  related:
+  - R-STAFF-RECHECK-02
+  - R-STAFF-CARD-06
+  implemented_by:
+  - symbol: services/staff/listeners.py::_employee_changes
+    lines: 14-22
+    hash: 8e14afa8598a
+  config:
+  - services/staff/listeners.py::TRACKED_FIELDS
+  tested_by:
+  - tests/test_staff_employees.py::test_tracked_change_publishes_employee_updated
+  - tests/test_staff_employees.py::test_same_value_is_not_a_change
+  status: draft
+- id: R-STAFF-RECHECK-02
+  title: Изменение карточки отзывает допуски, требующие перепроверки этих полей
+  text: >
+    Подписчик staff.employee_updated отзывает действующие допуски сотрудника, если recheck_fields их вида
+    пересекаются с изменёнными полями. Причина отзыва — recheck. Отзыв публикует staff.clearance_revoked,
+    и дальше по цепочке сотрудник снимается со смен, требующих этого допуска, а ответственный может получить
+    уведомление о недоукомплектованности.
+  kind: effect
+  applies_to:
+  - table:staff.clearances
+  trigger: event:staff.employee_updated
+  effects:
+  - 'writes: table:staff.clearances'
+  - event:staff.clearance_revoked
+  roles:
+  - system
+  related:
+  - R-STAFF-RECHECK-01
+  - R-STAFF-CLEARANCE-06
+  - R-STAFF-CLEARANCE-02
+  implemented_by:
+  - symbol: services/staff/consumers.py::on_employee_updated
+    lines: 11-12
+    hash: 0e2dd129a38a
+  - symbol: services/staff/service.py::revoke_for_recheck
+    lines: 576-590
+    hash: ea52bb90d168
+  - symbol: services/staff/service.py::_revoke
+    lines: 537-549
+    hash: 57545fc6c0f9
+  tested_by:
+  - tests/test_staff_employees.py::test_card_change_revokes_clearances_needing_recheck
+  - tests/test_staff_employees.py::test_same_value_is_not_a_change
+  - tests/test_staff_events.py::test_passport_change_chain_reaches_responsible
+  status: draft
+- id: R-STAFF-DISMISS-01
+  title: Увольнение закрывает карточку и закрепление за площадкой
+  text: >
+    `dismiss_employee` проставляет dismissed_at, закрывает текущее закрепление за площадкой (сняв сотрудника
+    с роли ответственного, если он им был) и публикует staff.employee_dismissed. Повторное увольнение
+    даёт DomainError «сотрудник уже уволен». CHECK employees_dismissal_check требует dismissed_at >= hired_at.
+  kind: effect
+  applies_to:
+  - table:staff.employees
+  trigger: symbol:services/staff/service.py::dismiss_employee
+  effects:
+  - 'writes: table:staff.employees'
+  - 'writes: table:staff.assignments'
+  - event:staff.employee_dismissed
+  related:
+  - R-STAFF-DISMISS-02
+  - R-STAFF-SITE-RESP-03
+  implemented_by:
+  - symbol: services/staff/service.py::dismiss_employee
+    lines: 143-149
+    hash: 452dfb5d0ed9
+  enforced_by_db:
+  - constraint: employees_dismissal_check
+    hash: 510764960ea0
+  tested_by:
+  - tests/test_staff_employees.py::test_dismissal_closes_card_and_releases_everything
+  - tests/test_staff_employees.py::test_passport_reused_only_after_dismissal
+  status: draft
+- id: R-STAFF-DISMISS-02
+  title: Уволенного снимают со всех будущих смен и отзывают все его допуски
+  text: >
+    Подписчик staff.employee_dismissed снимает сотрудника со всех запланированных смен, которые ещё не
+    начались (причина dismissed), и отзывает все действующие допуски с той же причиной. Начавшиеся смены
+    не затрагиваются. Каждое снятие публикует staff.shift_member_removed, что запускает проверку укомплектованности.
+  kind: effect
+  applies_to:
+  - table:staff.shift_members
+  - table:staff.clearances
+  trigger: event:staff.employee_dismissed
+  effects:
+  - 'writes: table:staff.shift_members'
+  - 'writes: table:staff.clearances'
+  - event:staff.shift_member_removed
+  - event:staff.clearance_revoked
+  roles:
+  - system
+  related:
+  - R-STAFF-DISMISS-01
+  - R-STAFF-STAFFING-01
+  implemented_by:
+  - symbol: services/staff/consumers.py::on_employee_dismissed
+    lines: 16-18
+    hash: 8dddcd9b7a4e
+  - symbol: services/staff/service.py::drop_from_future_shifts
+    lines: 415-434
+    hash: 1ab7830e5915
+  - symbol: services/staff/service.py::revoke_all_clearances
+    lines: 564-571
+    hash: c32e3c599350
+  tested_by:
+  - tests/test_staff_employees.py::test_dismissal_closes_card_and_releases_everything
+  status: draft
+- id: R-STAFF-TRANSFER-01
+  title: Сотрудник одновременно закреплён только за одной площадкой
+  text: >
+    `transfer_employee` закрепляет сотрудника за площадкой. Если он уже работал на другой, старое закрепление
+    закрывается (ended_at) и открывается новое. Уволенного закрепить нельзя, повторно закрепить за той
+    же площадкой тоже нельзя (DomainError). Событие staff.employee_transferred публикуется, только если
+    было предыдущее закрепление. Индекс assignments_current_uq допускает одно открытое закрепление на
+    сотрудника.
+  kind: invariant
+  applies_to:
+  - table:staff.assignments
+  trigger: symbol:services/staff/service.py::transfer_employee
+  effects:
+  - 'writes: table:staff.assignments'
+  - event:staff.employee_transferred
+  related:
+  - R-STAFF-TRANSFER-02
+  - R-STAFF-SITE-RESP-03
+  implemented_by:
+  - symbol: services/staff/service.py::transfer_employee
+    lines: 201-221
+    hash: d0cf8e4e4f6c
+  - symbol: services/staff/service.py::_close_assignment
+    lines: 183-194
+    hash: cf883d87d633
+  enforced_by_db:
+  - constraint: assignments_current_uq
+    hash: 9dba25b5cb12
+  - constraint: assignments_period_check
+    hash: aeb3b899fef0
+  tested_by:
+  - tests/test_staff_events.py::test_transfer_drops_future_shifts_at_old_site_only
+  - tests/test_staff_events.py::test_api_hire_and_plan_shift
+  status: draft
+- id: R-STAFF-TRANSFER-02
+  title: Перевод снимает сотрудника только с будущих смен старой площадки
+  text: >
+    Подписчик staff.employee_transferred снимает сотрудника с запланированных и ещё не начавшихся смен
+    старой площадки (причина transferred). На уже идущей смене сотрудник остаётся. Снятие может сделать
+    смену недоукомплектованной и вызвать уведомление ответственному.
+  kind: effect
+  applies_to:
+  - table:staff.shift_members
+  trigger: event:staff.employee_transferred
+  effects:
+  - 'writes: table:staff.shift_members'
+  - event:staff.shift_member_removed
+  roles:
+  - system
+  related:
+  - R-STAFF-TRANSFER-01
+  - R-STAFF-STAFFING-01
+  implemented_by:
+  - symbol: services/staff/consumers.py::on_employee_transferred
+    lines: 30-33
+    hash: acf284f0bdfe
+  - symbol: services/staff/service.py::drop_from_future_shifts
+    lines: 415-434
+    hash: 1ab7830e5915
+  tested_by:
+  - tests/test_staff_events.py::test_transfer_drops_future_shifts_at_old_site_only
+  - tests/test_staff_events.py::test_transfer_leaves_shift_understaffed_and_alerts_responsible
+  status: draft
+- id: R-STAFF-SITE-01
+  title: Максимум сотрудников на смене для новой площадки — 6
+  text: >
+    Если при создании площадки максимум не указан, `create_site` берёт MAX_SHIFT_STAFF (6). Этот максимум
+    служит вместимостью по умолчанию для новых смен площадки.
+  kind: config
+  applies_to:
+  - table:staff.sites
+  trigger: symbol:services/staff/service.py::create_site
+  effects:
+  - 'writes: table:staff.sites'
+  related:
+  - R-STAFF-SITE-02
+  - R-STAFF-SHIFT-02
+  implemented_by:
+  - symbol: services/staff/service.py::create_site
+    lines: 157-157
+    hash: 4c38afba7780
+  enforced_by_db:
+  - constraint: sites_max_shift_staff_check
+    hash: 54387d39fe88
+  config:
+  - services/staff/settings.py::MAX_SHIFT_STAFF
+  status: draft
+- id: R-STAFF-SITE-02
+  title: Максимум смены площадки — от 1 до 20
+  text: >
+    `set_site_max_staff` принимает значение от 1 до SHIFT_STAFF_CEILING (20), иначе DomainError. CHECK
+    sites_max_shift_staff_check задаёт те же границы литералом 20, а не настройкой. `create_site` границы
+    в коде не проверяет, там действует только CHECK.
+  kind: invariant
+  applies_to:
+  - table:staff.sites
+  trigger: symbol:services/staff/service.py::set_site_max_staff
+  effects:
+  - 'writes: table:staff.sites'
+  related:
+  - R-STAFF-SITE-03
+  - R-STAFF-SITE-01
+  implemented_by:
+  - symbol: services/staff/service.py::set_site_max_staff
+    lines: 165-168
+    hash: b0f48b0de00e
+  enforced_by_db:
+  - constraint: sites_max_shift_staff_check
+    hash: 54387d39fe88
+  config:
+  - services/staff/settings.py::SHIFT_STAFF_CEILING
+  tested_by:
+  - tests/test_staff_shifts.py::test_site_maximum_cannot_drop_below_planned_shifts
+  status: draft
+- id: R-STAFF-SITE-03
+  title: Максимум площадки нельзя опустить ниже вместимости её запланированных смен
+  text: >
+    Триггер trg_site_max_shift_staff (функция check_site_max_staff) отклоняет уменьшение max_shift_staff,
+    если у площадки есть смена со статусом planned и вместимостью больше нового значения. В коде такой
+    проверки нет. Завершённые (done) и отменённые смены не мешают.
+  kind: invariant
+  applies_to:
+  - table:staff.sites
+  - table:staff.shifts
+  trigger: table:staff.sites
+  related:
+  - R-STAFF-SITE-02
+  - R-STAFF-SHIFT-CLOSE-01
+  implemented_by:
+  - symbol: services/staff/service.py::set_site_max_staff
+    lines: 168-169
+    hash: b0f48b0de00e
+  enforced_by_db:
+  - constraint: trg_site_max_shift_staff
+    hash: a55ea7522963
+  - constraint: check_site_max_staff
+    hash: 05b36a1cd1ef
+  tested_by:
+  - tests/test_staff_shifts.py::test_site_maximum_cannot_drop_below_planned_shifts
+  - tests/test_staff_events.py::test_close_finished_shifts_job
+  status: draft
+- id: R-STAFF-SHIFT-01
+  title: Смена планируется в будущем, не дальше 60 дней и длится не больше 12 часов
+  text: >
+    `create_shift` требует, чтобы смена начиналась позже текущего момента и не позже PLANNING_HORIZON_DAYS
+    (60) дней вперёд. Конец должен быть позже начала, длительность — не больше MAX_SHIFT_HOURS (12) часов.
+    Указанный обязательный вид допуска должен существовать. CHECK shifts_period_check дублирует условие
+    ends_at > starts_at.
+  kind: guard
+  applies_to:
+  - table:staff.shifts
+  trigger: symbol:services/staff/service.py::create_shift
+  effects:
+  - 'writes: table:staff.shifts'
+  related:
+  - R-STAFF-SHIFT-02
+  - R-STAFF-SITE-RESP-01
+  implemented_by:
+  - symbol: services/staff/service.py::create_shift
+    lines: 253-261
+    hash: 0eb7faa19eee
+  enforced_by_db:
+  - constraint: shifts_period_check
+    hash: dd255e1b45f0
+  config:
+  - services/staff/settings.py::PLANNING_HORIZON_DAYS
+  - services/staff/settings.py::MAX_SHIFT_HOURS
+  tested_by:
+  - tests/test_staff_shifts.py::test_shift_time_rules
+  status: draft
+- id: R-STAFF-SHIFT-02
+  title: Вместимость смены ограничена максимумом площадки, минимальный состав — вместимостью
+  text: >
+    Если вместимость не указана, берётся max_shift_staff площадки. Минимальный состав не может превышать
+    вместимость (DomainError в коде и CHECK shifts_min_staff_check). Что вместимость не больше максимума
+    площадки, код не проверяет: это делает триггер trg_shift_capacity (check_shift_capacity), через API
+    ошибка возвращается как 409 «exceeds site maximum». CHECK shifts_capacity_check ограничивает вместимость
+    1–20 литералом.
+  kind: invariant
+  applies_to:
+  - table:staff.shifts
+  trigger: symbol:services/staff/service.py::create_shift
+  related:
+  - R-STAFF-SHIFT-03
+  - R-STAFF-SITE-01
+  - R-STAFF-SITE-02
+  implemented_by:
+  - symbol: services/staff/service.py::create_shift
+    lines: 262-264
+    hash: 0eb7faa19eee
+  enforced_by_db:
+  - constraint: trg_shift_capacity
+    hash: 823febec61ae
+  - constraint: check_shift_capacity
+    hash: 6300af2009a4
+  - constraint: shifts_capacity_check
+    hash: af1936dc7d77
+  - constraint: shifts_min_staff_check
+    hash: b97283e7931b
+  tested_by:
+  - tests/test_staff_shifts.py::test_capacity_bounded_by_site_maximum
+  - tests/test_staff_events.py::test_api_errors_map_to_statuses
+  status: draft
+- id: R-STAFF-SHIFT-03
+  title: Вместимость смены нельзя уменьшить ниже числа назначенных сотрудников
+  text: >
+    При UPDATE вместимости или площадки смены триггер trg_shift_capacity отклоняет изменение, если назначенных
+    (assigned) сотрудников больше новой вместимости. Операции изменения вместимости в сервисе нет, правило
+    действует только на уровне БД.
+  kind: invariant
+  applies_to:
+  - table:staff.shifts
+  - table:staff.shift_members
+  trigger: table:staff.shifts
+  related:
+  - R-STAFF-SHIFT-02
+  - R-STAFF-MEMBER-03
+  enforced_by_db:
+  - constraint: trg_shift_capacity
+    hash: 823febec61ae
+  - constraint: check_shift_capacity
+    hash: 6300af2009a4
+  tested_by:
+  - tests/test_staff_shifts.py::test_capacity_cannot_shrink_below_roster
+  status: draft
+- id: R-STAFF-SHIFT-04
+  title: Нет двух запланированных смен площадки с одним началом и одним видом допуска
+  text: >
+    Частичный уникальный индекс shifts_planned_uq на (site_id, starts_at, coalesce(required_clearance,
+    '')) при status = 'planned' запрещает дубли запланированных смен. В коде проверки нет: дубль отклоняет
+    БД. После отмены или завершения смены слот можно занять снова.
+  kind: invariant
+  applies_to:
+  - table:staff.shifts
+  trigger: table:staff.shifts
+  related:
+  - R-STAFF-SHIFT-01
+  implemented_by:
+  - symbol: services/staff/service.py::create_shift
+    lines: 265-276
+    hash: 0eb7faa19eee
+  enforced_by_db:
+  - constraint: shifts_planned_uq
+    hash: 2dd050f2a9fe
+  status: draft
+- id: R-STAFF-SHIFT-05
+  title: Новая смена с ненулевым минимумом сразу помечена недоукомплектованной, без уведомления
+  text: >
+    `create_shift` выставляет understaffed = (min_staff > 0). Событие staff.shift_understaffed при этом
+    не публикуется, и ответственный уведомления не получает. Флаг снимается, когда число назначенных достигнет
+    min_staff.
+  kind: effect
+  applies_to:
+  - table:staff.shifts
+  trigger: symbol:services/staff/service.py::create_shift
+  effects:
+  - 'writes: table:staff.shifts'
+  related:
+  - R-STAFF-MEMBER-05
+  - R-STAFF-STAFFING-01
+  implemented_by:
+  - symbol: services/staff/service.py::create_shift
+    lines: 265-276
+    hash: 0eb7faa19eee
+  tested_by:
+  - tests/test_staff_events.py::test_transfer_leaves_shift_understaffed_and_alerts_responsible
+  status: draft
+- id: R-STAFF-MEMBER-01
+  title: На смену ставят действующего сотрудника своей площадки с полной карточкой
+  text: >
+    `assign_to_shift` разрешён только для запланированной и ещё не начавшейся смены. Сотрудник должен
+    быть не уволен, иметь заполненные поля REQUIRED_EMPLOYEE_FIELDS и быть закреплён за площадкой смены.
+    Иначе DomainError.
+  kind: guard
+  applies_to:
+  - table:staff.shift_members
+  trigger: symbol:services/staff/service.py::assign_to_shift
+  effects:
+  - 'writes: table:staff.shift_members'
+  related:
+  - R-STAFF-HIRE-01
+  - R-STAFF-MEMBER-02
+  - R-STAFF-MEMBER-03
+  - R-STAFF-MEMBER-04
+  implemented_by:
+  - symbol: services/staff/service.py::assign_to_shift
+    lines: 329-338
+    hash: b93fbb9e3c37
+  config:
+  - services/staff/settings.py::REQUIRED_EMPLOYEE_FIELDS
+  tested_by:
+  - tests/test_staff_shifts.py::test_shift_admission_needs_full_card_and_own_site
+  - tests/test_staff_shifts.py::test_cancel_shift_releases_staff
+  status: draft
+- id: R-STAFF-MEMBER-02
+  title: На смену с обязательным допуском ставят только при действующем допуске
+  text: >
+    Если у смены задан required_clearance, у сотрудника должен быть допуск этого вида со статусом active.
+    Иначе DomainError «у сотрудника нет действующего допуска для этой смены». Код не проверяет, что допуск
+    действует на дату смены: истечение до начала смены обрабатывает только фоновая задача expire_clearances.
+  kind: guard
+  applies_to:
+  - table:staff.shift_members
+  trigger: symbol:services/staff/service.py::assign_to_shift
+  related:
+  - R-STAFF-CLEARANCE-05
+  - R-STAFF-CLEARANCE-06
+  implemented_by:
+  - symbol: services/staff/service.py::assign_to_shift
+    lines: 339-342
+    hash: b93fbb9e3c37
+  - symbol: services/staff/service.py::active_clearance
+    lines: 295-300
+    hash: '302718257629'
+  tested_by:
+  - tests/test_staff_shifts.py::test_shift_with_clearance_requires_active_one
+  status: draft
+- id: R-STAFF-MEMBER-03
+  title: Смену нельзя переукомплектовать, сотрудника нельзя назначить дважды
+  text: >
+    Код отклоняет повторное назначение того же сотрудника и назначение на смену, где назначенных уже столько,
+    сколько её вместимость. БД дублирует это: триггер trg_shift_members_limit (check_shift_members) при
+    INSERT или переводе в assigned блокирует строку на смене (FOR UPDATE) и отклоняет переполнение, а
+    индекс shift_members_assigned_uq запрещает две активные записи одного сотрудника на смене.
+  kind: invariant
+  applies_to:
+  - table:staff.shift_members
+  trigger: symbol:services/staff/service.py::assign_to_shift
+  related:
+  - R-STAFF-SHIFT-03
+  implemented_by:
+  - symbol: services/staff/service.py::assign_to_shift
+    lines: 343-346
+    hash: b93fbb9e3c37
+  enforced_by_db:
+  - constraint: trg_shift_members_limit
+    hash: 37fbb969a3d0
+  - constraint: check_shift_members
+    hash: eea69b17d5b7
+  - constraint: shift_members_assigned_uq
+    hash: 42bcdbcdc52b
+  tested_by:
+  - tests/test_staff_shifts.py::test_full_shift_refuses_more_staff
+  - tests/test_staff_shifts.py::test_member_limit_trigger_guards_direct_inserts
+  status: draft
+- id: R-STAFF-MEMBER-04
+  title: Между сменами сотрудника не меньше 8 часов отдыха
+  text: >
+    `_check_rest` отклоняет назначение, если у сотрудника есть другая назначенная смена, которая пересекается
+    с новой, расширенной на MIN_REST_HOURS (8 ч) с каждой стороны. Учитываются только смены со статусом
+    planned. Смена, которую задача close_finished_shifts уже перевела в done, в расчёт не попадает.
+  kind: guard
+  applies_to:
+  - table:staff.shift_members
+  trigger: symbol:services/staff/service.py::assign_to_shift
+  related:
+  - R-STAFF-SHIFT-CLOSE-01
+  implemented_by:
+  - symbol: services/staff/service.py::_check_rest
+    lines: 303-321
+    hash: dee4121a3c41
+  - symbol: services/staff/service.py::assign_to_shift
+    lines: 347-347
+    hash: b93fbb9e3c37
+  config:
+  - services/staff/settings.py::MIN_REST_HOURS
+  tested_by:
+  - tests/test_staff_shifts.py::test_rest_between_shifts
+  status: draft
+- id: R-STAFF-MEMBER-05
+  title: Назначение до минимального состава снимает пометку недоукомплектованности
+  text: >
+    После добавления сотрудника `assign_to_shift` снимает флаг understaffed, если число назначенных достигло
+    min_staff. После этого новое снятие сотрудника может снова поставить флаг и создать уведомление.
+  kind: effect
+  applies_to:
+  - table:staff.shifts
+  trigger: symbol:services/staff/service.py::assign_to_shift
+  effects:
+  - 'writes: table:staff.shifts'
+  related:
+  - R-STAFF-SHIFT-05
+  - R-STAFF-STAFFING-01
+  implemented_by:
+  - symbol: services/staff/service.py::assign_to_shift
+    lines: 352-353
+    hash: b93fbb9e3c37
+  tested_by:
+  - tests/test_staff_events.py::test_transfer_leaves_shift_understaffed_and_alerts_responsible
+  - tests/test_staff_events.py::test_api_hire_and_plan_shift
+  status: draft
+- id: R-STAFF-MEMBER-06
+  title: Снятие со смены сохраняет запись с причиной и публикует staff.shift_member_removed
+  text: >
+    Ответственный снимает сотрудника вручную (причина manual). Система снимает его при отмене смены (shift_cancelled),
+    увольнении (dismissed), переводе (transferred) или потере допуска (clearance_lost). Запись не удаляется:
+    она получает status removed, removed_at и removed_reason. Каждое снятие публикует staff.shift_member_removed.
+    CHECK shift_members_removal_check связывает status removed с заполненным removed_at.
+  kind: effect
+  applies_to:
+  - table:staff.shift_members
+  trigger: symbol:services/staff/service.py::_remove_member
+  effects:
+  - 'writes: table:staff.shift_members'
+  - event:staff.shift_member_removed
+  related:
+  - R-STAFF-STAFFING-01
+  - R-STAFF-CANCEL-01
+  implemented_by:
+  - symbol: services/staff/service.py::_remove_member
+    lines: 357-370
+    hash: 00f7dd8addea
+  - symbol: services/staff/service.py::remove_from_shift
+    lines: 378-387
+    hash: b9aaafece233
+  enforced_by_db:
+  - constraint: shift_members_removal_check
+    hash: 66d3c63d992e
+  - constraint: shift_members_status_check
+    hash: 1b162ad92e7f
+  tested_by:
+  - tests/test_staff_events.py::test_understaffed_alert_is_not_duplicated_until_read
+  status: draft
+- id: R-STAFF-CANCEL-01
+  title: Отменить можно только запланированную смену, её состав снимается без уведомлений
+  text: >
+    `cancel_shift` разрешена только при status planned. Смена переводится в cancelled, все назначенные
+    сотрудники снимаются с причиной shift_cancelled. Уведомление о недоукомплектованности не создаётся:
+    `check_staffing` игнорирует смены не в статусе planned.
+  kind: guard
+  applies_to:
+  - table:staff.shifts
+  trigger: symbol:services/staff/service.py::cancel_shift
+  effects:
+  - 'writes: table:staff.shifts'
+  - event:staff.shift_member_removed
+  related:
+  - R-STAFF-MEMBER-06
+  - R-STAFF-STAFFING-01
+  implemented_by:
+  - symbol: services/staff/service.py::cancel_shift
+    lines: 393-402
+    hash: 75bd07ba1938
+  enforced_by_db:
+  - constraint: shifts_status_check
+    hash: 3d4b24289f93
+  tested_by:
+  - tests/test_staff_shifts.py::test_cancel_shift_releases_staff
+  status: draft
+- id: R-STAFF-STAFFING-01
+  title: Снятие сотрудника ниже минимума помечает смену недоукомплектованной
+  text: >
+    Подписчик staff.shift_member_removed вызывает `check_staffing`. Если смена запланирована, ещё не началась,
+    ещё не помечена и назначенных меньше min_staff, она получает understaffed = true и публикуется staff.shift_understaffed.
+    Если пометка уже стоит, событие повторно не публикуется.
+  kind: effect
+  applies_to:
+  - table:staff.shifts
+  trigger: event:staff.shift_member_removed
+  effects:
+  - 'writes: table:staff.shifts'
+  - event:staff.shift_understaffed
+  roles:
+  - system
+  related:
+  - R-STAFF-ALERT-01
+  - R-STAFF-MEMBER-05
+  - R-STAFF-SHIFT-05
+  implemented_by:
+  - symbol: services/staff/consumers.py::on_shift_member_removed
+    lines: 44-45
+    hash: 535734be6568
+  - symbol: services/staff/service.py::check_staffing
+    lines: 440-451
+    hash: 438df185a8f2
+  tested_by:
+  - tests/test_staff_events.py::test_transfer_leaves_shift_understaffed_and_alerts_responsible
+  - tests/test_staff_events.py::test_expire_job_drops_employee_from_shifts_needing_clearance
+  - tests/test_staff_shifts.py::test_cancel_shift_releases_staff
+  status: draft
+- id: R-STAFF-ALERT-01
+  title: Ответственный получает одно непрочитанное уведомление о недоукомплектованной смене
+  text: >
+    Подписчик staff.shift_understaffed создаёт уведомление вида understaffed текущему ответственному площадки
+    с текстом «На смене N из минимум M сотрудников». Если по этой смене уже есть непрочитанное уведомление
+    того же вида, новое не создаётся. Это проверяет и код, и частичный уникальный индекс alerts_unread_uq
+    (shift_id, kind) WHERE read_at IS NULL.
+  kind: effect
+  applies_to:
+  - table:staff.alerts
+  trigger: event:staff.shift_understaffed
+  effects:
+  - 'writes: table:staff.alerts'
+  roles:
+  - system
+  related:
+  - R-STAFF-STAFFING-01
+  - R-STAFF-ALERT-02
+  implemented_by:
+  - symbol: services/staff/consumers.py::on_shift_understaffed
+    lines: 49-56
+    hash: 09605065bfd2
+  - symbol: services/staff/service.py::raise_alert
+    lines: 599-616
+    hash: d75f48810276
+  enforced_by_db:
+  - constraint: alerts_unread_uq
+    hash: 566763e6a3e4
+  - constraint: alerts_kind_check
+    hash: 57ba92a0098e
+  tested_by:
+  - tests/test_staff_events.py::test_transfer_leaves_shift_understaffed_and_alerts_responsible
+  - tests/test_staff_events.py::test_understaffed_alert_is_not_duplicated_until_read
+  - tests/test_staff_events.py::test_passport_change_chain_reaches_responsible
+  status: draft
+- id: R-STAFF-ALERT-02
+  title: Уведомление отмечает прочитанным адресат или текущий ответственный площадки
+  text: >
+    `mark_alert_read` разрешена адресату уведомления или текущему ответственному площадки, иначе AccessDenied.
+    Поэтому уведомление no_responsible без адресата может прочитать новый ответственный. Повторная отметка
+    не меняет read_at. HTTP-маршрута для этой операции нет.
+  kind: permission
+  applies_to:
+  - table:staff.alerts
+  trigger: symbol:services/staff/service.py::mark_alert_read
+  effects:
+  - 'writes: table:staff.alerts'
+  related:
+  - R-STAFF-ALERT-01
+  - R-STAFF-SITE-RESP-04
+  implemented_by:
+  - symbol: services/staff/service.py::mark_alert_read
+    lines: 630-633
+    hash: e93ffe1cded0
+  tested_by:
+  - tests/test_staff_events.py::test_understaffed_alert_is_not_duplicated_until_read
+  status: draft
+- id: R-STAFF-BRIEFING-01
+  title: Инструктаж проводит ответственный площадки другому сотруднику этой площадки
+  text: >
+    `hold_briefing` проводит только ответственный площадки, и только для другого сотрудника (CHECK briefings_instructor_check
+    дублирует запрет на инструктаж самому себе), закреплённого за этой площадкой. Временем инструктажа
+    становится текущий момент. Уникальный ключ briefings_once_key запрещает дубль (сотрудник, тема, время).
+  kind: guard
+  applies_to:
+  - table:staff.briefings
+  trigger: symbol:services/staff/service.py::hold_briefing
+  effects:
+  - 'writes: table:staff.briefings'
+  related:
+  - R-STAFF-CLEARANCE-02
+  - R-STAFF-SITE-RESP-01
+  implemented_by:
+  - symbol: services/staff/service.py::hold_briefing
+    lines: 469-483
+    hash: d9f1cd595a56
+  enforced_by_db:
+  - constraint: briefings_instructor_check
+    hash: 321e7c1328b3
+  - constraint: briefings_once_key
+    hash: 1ac7af202aeb
+  status: draft
+- id: R-STAFF-CLEARANCE-01
+  title: Допуск выдаётся действующему сотруднику с полной карточкой, один активный на вид
+  text: >
+    `grant_clearance` (только отдел кадров) требует, чтобы сотрудник не был уволен и имел заполненные
+    REQUIRED_EMPLOYEE_FIELDS, а вид допуска существовал. Если у сотрудника уже есть активный допуск этого
+    вида, выдаётся DomainError «уже есть действующий допуск». БД дублирует запрет частичным индексом clearances_active_uq.
+  kind: guard
+  applies_to:
+  - table:staff.clearances
+  trigger: symbol:services/staff/service.py::grant_clearance
+  effects:
+  - 'writes: table:staff.clearances'
+  related:
+  - R-STAFF-CLEARANCE-02
+  - R-STAFF-CLEARANCE-03
+  - R-STAFF-HIRE-01
+  implemented_by:
+  - symbol: services/staff/service.py::grant_clearance
+    lines: 499-508
+    hash: 2a3805e47403
+  enforced_by_db:
+  - constraint: clearances_active_uq
+    hash: e863bd872d2b
+  config:
+  - services/staff/settings.py::REQUIRED_EMPLOYEE_FIELDS
+  tested_by:
+  - tests/test_staff_employees.py::test_incomplete_card_is_saved_but_lists_missing_fields
+  - tests/test_staff_employees.py::test_regrant_after_recheck_needs_fresh_briefing
+  status: draft
+- id: R-STAFF-CLEARANCE-02
+  title: Для допуска с инструктажем нужен инструктаж по теме не старше 30 дней
+  text: >
+    Если у вида допуска задан briefing_topic, нужен инструктаж сотрудника по этой теме, проведённый не
+    раньше чем BRIEFING_VALID_DAYS (30) дней назад. Площадка инструктажа значения не имеет. Найденный
+    инструктаж записывается в briefing_id допуска. При повторной выдаче после отзыва «на перепроверку»
+    действует то же требование.
+  kind: guard
+  applies_to:
+  - table:staff.clearances
+  trigger: symbol:services/staff/service.py::grant_clearance
+  related:
+  - R-STAFF-BRIEFING-01
+  - R-STAFF-RECHECK-02
+  implemented_by:
+  - symbol: services/staff/service.py::grant_clearance
+    lines: 509-516
+    hash: 2a3805e47403
+  - symbol: services/staff/service.py::_fresh_briefing
+    lines: 486-493
+    hash: 7680332ad650
+  config:
+  - services/staff/settings.py::BRIEFING_VALID_DAYS
+  tested_by:
+  - tests/test_staff_employees.py::test_regrant_after_recheck_needs_fresh_briefing
+  status: draft
+- id: R-STAFF-CLEARANCE-03
+  title: Срок допуска — valid_days его вида от момента выдачи
+  text: >
+    expires_at = момент выдачи + clearance_kinds.valid_days. CHECK clearance_kinds_valid_days_check ограничивает
+    valid_days от 1 до 1095, CHECK clearances_period_check требует expires_at > granted_at. После выдачи
+    публикуется staff.clearance_granted, на которое никто не подписан.
+  kind: calculation
+  applies_to:
+  - table:staff.clearances
+  trigger: symbol:services/staff/service.py::grant_clearance
+  effects:
+  - 'writes: table:staff.clearances'
+  - event:staff.clearance_granted
+  related:
+  - R-STAFF-CLEARANCE-05
+  implemented_by:
+  - symbol: services/staff/service.py::grant_clearance
+    lines: 517-532
+    hash: 2a3805e47403
+  enforced_by_db:
+  - constraint: clearance_kinds_valid_days_check
+    hash: 56d14792ad46
+  - constraint: clearances_period_check
+    hash: bd6095e32bbb
+  tested_by:
+  - tests/test_staff_events.py::test_expire_job_drops_employee_from_shifts_needing_clearance
+  status: draft
+- id: R-STAFF-CLEARANCE-04
+  title: Отдел кадров вручную отзывает только действующий допуск
+  text: >
+    `revoke_clearance` (только отдел кадров) отзывает допуск со статусом active. Для уже недействующего
+    выдаётся DomainError «допуск уже не действует». Отзыв ставит status revoked, revoked_at и причину,
+    затем публикует staff.clearance_revoked. CHECK clearances_revoked_check требует revoked_at у отозванного
+    допуска. Для этой операции нет HTTP-маршрута и тестов.
+  kind: guard
+  applies_to:
+  - table:staff.clearances
+  trigger: symbol:services/staff/service.py::revoke_clearance
+  effects:
+  - 'writes: table:staff.clearances'
+  - event:staff.clearance_revoked
+  related:
+  - R-STAFF-CLEARANCE-06
+  implemented_by:
+  - symbol: services/staff/service.py::revoke_clearance
+    lines: 555-559
+    hash: 09bed991f361
+  - symbol: services/staff/service.py::_revoke
+    lines: 536-549
+    hash: 57545fc6c0f9
+  enforced_by_db:
+  - constraint: clearances_revoked_check
+    hash: 7dca65234303
+  - constraint: clearances_status_check
+    hash: b5f2dd510271
+  status: draft
+- id: R-STAFF-CLEARANCE-05
+  title: Фоновая задача переводит допуски с наступившим сроком в expired
+  text: >
+    `expire_clearances(now)` переводит все активные допуски с expires_at <= now в статус expired и для
+    каждого публикует staff.clearance_expired. Расписание запуска в модуле не задано. До запуска задачи
+    истёкший допуск формально считается действующим, в том числе при назначении на смену.
+  kind: timer
+  applies_to:
+  - table:staff.clearances
+  trigger: symbol:services/staff/jobs.py::expire_clearances
+  effects:
+  - 'writes: table:staff.clearances'
+  - event:staff.clearance_expired
+  roles:
+  - system
+  related:
+  - R-STAFF-CLEARANCE-06
+  - R-STAFF-MEMBER-02
+  - R-STAFF-CLEARANCE-03
+  implemented_by:
+  - symbol: services/staff/jobs.py::expire_clearances
+    lines: 11-23
+    hash: f7a18f61da8c
+  tested_by:
+  - tests/test_staff_events.py::test_expire_job_drops_employee_from_shifts_needing_clearance
+  status: draft
+- id: R-STAFF-CLEARANCE-06
+  title: Потеря допуска снимает сотрудника с будущих смен, требующих этого допуска
+  text: >
+    Подписчик staff.clearance_revoked и staff.clearance_expired снимает сотрудника со всех запланированных
+    и ещё не начавшихся смен, у которых required_clearance совпадает с видом потерянного допуска (причина
+    clearance_lost). Остальные смены, в том числе уже начавшиеся, не затрагиваются. Снятие может вызвать
+    пометку недоукомплектованности и уведомление ответственному.
+  kind: effect
+  applies_to:
+  - table:staff.shift_members
+  trigger: event:staff.clearance_revoked
+  effects:
+  - 'writes: table:staff.shift_members'
+  - event:staff.shift_member_removed
+  roles:
+  - system
+  related:
+  - R-STAFF-CLEARANCE-05
+  - R-STAFF-RECHECK-02
+  - R-STAFF-STAFFING-01
+  implemented_by:
+  - symbol: services/staff/consumers.py::on_clearance_lost
+    lines: 23-26
+    hash: c48a6a32da00
+  - symbol: services/staff/service.py::drop_from_future_shifts
+    lines: 415-434
+    hash: 1ab7830e5915
+  tested_by:
+  - tests/test_staff_events.py::test_expire_job_drops_employee_from_shifts_needing_clearance
+  - tests/test_staff_events.py::test_passport_change_chain_reaches_responsible
+  status: draft
+- id: R-STAFF-SHIFT-CLOSE-01
+  title: Фоновая задача закрывает завершившиеся смены
+  text: >
+    `close_finished_shifts(now)` переводит смены со статусом planned и ends_at <= now в статус done. Записи
+    о назначенных сотрудниках не меняются. Расписание запуска в модуле не задано. После закрытия такие
+    смены не мешают уменьшить максимум площадки и не учитываются в проверке отдыха между сменами.
+  kind: timer
+  applies_to:
+  - table:staff.shifts
+  trigger: symbol:services/staff/jobs.py::close_finished_shifts
+  effects:
+  - 'writes: table:staff.shifts'
+  roles:
+  - system
+  related:
+  - R-STAFF-SITE-03
+  - R-STAFF-MEMBER-04
+  implemented_by:
+  - symbol: services/staff/jobs.py::close_finished_shifts
+    lines: 27-32
+    hash: cc8cf5a2da67
+  enforced_by_db:
+  - constraint: shifts_status_check
+    hash: 3d4b24289f93
+  tested_by:
+  - tests/test_staff_events.py::test_close_finished_shifts_job
+  status: draft

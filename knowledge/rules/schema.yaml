@@ -1,0 +1,170 @@
+# Правила из общей схемы (knowledge/sources/erp-library.md), не найденные в коде проекта.
+# Извлечены LLM на шаге сверки (bootstrap_rules.sh). Статус verified ставит только человек.
+rules:
+- id: R-SCHEMA-NOTIF-01
+  title: Ссылка на запись уходит клиенту и представителю письмом
+  text: >
+    По схеме, когда заявка готова к визиту (за книгами — на этапе «Ожидает выдачи», для сдачи — когда
+    книги у клиента), публичную ссылку на запись отправляют клиенту письмом. Клиент работает только по
+    ссылке из письма.
+  kind: notification
+  roles:
+  - system
+  - client
+  - representative
+  schema_ref: §1 Клиент; §13 Запись на визит и письма
+  discrepancy: >
+    в проекте не реализовано: scheduling.issue_link создаёт токен, но на application.ready_for_booking
+    и books.issued notifications не подписан, а emails_type_check и templates_type_check допускают только
+    booking и cancel — письма со ссылкой нет
+  status: draft
+- id: R-SCHEMA-NOTIF-02
+  title: Оператор может повторно отправить письмо со ссылкой
+  text: >
+    Оператор заявки может повторно отправить клиенту письмо со ссылкой на запись.
+  kind: permission
+  roles:
+  - operator
+  schema_ref: §2 Оператор
+  discrepancy: 'в проекте не реализовано: нет операции повторной отправки и нет типа письма со ссылкой'
+  status: draft
+- id: R-SCHEMA-ADMIN-01
+  title: Размеры штрафов по представителю и площадке задаёт администратор в админке
+  text: >
+    Администратор задаёт размеры штрафов (просрочка, утеря, порча) в зависимости от представителя и площадки.
+    В заявке размер штрафа вручную не меняют.
+  kind: permission
+  roles:
+  - admin
+  schema_ref: §2 Администратор; §14 Штрафы
+  discrepancy: >
+    в проекте не реализовано: billing.fine_rates только читается в services/billing/service.py::create_fine;
+    функции или эндпоинта для записи ставок нет ни в applications/admin.py, ни в billing
+  status: draft
+- id: R-SCHEMA-CLIENT-01
+  title: Клиент заводится один раз оператором, данные общие для всех заявок
+  text: >
+    Нового клиента заводит оператор. Клиент заводится в системе один раз, и его данные общие для всех
+    его заявок.
+  kind: constraint
+  roles:
+  - operator
+  implemented_by:
+  - symbol: services/applications/service.py::create_client
+    hash: dc724224c749
+  schema_ref: §6 Клиент и проверка данных; §17
+  discrepancy: >
+    реализовано частично: create_client не проверяет роль; у applications.clients нет уникальности (паспорт,
+    ФИО+дата рождения), поэтому один и тот же клиент может быть заведён дважды — и тогда дедупликация
+    по client_id+sphere_id не сработает
+  status: draft
+- id: R-SCHEMA-APP-01
+  title: Оператора заявки переназначить нельзя
+  text: >
+    Оператор — создатель заявки. Переназначить оператора нельзя: на время отсутствия оператор передаёт
+    свою учётную запись коллеге.
+  kind: constraint
+  roles:
+  - operator
+  implemented_by:
+  - symbol: services/applications/service.py::create_application
+    hash: 37162b401c18
+  schema_ref: §3 Кто закреплён за заявкой
+  discrepancy: >
+    реализовано неявно: operator_id задаётся только при создании и в коде нигде не меняется; в БД защиты
+    нет — trg_applications_core_immutable охраняет только sphere_id и representative_id
+  status: draft
+- id: R-SCHEMA-APP-02
+  title: Удалить заявку нельзя
+  text: >
+    Заявку нельзя удалить. Закрытую заявку можно только просматривать.
+  kind: constraint
+  schema_ref: §4 Общие правила
+  discrepancy: >
+    реализовано неявно: в коде нет операции удаления, но в БД запрета нет — у application_books и attempts
+    стоит ON DELETE CASCADE, и DELETE заявки удалит вместе с ней историю попыток
+  status: draft
+- id: R-SCHEMA-HIST-01
+  title: Все значимые действия по заявке сохраняются в истории — кто и когда
+  text: >
+    История заявки хранит все значимые действия: кто и когда их совершил. Историю удалить нельзя. Если
+    оператор работал под чужой учётной записью, история показывает владельца учётной записи.
+  kind: audit
+  schema_ref: §16 Общие ограничения
+  discrepancy: >
+    в проекте не реализовано: libs/bpm/engine.py::transition принимает actor, но не сохраняет его; application.stage_changed
+    передаёт только from и to, без исполнителя. Единственный неизменяемый журнал — chat.messages (события
+    без автора). Назначение проверяющего, бухгалтера и отвязка платежа нигде не фиксируются
+  status: draft
+- id: R-SCHEMA-ACCESS-01
+  title: Проверяющий оператор видит только заявки своей площадки
+  text: >
+    Проверяющий оператор видит только заявки своей площадки. Остальные роли работают с заявками всех площадок.
+    Клиент не видит заявку, счета и внутреннюю информацию.
+  kind: permission
+  roles:
+  - site_checker
+  - client
+  schema_ref: §16 Общие ограничения; §2 Клиент
+  discrepancy: >
+    в проекте не реализовано: GET /applications/{application_id} (services/applications/api.py::get) отдаёт
+    заявку без идентификации и проверки роли
+  status: draft
+- id: R-SCHEMA-ROLE-01
+  title: Один сотрудник — одна роль
+  text: >
+    Совмещения ролей нет: у каждого сотрудника ровно одна роль.
+  kind: constraint
+  schema_ref: §2 Роли; §16 Общие ограничения
+  discrepancy: >
+    в проекте не реализовано: справочника сотрудников и ролей нет, идентификаторы (operator_id, reviewer_id,
+    chief_id, accountant_id) и роль чата приходят из запроса; один и тот же id может действовать в нескольких
+    ролях
+  status: draft
+- id: R-SCHEMA-LINK-01
+  title: По ссылке нельзя изменить данные заявки
+  text: >
+    Через публичную ссылку можно только посмотреть свободные окна, записаться, перенести или отменить
+    визит. Данные заявки по ссылке изменить нельзя.
+  kind: constraint
+  roles:
+  - client
+  - representative
+  implemented_by:
+  - symbol: services/scheduling/api.py::slots
+    hash: bd5b1d3cdea7
+  - symbol: services/scheduling/api.py::book
+    hash: 462831f5d7ab
+  - symbol: services/scheduling/api.py::cancel
+    hash: 46d6ab9688c5
+  schema_ref: §13 Запись на визит и письма
+  status: draft
+- id: R-SCHEMA-FINE-01
+  title: О просрочке представителю сообщает оператор по почте
+  text: >
+    Когда система отметила срыв срока возврата, оператор вручную сообщает о просрочке представителю по
+    почте вне системы.
+  kind: obligation
+  roles:
+  - operator
+  implemented_by:
+  - symbol: services/scheduling/jobs.py::flag_overdue
+    hash: 60a1ef28c116
+  - symbol: services/chat/consumers.py::_handler
+    hash: f46c9b143853
+  schema_ref: §2 Оператор; §14 Штрафы
+  discrepancy: >
+    реализовано частично: система только пишет в чат «Срыв срока возврата книги»; задачи или напоминания
+    оператору нет, факт уведомления не фиксируется
+  status: draft
+- id: R-SCHEMA-SPHERE-01
+  title: Название сферы уникально
+  text: >
+    Сферы — общий справочник тематических разделов. Две сферы с одинаковым названием завести нельзя (UNIQUE
+    в БД).
+  kind: constraint
+  enforced_by_db:
+  - constraint: spheres_name_key
+    hash: c13b99ebc1a2
+  schema_ref: §1 Основные понятия — Сфера (в схеме явно не сказано)
+  status: draft

@@ -1,0 +1,3545 @@
+{
+ "dynamic_topics": [
+  {
+   "expr": "topic",
+   "line": 59,
+   "symbol": "services/inventory/service.py::_stock_event"
+  }
+ ],
+ "edges": [
+  {
+   "dst": "application.review_passed",
+   "src": "service:applications",
+   "type": "consumes"
+  },
+  {
+   "dst": "books.issued",
+   "src": "service:applications",
+   "type": "consumes"
+  },
+  {
+   "dst": "client.updated",
+   "src": "service:applications",
+   "type": "consumes"
+  },
+  {
+   "dst": "invoice.cancelled",
+   "src": "service:applications",
+   "type": "consumes"
+  },
+  {
+   "dst": "invoice.issued",
+   "src": "service:applications",
+   "type": "consumes"
+  },
+  {
+   "dst": "payment.fully_paid",
+   "src": "service:applications",
+   "type": "consumes"
+  },
+  {
+   "dst": "payment.refunded",
+   "src": "service:applications",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.closed_duplicate",
+   "src": "service:billing",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.unarchived",
+   "src": "service:billing",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.venue_changed",
+   "src": "service:billing",
+   "type": "consumes"
+  },
+  {
+   "dst": "loan.damaged",
+   "src": "service:billing",
+   "type": "consumes"
+  },
+  {
+   "dst": "loan.lost",
+   "src": "service:billing",
+   "type": "consumes"
+  },
+  {
+   "dst": "loan.overdue",
+   "src": "service:billing",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.archived",
+   "src": "service:chat",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.closed_duplicate",
+   "src": "service:chat",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.stage_changed",
+   "src": "service:chat",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.unarchived",
+   "src": "service:chat",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.venue_changed",
+   "src": "service:chat",
+   "type": "consumes"
+  },
+  {
+   "dst": "booking.cancelled",
+   "src": "service:chat",
+   "type": "consumes"
+  },
+  {
+   "dst": "booking.created",
+   "src": "service:chat",
+   "type": "consumes"
+  },
+  {
+   "dst": "invoice.cancelled",
+   "src": "service:chat",
+   "type": "consumes"
+  },
+  {
+   "dst": "invoice.issued",
+   "src": "service:chat",
+   "type": "consumes"
+  },
+  {
+   "dst": "loan.overdue",
+   "src": "service:chat",
+   "type": "consumes"
+  },
+  {
+   "dst": "payment.linked",
+   "src": "service:chat",
+   "type": "consumes"
+  },
+  {
+   "dst": "booking.cancelled",
+   "src": "service:notifications",
+   "type": "consumes"
+  },
+  {
+   "dst": "booking.created",
+   "src": "service:notifications",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.archived",
+   "src": "service:scheduling",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.closed_duplicate",
+   "src": "service:scheduling",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.ready_for_booking",
+   "src": "service:scheduling",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.venue_changed",
+   "src": "service:scheduling",
+   "type": "consumes"
+  },
+  {
+   "dst": "venue.settings_changed",
+   "src": "service:scheduling",
+   "type": "consumes"
+  },
+  {
+   "dst": "books.issued",
+   "lines": [
+    67
+   ],
+   "src": "services/applications/consumers.py::on_books_issued",
+   "type": "consumes"
+  },
+  {
+   "dst": "client.updated",
+   "lines": [
+    51
+   ],
+   "src": "services/applications/consumers.py::on_client_updated",
+   "type": "consumes"
+  },
+  {
+   "dst": "payment.fully_paid",
+   "lines": [
+    31
+   ],
+   "src": "services/applications/consumers.py::on_fully_paid",
+   "type": "consumes"
+  },
+  {
+   "dst": "invoice.cancelled",
+   "lines": [
+    22
+   ],
+   "src": "services/applications/consumers.py::on_invoice_cancelled",
+   "type": "consumes"
+  },
+  {
+   "dst": "invoice.issued",
+   "lines": [
+    13
+   ],
+   "src": "services/applications/consumers.py::on_invoice_issued",
+   "type": "consumes"
+  },
+  {
+   "dst": "payment.refunded",
+   "lines": [
+    73
+   ],
+   "src": "services/applications/consumers.py::on_payment_refunded",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.review_passed",
+   "lines": [
+    43
+   ],
+   "src": "services/applications/consumers.py::on_review_passed",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.closed_duplicate",
+   "lines": [
+    20
+   ],
+   "src": "services/billing/consumers.py::on_closed_duplicate",
+   "type": "consumes"
+  },
+  {
+   "dst": "loan.damaged",
+   "lines": [
+    49
+   ],
+   "src": "services/billing/consumers.py::on_loan_damaged",
+   "type": "consumes"
+  },
+  {
+   "dst": "loan.lost",
+   "lines": [
+    44
+   ],
+   "src": "services/billing/consumers.py::on_loan_lost",
+   "type": "consumes"
+  },
+  {
+   "dst": "loan.overdue",
+   "lines": [
+    39
+   ],
+   "src": "services/billing/consumers.py::on_loan_overdue",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.unarchived",
+   "lines": [
+    27
+   ],
+   "src": "services/billing/consumers.py::on_unarchived",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.venue_changed",
+   "lines": [
+    13
+   ],
+   "src": "services/billing/consumers.py::on_venue_changed",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.archived",
+   "dynamic": true,
+   "lines": [
+    31
+   ],
+   "registered_in": "services/chat/consumers.py::<module>",
+   "src": "services/chat/consumers.py::_handler",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.closed_duplicate",
+   "dynamic": true,
+   "lines": [
+    31
+   ],
+   "registered_in": "services/chat/consumers.py::<module>",
+   "src": "services/chat/consumers.py::_handler",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.stage_changed",
+   "dynamic": true,
+   "lines": [
+    31
+   ],
+   "registered_in": "services/chat/consumers.py::<module>",
+   "src": "services/chat/consumers.py::_handler",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.unarchived",
+   "dynamic": true,
+   "lines": [
+    31
+   ],
+   "registered_in": "services/chat/consumers.py::<module>",
+   "src": "services/chat/consumers.py::_handler",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.venue_changed",
+   "dynamic": true,
+   "lines": [
+    31
+   ],
+   "registered_in": "services/chat/consumers.py::<module>",
+   "src": "services/chat/consumers.py::_handler",
+   "type": "consumes"
+  },
+  {
+   "dst": "booking.cancelled",
+   "dynamic": true,
+   "lines": [
+    31
+   ],
+   "registered_in": "services/chat/consumers.py::<module>",
+   "src": "services/chat/consumers.py::_handler",
+   "type": "consumes"
+  },
+  {
+   "dst": "booking.created",
+   "dynamic": true,
+   "lines": [
+    31
+   ],
+   "registered_in": "services/chat/consumers.py::<module>",
+   "src": "services/chat/consumers.py::_handler",
+   "type": "consumes"
+  },
+  {
+   "dst": "invoice.cancelled",
+   "dynamic": true,
+   "lines": [
+    31
+   ],
+   "registered_in": "services/chat/consumers.py::<module>",
+   "src": "services/chat/consumers.py::_handler",
+   "type": "consumes"
+  },
+  {
+   "dst": "invoice.issued",
+   "dynamic": true,
+   "lines": [
+    31
+   ],
+   "registered_in": "services/chat/consumers.py::<module>",
+   "src": "services/chat/consumers.py::_handler",
+   "type": "consumes"
+  },
+  {
+   "dst": "loan.overdue",
+   "dynamic": true,
+   "lines": [
+    31
+   ],
+   "registered_in": "services/chat/consumers.py::<module>",
+   "src": "services/chat/consumers.py::_handler",
+   "type": "consumes"
+  },
+  {
+   "dst": "payment.linked",
+   "dynamic": true,
+   "lines": [
+    31
+   ],
+   "registered_in": "services/chat/consumers.py::<module>",
+   "src": "services/chat/consumers.py::_handler",
+   "type": "consumes"
+  },
+  {
+   "dst": "halls.booking_cancelled",
+   "lines": [
+    35
+   ],
+   "src": "services/halls/consumers.py::on_booking_cancelled",
+   "type": "consumes"
+  },
+  {
+   "dst": "halls.booking_confirmed",
+   "lines": [
+    25
+   ],
+   "src": "services/halls/consumers.py::on_booking_confirmed",
+   "type": "consumes"
+  },
+  {
+   "dst": "halls.booking_prepaid",
+   "lines": [
+    20
+   ],
+   "src": "services/halls/consumers.py::on_booking_prepaid",
+   "type": "consumes"
+  },
+  {
+   "dst": "halls.invoice_issued",
+   "lines": [
+    10
+   ],
+   "src": "services/halls/consumers.py::on_invoice_issued",
+   "type": "consumes"
+  },
+  {
+   "dst": "halls.payment_received",
+   "lines": [
+    15
+   ],
+   "src": "services/halls/consumers.py::on_payment_received",
+   "type": "consumes"
+  },
+  {
+   "dst": "halls.venue_changed",
+   "lines": [
+    30
+   ],
+   "src": "services/halls/consumers.py::on_venue_changed",
+   "type": "consumes"
+  },
+  {
+   "dst": "inventory.copy_damaged",
+   "lines": [
+    35
+   ],
+   "src": "services/inventory/consumers.py::on_copy_damaged",
+   "type": "consumes"
+  },
+  {
+   "dst": "inventory.copy_lost",
+   "lines": [
+    24
+   ],
+   "src": "services/inventory/consumers.py::on_copy_lost",
+   "type": "consumes"
+  },
+  {
+   "dst": "inventory.ill_overdue",
+   "lines": [
+    48
+   ],
+   "src": "services/inventory/consumers.py::on_ill_overdue",
+   "type": "consumes"
+  },
+  {
+   "dst": "inventory.ill_returned",
+   "lines": [
+    53
+   ],
+   "src": "services/inventory/consumers.py::on_ill_returned",
+   "type": "consumes"
+  },
+  {
+   "dst": "inventory.ill_penalty_accrued",
+   "lines": [
+    62
+   ],
+   "src": "services/inventory/consumers.py::on_penalty_accrued",
+   "type": "consumes"
+  },
+  {
+   "dst": "inventory.copy_registered",
+   "lines": [
+    18
+   ],
+   "src": "services/inventory/consumers.py::on_stock_changed",
+   "type": "consumes"
+  },
+  {
+   "dst": "inventory.copy_relocated",
+   "lines": [
+    18
+   ],
+   "src": "services/inventory/consumers.py::on_stock_changed",
+   "type": "consumes"
+  },
+  {
+   "dst": "inventory.copy_written_off",
+   "lines": [
+    18
+   ],
+   "src": "services/inventory/consumers.py::on_stock_changed",
+   "type": "consumes"
+  },
+  {
+   "dst": "inventory.ill_issued",
+   "lines": [
+    18
+   ],
+   "src": "services/inventory/consumers.py::on_stock_changed",
+   "type": "consumes"
+  },
+  {
+   "dst": "inventory.ill_returned",
+   "lines": [
+    18
+   ],
+   "src": "services/inventory/consumers.py::on_stock_changed",
+   "type": "consumes"
+  },
+  {
+   "dst": "inventory.transfer_cancelled",
+   "lines": [
+    18
+   ],
+   "src": "services/inventory/consumers.py::on_stock_changed",
+   "type": "consumes"
+  },
+  {
+   "dst": "inventory.transfer_received",
+   "lines": [
+    18
+   ],
+   "src": "services/inventory/consumers.py::on_stock_changed",
+   "type": "consumes"
+  },
+  {
+   "dst": "inventory.transfer_shipped",
+   "lines": [
+    18
+   ],
+   "src": "services/inventory/consumers.py::on_stock_changed",
+   "type": "consumes"
+  },
+  {
+   "dst": "lectures.capacity_increased",
+   "lines": [
+    21
+   ],
+   "src": "services/lectures/consumers.py::on_capacity_increased",
+   "type": "consumes"
+  },
+  {
+   "dst": "lectures.event_cancelled",
+   "lines": [
+    107
+   ],
+   "src": "services/lectures/consumers.py::on_event_cancelled",
+   "type": "consumes"
+  },
+  {
+   "dst": "lectures.event_moved",
+   "lines": [
+    96
+   ],
+   "src": "services/lectures/consumers.py::on_event_moved",
+   "type": "consumes"
+  },
+  {
+   "dst": "lectures.registration_cancelled",
+   "lines": [
+    39
+   ],
+   "src": "services/lectures/consumers.py::on_registration_cancelled",
+   "type": "consumes"
+  },
+  {
+   "dst": "lectures.registration_created",
+   "lines": [
+    26
+   ],
+   "src": "services/lectures/consumers.py::on_registration_created",
+   "type": "consumes"
+  },
+  {
+   "dst": "lectures.seat_released",
+   "lines": [
+    66
+   ],
+   "src": "services/lectures/consumers.py::on_seat_released",
+   "type": "consumes"
+  },
+  {
+   "dst": "lectures.venue_limit_changed",
+   "lines": [
+    16
+   ],
+   "src": "services/lectures/consumers.py::on_venue_limit_changed",
+   "type": "consumes"
+  },
+  {
+   "dst": "lectures.waitlist_expired",
+   "lines": [
+    113
+   ],
+   "src": "services/lectures/consumers.py::on_waitlist_expired",
+   "type": "consumes"
+  },
+  {
+   "dst": "lectures.waitlist_promoted",
+   "lines": [
+    71
+   ],
+   "src": "services/lectures/consumers.py::on_waitlist_promoted",
+   "type": "consumes"
+  },
+  {
+   "dst": "marketing.campaign_finished",
+   "lines": [
+    20
+   ],
+   "src": "services/marketing/consumers.py::on_campaign_finished",
+   "type": "consumes"
+  },
+  {
+   "dst": "marketing.campaign_launched",
+   "lines": [
+    10
+   ],
+   "src": "services/marketing/consumers.py::on_campaign_launched",
+   "type": "consumes"
+  },
+  {
+   "dst": "marketing.campaign_prepared",
+   "lines": [
+    15
+   ],
+   "src": "services/marketing/consumers.py::on_campaign_prepared",
+   "type": "consumes"
+  },
+  {
+   "dst": "marketing.message_bounced",
+   "lines": [
+    30
+   ],
+   "src": "services/marketing/consumers.py::on_message_bounced",
+   "type": "consumes"
+  },
+  {
+   "dst": "marketing.unsubscribed",
+   "lines": [
+    25
+   ],
+   "src": "services/marketing/consumers.py::on_unsubscribed",
+   "type": "consumes"
+  },
+  {
+   "dst": "booking.cancelled",
+   "lines": [
+    21
+   ],
+   "src": "services/notifications/consumers.py::on_booking_cancelled",
+   "type": "consumes"
+  },
+  {
+   "dst": "booking.created",
+   "lines": [
+    10
+   ],
+   "src": "services/notifications/consumers.py::on_booking_created",
+   "type": "consumes"
+  },
+  {
+   "dst": "partners.commission_accrued",
+   "lines": [
+    25
+   ],
+   "src": "services/partners/consumers.py::on_commission_accrued",
+   "type": "consumes"
+  },
+  {
+   "dst": "partners.credit_overdue",
+   "lines": [
+    30
+   ],
+   "src": "services/partners/consumers.py::on_credit_overdue",
+   "type": "consumes"
+  },
+  {
+   "dst": "partners.deal_closed",
+   "lines": [
+    20
+   ],
+   "src": "services/partners/consumers.py::on_deal_closed",
+   "type": "consumes"
+  },
+  {
+   "dst": "partners.deal_paid",
+   "lines": [
+    35
+   ],
+   "src": "services/partners/consumers.py::on_deal_paid",
+   "type": "consumes"
+  },
+  {
+   "dst": "partners.partner_onboarded",
+   "lines": [
+    15
+   ],
+   "src": "services/partners/consumers.py::on_partner_onboarded",
+   "type": "consumes"
+  },
+  {
+   "dst": "partners.request_approved",
+   "lines": [
+    10
+   ],
+   "src": "services/partners/consumers.py::on_request_approved",
+   "type": "consumes"
+  },
+  {
+   "dst": "reports.run_completed",
+   "lines": [
+    21
+   ],
+   "src": "services/reports/consumers.py::count_completed_run",
+   "type": "consumes"
+  },
+  {
+   "dst": "reports.definition_deactivated",
+   "lines": [
+    44
+   ],
+   "src": "services/reports/consumers.py::on_definition_deactivated",
+   "type": "consumes"
+  },
+  {
+   "dst": "reports.run_cancelled",
+   "lines": [
+    37
+   ],
+   "src": "services/reports/consumers.py::on_run_cancelled",
+   "type": "consumes"
+  },
+  {
+   "dst": "reports.run_completed",
+   "lines": [
+    16
+   ],
+   "src": "services/reports/consumers.py::on_run_completed",
+   "type": "consumes"
+  },
+  {
+   "dst": "reports.run_failed",
+   "lines": [
+    32
+   ],
+   "src": "services/reports/consumers.py::on_run_failed",
+   "type": "consumes"
+  },
+  {
+   "dst": "reports.run_requested",
+   "lines": [
+    11
+   ],
+   "src": "services/reports/consumers.py::on_run_requested",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.archived",
+   "lines": [
+    25
+   ],
+   "src": "services/scheduling/consumers.py::on_archived",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.closed_duplicate",
+   "lines": [
+    30
+   ],
+   "src": "services/scheduling/consumers.py::on_closed_duplicate",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.ready_for_booking",
+   "lines": [
+    12
+   ],
+   "src": "services/scheduling/consumers.py::on_ready_for_booking",
+   "type": "consumes"
+  },
+  {
+   "dst": "application.venue_changed",
+   "lines": [
+    17
+   ],
+   "src": "services/scheduling/consumers.py::on_venue_changed",
+   "type": "consumes"
+  },
+  {
+   "dst": "venue.settings_changed",
+   "lines": [
+    35
+   ],
+   "src": "services/scheduling/consumers.py::on_venue_settings_changed",
+   "type": "consumes"
+  },
+  {
+   "dst": "staff.clearance_expired",
+   "lines": [
+    23
+   ],
+   "src": "services/staff/consumers.py::on_clearance_lost",
+   "type": "consumes"
+  },
+  {
+   "dst": "staff.clearance_revoked",
+   "lines": [
+    23
+   ],
+   "src": "services/staff/consumers.py::on_clearance_lost",
+   "type": "consumes"
+  },
+  {
+   "dst": "staff.employee_dismissed",
+   "lines": [
+    16
+   ],
+   "src": "services/staff/consumers.py::on_employee_dismissed",
+   "type": "consumes"
+  },
+  {
+   "dst": "staff.employee_transferred",
+   "lines": [
+    30
+   ],
+   "src": "services/staff/consumers.py::on_employee_transferred",
+   "type": "consumes"
+  },
+  {
+   "dst": "staff.employee_updated",
+   "lines": [
+    11
+   ],
+   "src": "services/staff/consumers.py::on_employee_updated",
+   "type": "consumes"
+  },
+  {
+   "dst": "staff.shift_member_removed",
+   "lines": [
+    44
+   ],
+   "src": "services/staff/consumers.py::on_shift_member_removed",
+   "type": "consumes"
+  },
+  {
+   "dst": "staff.shift_understaffed",
+   "lines": [
+    49
+   ],
+   "src": "services/staff/consumers.py::on_shift_understaffed",
+   "type": "consumes"
+  },
+  {
+   "dst": "subscriptions.activated",
+   "lines": [
+    45
+   ],
+   "src": "services/subscriptions/consumers.py::on_activated",
+   "type": "consumes"
+  },
+  {
+   "dst": "subscriptions.closed_duplicate",
+   "lines": [
+    59
+   ],
+   "src": "services/subscriptions/consumers.py::on_closed_duplicate",
+   "type": "consumes"
+  },
+  {
+   "dst": "subscriptions.created",
+   "lines": [
+    10
+   ],
+   "src": "services/subscriptions/consumers.py::on_created",
+   "type": "consumes"
+  },
+  {
+   "dst": "subscriptions.expired",
+   "lines": [
+    80
+   ],
+   "src": "services/subscriptions/consumers.py::on_expired",
+   "type": "consumes"
+  },
+  {
+   "dst": "subscriptions.grace_started",
+   "lines": [
+    70
+   ],
+   "src": "services/subscriptions/consumers.py::on_grace_started",
+   "type": "consumes"
+  },
+  {
+   "dst": "subscriptions.holder_rejected",
+   "lines": [
+    20
+   ],
+   "src": "services/subscriptions/consumers.py::on_holder_rejected",
+   "type": "consumes"
+  },
+  {
+   "dst": "subscriptions.holder_updated",
+   "lines": [
+    15
+   ],
+   "src": "services/subscriptions/consumers.py::on_holder_updated",
+   "type": "consumes"
+  },
+  {
+   "dst": "subscriptions.invoice_issued",
+   "lines": [
+    30
+   ],
+   "src": "services/subscriptions/consumers.py::on_invoice_issued",
+   "type": "consumes"
+  },
+  {
+   "dst": "subscriptions.payment_completed",
+   "lines": [
+    40
+   ],
+   "src": "services/subscriptions/consumers.py::on_payment_completed",
+   "type": "consumes"
+  },
+  {
+   "dst": "subscriptions.refund_required",
+   "lines": [
+    86
+   ],
+   "src": "services/subscriptions/consumers.py::on_refund_required",
+   "type": "consumes"
+  },
+  {
+   "dst": "subscriptions.renewed",
+   "lines": [
+    52
+   ],
+   "src": "services/subscriptions/consumers.py::on_renewed",
+   "type": "consumes"
+  },
+  {
+   "dst": "effect:chat.event_log",
+   "src": "application.archived",
+   "template": "Заявка ушла в архив ({outcome})",
+   "type": "notifies"
+  },
+  {
+   "dst": "effect:chat.event_log",
+   "src": "application.closed_duplicate",
+   "template": "Заявка закрыта как дубль заявки {winner_id}",
+   "type": "notifies"
+  },
+  {
+   "dst": "effect:chat.event_log",
+   "src": "application.stage_changed",
+   "template": "Этап: {from} → {to}",
+   "type": "notifies"
+  },
+  {
+   "dst": "effect:chat.event_log",
+   "src": "application.unarchived",
+   "template": "Заявка возвращена из архива",
+   "type": "notifies"
+  },
+  {
+   "dst": "effect:chat.event_log",
+   "src": "application.venue_changed",
+   "template": "Площадка изменена: {old_venue_id} → {new_venue_id}",
+   "type": "notifies"
+  },
+  {
+   "dst": "effect:chat.event_log",
+   "src": "booking.cancelled",
+   "template": "Запись на {starts_at} отменена ({reason})",
+   "type": "notifies"
+  },
+  {
+   "dst": "effect:email.cancel",
+   "src": "booking.cancelled",
+   "type": "notifies",
+   "via": "services/notifications/consumers.py::on_booking_cancelled"
+  },
+  {
+   "dst": "effect:chat.event_log",
+   "src": "booking.created",
+   "template": "Запись на {starts_at}",
+   "type": "notifies"
+  },
+  {
+   "dst": "effect:email.booking",
+   "src": "booking.created",
+   "type": "notifies",
+   "via": "services/notifications/consumers.py::on_booking_created"
+  },
+  {
+   "dst": "effect:chat.event_log",
+   "src": "invoice.cancelled",
+   "template": "Счёт {invoice_id} аннулирован ({reason})",
+   "type": "notifies"
+  },
+  {
+   "dst": "effect:chat.event_log",
+   "src": "invoice.issued",
+   "template": "Выставлен счёт {invoice_id} на {amount}",
+   "type": "notifies"
+  },
+  {
+   "dst": "effect:chat.event_log",
+   "src": "loan.overdue",
+   "template": "Срыв срока возврата книги {book_id}",
+   "type": "notifies"
+  },
+  {
+   "dst": "effect:chat.event_log",
+   "src": "payment.linked",
+   "template": "Привязан платёж {amount} к счёту {invoice_id}",
+   "type": "notifies"
+  },
+  {
+   "dst": "effect:email.cancel",
+   "lines": [
+    22
+   ],
+   "src": "services/notifications/consumers.py::on_booking_cancelled",
+   "type": "notifies"
+  },
+  {
+   "dst": "effect:email.booking",
+   "lines": [
+    11
+   ],
+   "src": "services/notifications/consumers.py::on_booking_created",
+   "type": "notifies"
+  },
+  {
+   "dst": "application.archived",
+   "src": "service:applications",
+   "type": "publishes"
+  },
+  {
+   "dst": "application.closed_duplicate",
+   "src": "service:applications",
+   "type": "publishes"
+  },
+  {
+   "dst": "application.ready_for_booking",
+   "src": "service:applications",
+   "type": "publishes"
+  },
+  {
+   "dst": "application.review_passed",
+   "src": "service:applications",
+   "type": "publishes"
+  },
+  {
+   "dst": "application.stage_changed",
+   "src": "service:applications",
+   "type": "publishes"
+  },
+  {
+   "dst": "application.unarchived",
+   "src": "service:applications",
+   "type": "publishes"
+  },
+  {
+   "dst": "application.venue_changed",
+   "src": "service:applications",
+   "type": "publishes"
+  },
+  {
+   "dst": "client.updated",
+   "src": "service:applications",
+   "type": "publishes"
+  },
+  {
+   "dst": "venue.settings_changed",
+   "src": "service:applications",
+   "type": "publishes"
+  },
+  {
+   "dst": "invoice.cancelled",
+   "src": "service:billing",
+   "type": "publishes"
+  },
+  {
+   "dst": "invoice.issued",
+   "src": "service:billing",
+   "type": "publishes"
+  },
+  {
+   "dst": "payment.fully_paid",
+   "src": "service:billing",
+   "type": "publishes"
+  },
+  {
+   "dst": "payment.linked",
+   "src": "service:billing",
+   "type": "publishes"
+  },
+  {
+   "dst": "payment.refunded",
+   "src": "service:billing",
+   "type": "publishes"
+  },
+  {
+   "dst": "booking.cancelled",
+   "src": "service:scheduling",
+   "type": "publishes"
+  },
+  {
+   "dst": "booking.created",
+   "src": "service:scheduling",
+   "type": "publishes"
+  },
+  {
+   "dst": "books.issued",
+   "src": "service:scheduling",
+   "type": "publishes"
+  },
+  {
+   "dst": "loan.damaged",
+   "src": "service:scheduling",
+   "type": "publishes"
+  },
+  {
+   "dst": "loan.lost",
+   "src": "service:scheduling",
+   "type": "publishes"
+  },
+  {
+   "dst": "loan.overdue",
+   "src": "service:scheduling",
+   "type": "publishes"
+  },
+  {
+   "dst": "venue.settings_changed",
+   "lines": [
+    40
+   ],
+   "src": "services/applications/admin.py::set_venue_max_capacity",
+   "type": "publishes"
+  },
+  {
+   "dst": "application.closed_duplicate",
+   "lines": [
+    45
+   ],
+   "src": "services/applications/dedup.py::close_duplicates",
+   "type": "publishes"
+  },
+  {
+   "condition": "isinstance(obj, Application) and history.deleted and history.added",
+   "dst": "application.stage_changed",
+   "lines": [
+    18
+   ],
+   "src": "services/applications/listeners.py::_domain_events",
+   "type": "publishes"
+  },
+  {
+   "condition": "not (isinstance(obj, Application)) and isinstance(obj, Client) and changed",
+   "dst": "client.updated",
+   "lines": [
+    28
+   ],
+   "src": "services/applications/listeners.py::_domain_events",
+   "type": "publishes"
+  },
+  {
+   "dst": "application.review_passed",
+   "lines": [
+    183
+   ],
+   "src": "services/applications/service.py::approve",
+   "type": "publishes"
+  },
+  {
+   "dst": "application.archived",
+   "lines": [
+    261
+   ],
+   "src": "services/applications/service.py::archive",
+   "type": "publishes"
+  },
+  {
+   "dst": "application.venue_changed",
+   "lines": [
+    220
+   ],
+   "src": "services/applications/service.py::change_venue",
+   "type": "publishes"
+  },
+  {
+   "dst": "application.ready_for_booking",
+   "lines": [
+    160
+   ],
+   "src": "services/applications/service.py::mark_ready_for_booking",
+   "type": "publishes"
+  },
+  {
+   "dst": "application.unarchived",
+   "lines": [
+    299
+   ],
+   "src": "services/applications/service.py::unarchive",
+   "type": "publishes"
+  },
+  {
+   "dst": "invoice.cancelled",
+   "lines": [
+    85
+   ],
+   "src": "services/billing/service.py::cancel_invoice",
+   "type": "publishes"
+  },
+  {
+   "dst": "invoice.issued",
+   "lines": [
+    62
+   ],
+   "src": "services/billing/service.py::issue_books_invoice",
+   "type": "publishes"
+  },
+  {
+   "dst": "invoice.issued",
+   "lines": [
+    202
+   ],
+   "src": "services/billing/service.py::issue_fine_invoice",
+   "type": "publishes"
+  },
+  {
+   "condition": "before < invoice.amount <= after",
+   "dst": "payment.fully_paid",
+   "lines": [
+    120
+   ],
+   "src": "services/billing/service.py::link_payment",
+   "type": "publishes"
+  },
+  {
+   "dst": "payment.linked",
+   "lines": [
+    111
+   ],
+   "src": "services/billing/service.py::link_payment",
+   "type": "publishes"
+  },
+  {
+   "dst": "payment.refunded",
+   "lines": [
+    151
+   ],
+   "src": "services/billing/service.py::refund_payment",
+   "type": "publishes"
+  },
+  {
+   "dst": "halls.booking_cancelled",
+   "lines": [
+    221
+   ],
+   "src": "services/halls/service.py::_cancel",
+   "type": "publishes"
+  },
+  {
+   "condition": "await is_fully_paid(session, invoice)",
+   "dst": "halls.booking_confirmed",
+   "lines": [
+    385
+   ],
+   "src": "services/halls/service.py::apply_payments",
+   "type": "publishes"
+  },
+  {
+   "condition": "not (await is_fully_paid(session, invoice)) and paid >= invoice.amount * settings.PREPAY_SHARE and booking.status == 'draft'",
+   "dst": "halls.booking_prepaid",
+   "lines": [
+    389
+   ],
+   "src": "services/halls/service.py::apply_payments",
+   "type": "publishes"
+  },
+  {
+   "dst": "halls.venue_changed",
+   "lines": [
+    209
+   ],
+   "src": "services/halls/service.py::change_venue",
+   "type": "publishes"
+  },
+  {
+   "dst": "halls.booking_created",
+   "lines": [
+    177
+   ],
+   "src": "services/halls/service.py::create_booking",
+   "type": "publishes"
+  },
+  {
+   "dst": "halls.invoice_issued",
+   "lines": [
+    288
+   ],
+   "src": "services/halls/service.py::issue_invoice",
+   "type": "publishes"
+  },
+  {
+   "dst": "halls.booking_held",
+   "lines": [
+    252
+   ],
+   "src": "services/halls/service.py::mark_held",
+   "type": "publishes"
+  },
+  {
+   "dst": "halls.payment_received",
+   "lines": [
+    364
+   ],
+   "src": "services/halls/service.py::record_payment",
+   "type": "publishes"
+  },
+  {
+   "condition": "old is not None",
+   "dst": "halls.payment_received",
+   "lines": [
+    314
+   ],
+   "src": "services/halls/service.py::reissue_invoice",
+   "type": "publishes"
+  },
+  {
+   "dst": "inventory.ill_overdue",
+   "lines": [
+    23
+   ],
+   "src": "services/inventory/jobs.py::flag_overdue_ill",
+   "type": "publishes"
+  },
+  {
+   "dst": "inventory.ill_penalty_accrued",
+   "lines": [
+    481
+   ],
+   "src": "services/inventory/service.py::accrue_overdue",
+   "type": "publishes"
+  },
+  {
+   "dst": "inventory.ill_penalty_accrued",
+   "lines": [
+    501
+   ],
+   "src": "services/inventory/service.py::charge_lost_copy",
+   "type": "publishes"
+  },
+  {
+   "condition": "not partner.suspended and await partner_debt(session, partner_id) > settings.ILL_PARTNER_DEBT_LIMIT",
+   "dst": "inventory.partner_suspended",
+   "lines": [
+    538
+   ],
+   "src": "services/inventory/service.py::review_partner_debt",
+   "type": "publishes"
+  },
+  {
+   "condition": "partner.suspended and await partner_debt(session, partner.id) <= settings.ILL_PARTNER_DEBT_LIMIT",
+   "dst": "inventory.partner_resumed",
+   "lines": [
+    530
+   ],
+   "src": "services/inventory/service.py::settle_penalty",
+   "type": "publishes"
+  },
+  {
+   "condition": "reason in service.SEAT_RELEASING_REASONS and lecture.status == 'scheduled' and (lecture.venue_id == payload['venue_id'])",
+   "dst": "lectures.seat_released",
+   "lines": [
+    62
+   ],
+   "src": "services/lectures/consumers.py::on_registration_cancelled",
+   "type": "publishes"
+  },
+  {
+   "dst": "lectures.waitlist_expired",
+   "lines": [
+    28
+   ],
+   "src": "services/lectures/jobs.py::close_waitlists",
+   "type": "publishes"
+  },
+  {
+   "dst": "lectures.registration_cancelled",
+   "lines": [
+    324
+   ],
+   "src": "services/lectures/service.py::_cancel",
+   "type": "publishes"
+  },
+  {
+   "condition": "max_capacity > old",
+   "dst": "lectures.capacity_increased",
+   "lines": [
+    118
+   ],
+   "src": "services/lectures/service.py::apply_venue_limit",
+   "type": "publishes"
+  },
+  {
+   "dst": "lectures.event_cancelled",
+   "lines": [
+    242
+   ],
+   "src": "services/lectures/service.py::cancel_event",
+   "type": "publishes"
+  },
+  {
+   "condition": "increased",
+   "dst": "lectures.capacity_increased",
+   "lines": [
+    176
+   ],
+   "src": "services/lectures/service.py::change_capacity",
+   "type": "publishes"
+  },
+  {
+   "dst": "lectures.waitlist_promoted",
+   "lines": [
+    458
+   ],
+   "src": "services/lectures/service.py::fill_from_waitlist",
+   "type": "publishes"
+  },
+  {
+   "dst": "lectures.event_moved",
+   "lines": [
+    224
+   ],
+   "src": "services/lectures/service.py::move_event",
+   "type": "publishes"
+  },
+  {
+   "dst": "lectures.registration_created",
+   "lines": [
+    312
+   ],
+   "src": "services/lectures/service.py::register",
+   "type": "publishes"
+  },
+  {
+   "dst": "lectures.venue_limit_changed",
+   "lines": [
+    78
+   ],
+   "src": "services/lectures/service.py::set_venue_capacity_limit",
+   "type": "publishes"
+  },
+  {
+   "dst": "marketing.campaign_finished",
+   "lines": [
+    394
+   ],
+   "src": "services/marketing/service.py::deliver_messages",
+   "type": "publishes"
+  },
+  {
+   "dst": "marketing.campaign_prepared",
+   "lines": [
+    379
+   ],
+   "src": "services/marketing/service.py::prepare_messages",
+   "type": "publishes"
+  },
+  {
+   "dst": "marketing.message_bounced",
+   "lines": [
+    499
+   ],
+   "src": "services/marketing/service.py::register_bounce",
+   "type": "publishes"
+  },
+  {
+   "dst": "marketing.campaign_launched",
+   "lines": [
+    323
+   ],
+   "src": "services/marketing/service.py::start",
+   "type": "publishes"
+  },
+  {
+   "dst": "marketing.unsubscribed",
+   "lines": [
+    546
+   ],
+   "src": "services/marketing/service.py::unsubscribe",
+   "type": "publishes"
+  },
+  {
+   "dst": "partners.credit_overdue",
+   "lines": [
+    25
+   ],
+   "src": "services/partners/jobs.py::flag_overdue_credit",
+   "type": "publishes"
+  },
+  {
+   "dst": "partners.commission_accrued",
+   "lines": [
+    473
+   ],
+   "src": "services/partners/service.py::accrue_commission",
+   "type": "publishes"
+  },
+  {
+   "dst": "partners.contract_activated",
+   "lines": [
+    251
+   ],
+   "src": "services/partners/service.py::activate_contract",
+   "type": "publishes"
+  },
+  {
+   "dst": "partners.request_approved",
+   "lines": [
+    126
+   ],
+   "src": "services/partners/service.py::approve_request",
+   "type": "publishes"
+  },
+  {
+   "dst": "partners.deal_cancelled",
+   "lines": [
+    430
+   ],
+   "src": "services/partners/service.py::cancel_deal",
+   "type": "publishes"
+  },
+  {
+   "dst": "partners.contract_rate_changed",
+   "lines": [
+    273
+   ],
+   "src": "services/partners/service.py::change_commission_rate",
+   "type": "publishes"
+  },
+  {
+   "dst": "partners.deal_closed",
+   "lines": [
+    412
+   ],
+   "src": "services/partners/service.py::close_deal",
+   "type": "publishes"
+  },
+  {
+   "dst": "partners.request_closed_duplicate",
+   "lines": [
+    67
+   ],
+   "src": "services/partners/service.py::close_duplicates",
+   "type": "publishes"
+  },
+  {
+   "dst": "partners.payout_closed",
+   "lines": [
+    526
+   ],
+   "src": "services/partners/service.py::close_payout",
+   "type": "publishes"
+  },
+  {
+   "dst": "partners.contract_expired",
+   "lines": [
+    549
+   ],
+   "src": "services/partners/service.py::expire_contract",
+   "type": "publishes"
+  },
+  {
+   "dst": "partners.partner_onboarded",
+   "lines": [
+    177
+   ],
+   "src": "services/partners/service.py::onboard",
+   "type": "publishes"
+  },
+  {
+   "dst": "partners.deal_created",
+   "lines": [
+    379
+   ],
+   "src": "services/partners/service.py::open_deal",
+   "type": "publishes"
+  },
+  {
+   "dst": "partners.deal_paid",
+   "lines": [
+    444
+   ],
+   "src": "services/partners/service.py::register_payment",
+   "type": "publishes"
+  },
+  {
+   "dst": "partners.request_rejected",
+   "lines": [
+    138
+   ],
+   "src": "services/partners/service.py::reject_request",
+   "type": "publishes"
+  },
+  {
+   "dst": "partners.contract_resumed",
+   "lines": [
+    336
+   ],
+   "src": "services/partners/service.py::resume_if_settled",
+   "type": "publishes"
+  },
+  {
+   "dst": "partners.request_submitted",
+   "lines": [
+    110
+   ],
+   "src": "services/partners/service.py::submit_request",
+   "type": "publishes"
+  },
+  {
+   "dst": "partners.contract_suspended",
+   "lines": [
+    316
+   ],
+   "src": "services/partners/service.py::suspend_contract",
+   "type": "publishes"
+  },
+  {
+   "dst": "partners.contract_terminated",
+   "lines": [
+    574
+   ],
+   "src": "services/partners/service.py::terminate_contract",
+   "type": "publishes"
+  },
+  {
+   "dst": "reports.run_failed",
+   "lines": [
+    57
+   ],
+   "src": "services/reports/jobs.py::fail_stuck_runs",
+   "type": "publishes"
+  },
+  {
+   "dst": "reports.run_cancelled",
+   "lines": [
+    271
+   ],
+   "src": "services/reports/service.py::_publish_cancelled",
+   "type": "publishes"
+  },
+  {
+   "dst": "reports.run_completed",
+   "lines": [
+    306
+   ],
+   "src": "services/reports/service.py::build_run",
+   "type": "publishes"
+  },
+  {
+   "dst": "reports.run_failed",
+   "lines": [
+    297
+   ],
+   "src": "services/reports/service.py::build_run",
+   "type": "publishes"
+  },
+  {
+   "dst": "reports.definition_deactivated",
+   "lines": [
+    179
+   ],
+   "src": "services/reports/service.py::deactivate_definition",
+   "type": "publishes"
+  },
+  {
+   "dst": "reports.run_requested",
+   "lines": [
+    253
+   ],
+   "src": "services/reports/service.py::request_run",
+   "type": "publishes"
+  },
+  {
+   "dst": "loan.overdue",
+   "lines": [
+    22
+   ],
+   "src": "services/scheduling/jobs.py::flag_overdue",
+   "type": "publishes"
+  },
+  {
+   "dst": "booking.cancelled",
+   "lines": [
+    180
+   ],
+   "src": "services/scheduling/service.py::_cancel",
+   "type": "publishes"
+  },
+  {
+   "dst": "booking.created",
+   "lines": [
+    152
+   ],
+   "src": "services/scheduling/service.py::book",
+   "type": "publishes"
+  },
+  {
+   "dst": "books.issued",
+   "lines": [
+    251
+   ],
+   "src": "services/scheduling/service.py::issue_books",
+   "type": "publishes"
+  },
+  {
+   "dst": "loan.lost",
+   "lines": [
+    282
+   ],
+   "src": "services/scheduling/service.py::mark_lost",
+   "type": "publishes"
+  },
+  {
+   "condition": "damaged",
+   "dst": "loan.damaged",
+   "lines": [
+    275
+   ],
+   "src": "services/scheduling/service.py::return_book",
+   "type": "publishes"
+  },
+  {
+   "dst": "staff.clearance_expired",
+   "lines": [
+    18
+   ],
+   "src": "services/staff/jobs.py::expire_clearances",
+   "type": "publishes"
+  },
+  {
+   "dst": "staff.employee_updated",
+   "lines": [
+    22
+   ],
+   "src": "services/staff/listeners.py::_employee_changes",
+   "type": "publishes"
+  },
+  {
+   "dst": "staff.shift_member_removed",
+   "lines": [
+    361
+   ],
+   "src": "services/staff/service.py::_remove_member",
+   "type": "publishes"
+  },
+  {
+   "dst": "staff.clearance_revoked",
+   "lines": [
+    540
+   ],
+   "src": "services/staff/service.py::_revoke",
+   "type": "publishes"
+  },
+  {
+   "dst": "staff.shift_understaffed",
+   "lines": [
+    446
+   ],
+   "src": "services/staff/service.py::check_staffing",
+   "type": "publishes"
+  },
+  {
+   "dst": "staff.employee_dismissed",
+   "lines": [
+    149
+   ],
+   "src": "services/staff/service.py::dismiss_employee",
+   "type": "publishes"
+  },
+  {
+   "dst": "staff.clearance_granted",
+   "lines": [
+    528
+   ],
+   "src": "services/staff/service.py::grant_clearance",
+   "type": "publishes"
+  },
+  {
+   "dst": "staff.employee_hired",
+   "lines": [
+    121
+   ],
+   "src": "services/staff/service.py::hire_employee",
+   "type": "publishes"
+  },
+  {
+   "condition": "old is not None",
+   "dst": "staff.employee_transferred",
+   "lines": [
+    212
+   ],
+   "src": "services/staff/service.py::transfer_employee",
+   "type": "publishes"
+  },
+  {
+   "dst": "subscriptions.expired",
+   "lines": [
+    27
+   ],
+   "src": "services/subscriptions/jobs.py::expire_overdue",
+   "type": "publishes"
+  },
+  {
+   "dst": "subscriptions.grace_started",
+   "lines": [
+    40
+   ],
+   "src": "services/subscriptions/jobs.py::expire_overdue",
+   "type": "publishes"
+  },
+  {
+   "dst": "subscriptions.expired",
+   "lines": [
+    62
+   ],
+   "src": "services/subscriptions/jobs.py::expire_stale_pending",
+   "type": "publishes"
+  },
+  {
+   "condition": "sub.status == 'pending'",
+   "dst": "subscriptions.activated",
+   "lines": [
+    378
+   ],
+   "src": "services/subscriptions/service.py::apply_payment",
+   "type": "publishes"
+  },
+  {
+   "condition": "sub.status in CLOSED",
+   "dst": "subscriptions.refund_required",
+   "lines": [
+    366
+   ],
+   "src": "services/subscriptions/service.py::apply_payment",
+   "type": "publishes"
+  },
+  {
+   "dst": "subscriptions.renewed",
+   "lines": [
+    387
+   ],
+   "src": "services/subscriptions/service.py::apply_payment",
+   "type": "publishes"
+  },
+  {
+   "dst": "subscriptions.closed_duplicate",
+   "lines": [
+    349
+   ],
+   "src": "services/subscriptions/service.py::close_duplicates",
+   "type": "publishes"
+  },
+  {
+   "dst": "subscriptions.created",
+   "lines": [
+    174
+   ],
+   "src": "services/subscriptions/service.py::create_subscription",
+   "type": "publishes"
+  },
+  {
+   "dst": "subscriptions.invoice_issued",
+   "lines": [
+    259
+   ],
+   "src": "services/subscriptions/service.py::issue_invoice",
+   "type": "publishes"
+  },
+  {
+   "dst": "subscriptions.holder_rejected",
+   "lines": [
+    232
+   ],
+   "src": "services/subscriptions/service.py::recheck_holder",
+   "type": "publishes"
+  },
+  {
+   "condition": "fully_paid(invoice)",
+   "dst": "subscriptions.payment_completed",
+   "lines": [
+    295
+   ],
+   "src": "services/subscriptions/service.py::record_payment",
+   "type": "publishes"
+  },
+  {
+   "dst": "subscriptions.holder_updated",
+   "lines": [
+    210
+   ],
+   "src": "services/subscriptions/service.py::update_holder",
+   "type": "publishes"
+  },
+  {
+   "condition": "invoice.paid_total > 0",
+   "dst": "subscriptions.refund_required",
+   "lines": [
+    312
+   ],
+   "src": "services/subscriptions/service.py::void_open_invoices",
+   "type": "publishes"
+  }
+ ],
+ "generated_by": "tools/knowledge/extract_events.py",
+ "nodes": [
+  {
+   "channel": "chat",
+   "id": "effect:chat.event_log",
+   "implemented_by": "services/chat/service.py::log_event",
+   "name": "Событие в ленте чата заявки",
+   "type": "effect"
+  },
+  {
+   "channel": "email",
+   "id": "effect:email.booking",
+   "implemented_by": "services/notifications/service.py::send",
+   "name": "Письмо клиенту и представителю: booking",
+   "type": "effect"
+  },
+  {
+   "channel": "email",
+   "id": "effect:email.cancel",
+   "implemented_by": "services/notifications/service.py::send",
+   "name": "Письмо клиенту и представителю: cancel",
+   "type": "effect"
+  },
+  {
+   "consumer_services": [
+    "chat",
+    "scheduling"
+   ],
+   "consumers": [
+    "services/chat/consumers.py::_handler",
+    "services/scheduling/consumers.py::on_archived"
+   ],
+   "id": "application.archived",
+   "name": "application.archived",
+   "payload": [
+    "application_id",
+    "outcome"
+   ],
+   "publisher_services": [
+    "applications"
+   ],
+   "publishers": [
+    "services/applications/service.py::archive"
+   ],
+   "type": "event"
+  },
+  {
+   "consumer_services": [
+    "billing",
+    "chat",
+    "scheduling"
+   ],
+   "consumers": [
+    "services/billing/consumers.py::on_closed_duplicate",
+    "services/chat/consumers.py::_handler",
+    "services/scheduling/consumers.py::on_closed_duplicate"
+   ],
+   "id": "application.closed_duplicate",
+   "name": "application.closed_duplicate",
+   "payload": [
+    "application_id",
+    "winner_id"
+   ],
+   "publisher_services": [
+    "applications"
+   ],
+   "publishers": [
+    "services/applications/dedup.py::close_duplicates"
+   ],
+   "type": "event"
+  },
+  {
+   "consumer_services": [
+    "scheduling"
+   ],
+   "consumers": [
+    "services/scheduling/consumers.py::on_ready_for_booking"
+   ],
+   "id": "application.ready_for_booking",
+   "name": "application.ready_for_booking",
+   "payload": [
+    "application_id",
+    "sphere_id",
+    "venue_id"
+   ],
+   "publisher_services": [
+    "applications"
+   ],
+   "publishers": [
+    "services/applications/service.py::mark_ready_for_booking"
+   ],
+   "type": "event"
+  },
+  {
+   "consumer_services": [
+    "applications"
+   ],
+   "consumers": [
+    "services/applications/consumers.py::on_review_passed"
+   ],
+   "id": "application.review_passed",
+   "name": "application.review_passed",
+   "payload": [
+    "application_id",
+    "kind"
+   ],
+   "publisher_services": [
+    "applications"
+   ],
+   "publishers": [
+    "services/applications/service.py::approve"
+   ],
+   "type": "event"
+  },
+  {
+   "consumer_services": [
+    "chat"
+   ],
+   "consumers": [
+    "services/chat/consumers.py::_handler"
+   ],
+   "id": "application.stage_changed",
+   "name": "application.stage_changed",
+   "payload": [
+    "application_id",
+    "from",
+    "to"
+   ],
+   "publisher_services": [
+    "applications"
+   ],
+   "publishers": [
+    "services/applications/listeners.py::_domain_events"
+   ],
+   "type": "event"
+  },
+  {
+   "consumer_services": [
+    "billing",
+    "chat"
+   ],
+   "consumers": [
+    "services/billing/consumers.py::on_unarchived",
+    "services/chat/consumers.py::_handler"
+   ],
+   "id": "application.unarchived",
+   "name": "application.unarchived",
+   "payload": [
+    "amount_changed",
+    "application_id"
+   ],
+   "publisher_services": [
+    "applications"
+   ],
+   "publishers": [
+    "services/applications/service.py::unarchive"
+   ],
+   "type": "event"
+  },
+  {
+   "consumer_services": [
+    "billing",
+    "chat",
+    "scheduling"
+   ],
+   "consumers": [
+    "services/billing/consumers.py::on_venue_changed",
+    "services/chat/consumers.py::_handler",
+    "services/scheduling/consumers.py::on_venue_changed"
+   ],
+   "id": "application.venue_changed",
+   "name": "application.venue_changed",
+   "payload": [
+    "application_id",
+    "kind",
+    "new_venue_id",
+    "old_venue_id",
+    "stage"
+   ],
+   "publisher_services": [
+    "applications"
+   ],
+   "publishers": [
+    "services/applications/service.py::change_venue"
+   ],
+   "type": "event"
+  },
+  {
+   "consumer_services": [
+    "chat",
+    "notifications"
+   ],
+   "consumers": [
+    "services/chat/consumers.py::_handler",
+    "services/notifications/consumers.py::on_booking_cancelled"
+   ],
+   "id": "booking.cancelled",
+   "name": "booking.cancelled",
+   "payload": [
+    "application_id",
+    "booking_id",
+    "reason",
+    "starts_at",
+    "venue_id"
+   ],
+   "publisher_services": [
+    "scheduling"
+   ],
+   "publishers": [
+    "services/scheduling/service.py::_cancel"
+   ],
+   "type": "event"
+  },
+  {
+   "consumer_services": [
+    "chat",
+    "notifications"
+   ],
+   "consumers": [
+    "services/chat/consumers.py::_handler",
+    "services/notifications/consumers.py::on_booking_created"
+   ],
+   "id": "booking.created",
+   "name": "booking.created",
+   "payload": [
+    "application_id",
+    "booking_id",
+    "purpose",
+    "starts_at",
+    "venue_id"
+   ],
+   "publisher_services": [
+    "scheduling"
+   ],
+   "publishers": [
+    "services/scheduling/service.py::book"
+   ],
+   "type": "event"
+  },
+  {
+   "consumer_services": [
+    "applications"
+   ],
+   "consumers": [
+    "services/applications/consumers.py::on_books_issued"
+   ],
+   "id": "books.issued",
+   "name": "books.issued",
+   "payload": [
+    "application_id"
+   ],
+   "publisher_services": [
+    "scheduling"
+   ],
+   "publishers": [
+    "services/scheduling/service.py::issue_books"
+   ],
+   "type": "event"
+  },
+  {
+   "consumer_services": [
+    "applications"
+   ],
+   "consumers": [
+    "services/applications/consumers.py::on_client_updated"
+   ],
+   "id": "client.updated",
+   "name": "client.updated",
+   "payload": [
+    "client_id",
+    "fields",
+    "source_application_id"
+   ],
+   "publisher_services": [
+    "applications"
+   ],
+   "publishers": [
+    "services/applications/listeners.py::_domain_events"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/halls/consumers.py::on_booking_cancelled"
+   ],
+   "id": "halls.booking_cancelled",
+   "name": "halls.booking_cancelled",
+   "payload": [
+    "booking_id",
+    "reason",
+    "starts_at",
+    "venue_id"
+   ],
+   "publishers": [
+    "services/halls/service.py::_cancel"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/halls/consumers.py::on_booking_confirmed"
+   ],
+   "id": "halls.booking_confirmed",
+   "name": "halls.booking_confirmed",
+   "publishers": [
+    "services/halls/service.py::apply_payments"
+   ],
+   "type": "event"
+  },
+  {
+   "id": "halls.booking_created",
+   "name": "halls.booking_created",
+   "orphan": "нет подписчиков",
+   "payload": [
+    "booking_id",
+    "hall_id",
+    "starts_at",
+    "venue_id"
+   ],
+   "publishers": [
+    "services/halls/service.py::create_booking"
+   ],
+   "type": "event"
+  },
+  {
+   "id": "halls.booking_held",
+   "name": "halls.booking_held",
+   "orphan": "нет подписчиков",
+   "payload": [
+    "booking_id",
+    "hall_id",
+    "venue_id"
+   ],
+   "publishers": [
+    "services/halls/service.py::mark_held"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/halls/consumers.py::on_booking_prepaid"
+   ],
+   "id": "halls.booking_prepaid",
+   "name": "halls.booking_prepaid",
+   "publishers": [
+    "services/halls/service.py::apply_payments"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/halls/consumers.py::on_invoice_issued"
+   ],
+   "id": "halls.invoice_issued",
+   "name": "halls.invoice_issued",
+   "payload": [
+    "amount",
+    "booking_id",
+    "invoice_id"
+   ],
+   "publishers": [
+    "services/halls/service.py::issue_invoice"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/halls/consumers.py::on_payment_received"
+   ],
+   "id": "halls.payment_received",
+   "name": "halls.payment_received",
+   "payload": [
+    "amount",
+    "booking_id",
+    "invoice_id"
+   ],
+   "publishers": [
+    "services/halls/service.py::record_payment",
+    "services/halls/service.py::reissue_invoice"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/halls/consumers.py::on_venue_changed"
+   ],
+   "id": "halls.venue_changed",
+   "name": "halls.venue_changed",
+   "payload": [
+    "booking_id",
+    "old_venue_id",
+    "venue_id"
+   ],
+   "publishers": [
+    "services/halls/service.py::change_venue"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/inventory/consumers.py::on_copy_damaged"
+   ],
+   "id": "inventory.copy_damaged",
+   "name": "inventory.copy_damaged",
+   "orphan": "нет публикаторов",
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/inventory/consumers.py::on_copy_lost"
+   ],
+   "id": "inventory.copy_lost",
+   "name": "inventory.copy_lost",
+   "orphan": "нет публикаторов",
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/inventory/consumers.py::on_stock_changed"
+   ],
+   "id": "inventory.copy_registered",
+   "name": "inventory.copy_registered",
+   "orphan": "нет публикаторов",
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/inventory/consumers.py::on_stock_changed"
+   ],
+   "id": "inventory.copy_relocated",
+   "name": "inventory.copy_relocated",
+   "orphan": "нет публикаторов",
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/inventory/consumers.py::on_stock_changed"
+   ],
+   "id": "inventory.copy_written_off",
+   "name": "inventory.copy_written_off",
+   "orphan": "нет публикаторов",
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/inventory/consumers.py::on_stock_changed"
+   ],
+   "id": "inventory.ill_issued",
+   "name": "inventory.ill_issued",
+   "orphan": "нет публикаторов",
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/inventory/consumers.py::on_ill_overdue"
+   ],
+   "id": "inventory.ill_overdue",
+   "name": "inventory.ill_overdue",
+   "payload": [
+    "copy_id",
+    "days_overdue",
+    "ill_loan_id",
+    "partner_id"
+   ],
+   "publishers": [
+    "services/inventory/jobs.py::flag_overdue_ill"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/inventory/consumers.py::on_penalty_accrued"
+   ],
+   "id": "inventory.ill_penalty_accrued",
+   "name": "inventory.ill_penalty_accrued",
+   "payload": [
+    "ill_loan_id",
+    "partner_id",
+    "penalty_id"
+   ],
+   "publishers": [
+    "services/inventory/service.py::accrue_overdue",
+    "services/inventory/service.py::charge_lost_copy"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/inventory/consumers.py::on_ill_returned",
+    "services/inventory/consumers.py::on_stock_changed"
+   ],
+   "id": "inventory.ill_returned",
+   "name": "inventory.ill_returned",
+   "orphan": "нет публикаторов",
+   "type": "event"
+  },
+  {
+   "id": "inventory.partner_resumed",
+   "name": "inventory.partner_resumed",
+   "orphan": "нет подписчиков",
+   "payload": [
+    "partner_id"
+   ],
+   "publishers": [
+    "services/inventory/service.py::settle_penalty"
+   ],
+   "type": "event"
+  },
+  {
+   "id": "inventory.partner_suspended",
+   "name": "inventory.partner_suspended",
+   "orphan": "нет подписчиков",
+   "payload": [
+    "partner_id"
+   ],
+   "publishers": [
+    "services/inventory/service.py::review_partner_debt"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/inventory/consumers.py::on_stock_changed"
+   ],
+   "id": "inventory.transfer_cancelled",
+   "name": "inventory.transfer_cancelled",
+   "orphan": "нет публикаторов",
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/inventory/consumers.py::on_stock_changed"
+   ],
+   "id": "inventory.transfer_received",
+   "name": "inventory.transfer_received",
+   "orphan": "нет публикаторов",
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/inventory/consumers.py::on_stock_changed"
+   ],
+   "id": "inventory.transfer_shipped",
+   "name": "inventory.transfer_shipped",
+   "orphan": "нет публикаторов",
+   "type": "event"
+  },
+  {
+   "consumer_services": [
+    "applications",
+    "chat"
+   ],
+   "consumers": [
+    "services/applications/consumers.py::on_invoice_cancelled",
+    "services/chat/consumers.py::_handler"
+   ],
+   "id": "invoice.cancelled",
+   "name": "invoice.cancelled",
+   "payload": [
+    "application_id",
+    "invoice_id",
+    "invoice_kind",
+    "reason"
+   ],
+   "publisher_services": [
+    "billing"
+   ],
+   "publishers": [
+    "services/billing/service.py::cancel_invoice"
+   ],
+   "type": "event"
+  },
+  {
+   "consumer_services": [
+    "applications",
+    "chat"
+   ],
+   "consumers": [
+    "services/applications/consumers.py::on_invoice_issued",
+    "services/chat/consumers.py::_handler"
+   ],
+   "id": "invoice.issued",
+   "name": "invoice.issued",
+   "payload": [
+    "amount",
+    "application_id",
+    "invoice_id",
+    "invoice_kind"
+   ],
+   "publisher_services": [
+    "billing"
+   ],
+   "publishers": [
+    "services/billing/service.py::issue_books_invoice",
+    "services/billing/service.py::issue_fine_invoice"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/lectures/consumers.py::on_capacity_increased"
+   ],
+   "id": "lectures.capacity_increased",
+   "name": "lectures.capacity_increased",
+   "payload": [
+    "event_id"
+   ],
+   "publishers": [
+    "services/lectures/service.py::apply_venue_limit",
+    "services/lectures/service.py::change_capacity"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/lectures/consumers.py::on_event_cancelled"
+   ],
+   "id": "lectures.event_cancelled",
+   "name": "lectures.event_cancelled",
+   "payload": [
+    "event_id",
+    "waitlisted"
+   ],
+   "publishers": [
+    "services/lectures/service.py::cancel_event"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/lectures/consumers.py::on_event_moved"
+   ],
+   "id": "lectures.event_moved",
+   "name": "lectures.event_moved",
+   "payload": [
+    "event_id",
+    "old_venue_id",
+    "venue_id",
+    "waitlisted"
+   ],
+   "publishers": [
+    "services/lectures/service.py::move_event"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/lectures/consumers.py::on_registration_cancelled"
+   ],
+   "id": "lectures.registration_cancelled",
+   "name": "lectures.registration_cancelled",
+   "payload": [
+    "event_id",
+    "listener_id",
+    "reason",
+    "registration_id",
+    "venue_id"
+   ],
+   "publishers": [
+    "services/lectures/service.py::_cancel"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/lectures/consumers.py::on_registration_created"
+   ],
+   "id": "lectures.registration_created",
+   "name": "lectures.registration_created",
+   "payload": [
+    "event_id",
+    "listener_id",
+    "registration_id"
+   ],
+   "publishers": [
+    "services/lectures/service.py::register"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/lectures/consumers.py::on_seat_released"
+   ],
+   "id": "lectures.seat_released",
+   "name": "lectures.seat_released",
+   "payload": [
+    "event_id"
+   ],
+   "publishers": [
+    "services/lectures/consumers.py::on_registration_cancelled"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/lectures/consumers.py::on_venue_limit_changed"
+   ],
+   "id": "lectures.venue_limit_changed",
+   "name": "lectures.venue_limit_changed",
+   "payload": [
+    "max_capacity",
+    "venue_id"
+   ],
+   "publishers": [
+    "services/lectures/service.py::set_venue_capacity_limit"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/lectures/consumers.py::on_waitlist_expired"
+   ],
+   "id": "lectures.waitlist_expired",
+   "name": "lectures.waitlist_expired",
+   "payload": [
+    "event_id",
+    "listener_id",
+    "waitlist_id"
+   ],
+   "publishers": [
+    "services/lectures/jobs.py::close_waitlists"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/lectures/consumers.py::on_waitlist_promoted"
+   ],
+   "id": "lectures.waitlist_promoted",
+   "name": "lectures.waitlist_promoted",
+   "payload": [
+    "event_id",
+    "listener_id",
+    "registration_id",
+    "waitlist_id"
+   ],
+   "publishers": [
+    "services/lectures/service.py::fill_from_waitlist"
+   ],
+   "type": "event"
+  },
+  {
+   "consumer_services": [
+    "billing"
+   ],
+   "consumers": [
+    "services/billing/consumers.py::on_loan_damaged"
+   ],
+   "id": "loan.damaged",
+   "name": "loan.damaged",
+   "payload": [
+    "application_id",
+    "loan_id"
+   ],
+   "publisher_services": [
+    "scheduling"
+   ],
+   "publishers": [
+    "services/scheduling/service.py::return_book"
+   ],
+   "type": "event"
+  },
+  {
+   "consumer_services": [
+    "billing"
+   ],
+   "consumers": [
+    "services/billing/consumers.py::on_loan_lost"
+   ],
+   "id": "loan.lost",
+   "name": "loan.lost",
+   "payload": [
+    "application_id",
+    "loan_id"
+   ],
+   "publisher_services": [
+    "scheduling"
+   ],
+   "publishers": [
+    "services/scheduling/service.py::mark_lost"
+   ],
+   "type": "event"
+  },
+  {
+   "consumer_services": [
+    "billing",
+    "chat"
+   ],
+   "consumers": [
+    "services/billing/consumers.py::on_loan_overdue",
+    "services/chat/consumers.py::_handler"
+   ],
+   "id": "loan.overdue",
+   "name": "loan.overdue",
+   "payload": [
+    "application_id",
+    "book_id",
+    "loan_id"
+   ],
+   "publisher_services": [
+    "scheduling"
+   ],
+   "publishers": [
+    "services/scheduling/jobs.py::flag_overdue"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/marketing/consumers.py::on_campaign_finished"
+   ],
+   "id": "marketing.campaign_finished",
+   "name": "marketing.campaign_finished",
+   "payload": [
+    "audience_id",
+    "campaign_id",
+    "finished_at"
+   ],
+   "publishers": [
+    "services/marketing/service.py::deliver_messages"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/marketing/consumers.py::on_campaign_launched"
+   ],
+   "id": "marketing.campaign_launched",
+   "name": "marketing.campaign_launched",
+   "payload": [
+    "audience_id",
+    "campaign_id",
+    "venue_id"
+   ],
+   "publishers": [
+    "services/marketing/service.py::start"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/marketing/consumers.py::on_campaign_prepared"
+   ],
+   "id": "marketing.campaign_prepared",
+   "name": "marketing.campaign_prepared",
+   "payload": [
+    "campaign_id",
+    "queued"
+   ],
+   "publishers": [
+    "services/marketing/service.py::prepare_messages"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/marketing/consumers.py::on_message_bounced"
+   ],
+   "id": "marketing.message_bounced",
+   "name": "marketing.message_bounced",
+   "payload": [
+    "campaign_id",
+    "email",
+    "message_id"
+   ],
+   "publishers": [
+    "services/marketing/service.py::register_bounce"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/marketing/consumers.py::on_unsubscribed"
+   ],
+   "id": "marketing.unsubscribed",
+   "name": "marketing.unsubscribed",
+   "payload": [
+    "email",
+    "reason",
+    "venue_id"
+   ],
+   "publishers": [
+    "services/marketing/service.py::unsubscribe"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/partners/consumers.py::on_commission_accrued"
+   ],
+   "id": "partners.commission_accrued",
+   "name": "partners.commission_accrued",
+   "payload": [
+    "amount",
+    "commission_id",
+    "partner_id"
+   ],
+   "publishers": [
+    "services/partners/service.py::accrue_commission"
+   ],
+   "type": "event"
+  },
+  {
+   "id": "partners.contract_activated",
+   "name": "partners.contract_activated",
+   "orphan": "нет подписчиков",
+   "payload": [
+    "contract_id",
+    "partner_id"
+   ],
+   "publishers": [
+    "services/partners/service.py::activate_contract"
+   ],
+   "type": "event"
+  },
+  {
+   "id": "partners.contract_expired",
+   "name": "partners.contract_expired",
+   "orphan": "нет подписчиков",
+   "payload": [
+    "contract_id"
+   ],
+   "publishers": [
+    "services/partners/service.py::expire_contract"
+   ],
+   "type": "event"
+  },
+  {
+   "id": "partners.contract_rate_changed",
+   "name": "partners.contract_rate_changed",
+   "orphan": "нет подписчиков",
+   "payload": [
+    "contract_id",
+    "new_pct",
+    "old_pct"
+   ],
+   "publishers": [
+    "services/partners/service.py::change_commission_rate"
+   ],
+   "type": "event"
+  },
+  {
+   "id": "partners.contract_resumed",
+   "name": "partners.contract_resumed",
+   "orphan": "нет подписчиков",
+   "payload": [
+    "contract_id"
+   ],
+   "publishers": [
+    "services/partners/service.py::resume_if_settled"
+   ],
+   "type": "event"
+  },
+  {
+   "id": "partners.contract_suspended",
+   "name": "partners.contract_suspended",
+   "orphan": "нет подписчиков",
+   "payload": [
+    "contract_id",
+    "reason"
+   ],
+   "publishers": [
+    "services/partners/service.py::suspend_contract"
+   ],
+   "type": "event"
+  },
+  {
+   "id": "partners.contract_terminated",
+   "name": "partners.contract_terminated",
+   "orphan": "нет подписчиков",
+   "payload": [
+    "contract_id",
+    "reason"
+   ],
+   "publishers": [
+    "services/partners/service.py::terminate_contract"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/partners/consumers.py::on_credit_overdue"
+   ],
+   "id": "partners.credit_overdue",
+   "name": "partners.credit_overdue",
+   "payload": [
+    "amount",
+    "contract_id",
+    "deal_id"
+   ],
+   "publishers": [
+    "services/partners/jobs.py::flag_overdue_credit"
+   ],
+   "type": "event"
+  },
+  {
+   "id": "partners.deal_cancelled",
+   "name": "partners.deal_cancelled",
+   "orphan": "нет подписчиков",
+   "payload": [
+    "contract_id",
+    "deal_id"
+   ],
+   "publishers": [
+    "services/partners/service.py::cancel_deal"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/partners/consumers.py::on_deal_closed"
+   ],
+   "id": "partners.deal_closed",
+   "name": "partners.deal_closed",
+   "payload": [
+    "amount",
+    "contract_id",
+    "deal_id",
+    "partner_id"
+   ],
+   "publishers": [
+    "services/partners/service.py::close_deal"
+   ],
+   "type": "event"
+  },
+  {
+   "id": "partners.deal_created",
+   "name": "partners.deal_created",
+   "orphan": "нет подписчиков",
+   "payload": [
+    "amount",
+    "contract_id",
+    "deal_id",
+    "on_credit"
+   ],
+   "publishers": [
+    "services/partners/service.py::open_deal"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/partners/consumers.py::on_deal_paid"
+   ],
+   "id": "partners.deal_paid",
+   "name": "partners.deal_paid",
+   "payload": [
+    "contract_id",
+    "deal_id"
+   ],
+   "publishers": [
+    "services/partners/service.py::register_payment"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/partners/consumers.py::on_partner_onboarded"
+   ],
+   "id": "partners.partner_onboarded",
+   "name": "partners.partner_onboarded",
+   "payload": [
+    "contract_id",
+    "partner_id",
+    "request_id"
+   ],
+   "publishers": [
+    "services/partners/service.py::onboard"
+   ],
+   "type": "event"
+  },
+  {
+   "id": "partners.payout_closed",
+   "name": "partners.payout_closed",
+   "orphan": "нет подписчиков",
+   "payload": [
+    "partner_id",
+    "payout_id",
+    "total"
+   ],
+   "publishers": [
+    "services/partners/service.py::close_payout"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/partners/consumers.py::on_request_approved"
+   ],
+   "id": "partners.request_approved",
+   "name": "partners.request_approved",
+   "payload": [
+    "manager_id",
+    "request_id"
+   ],
+   "publishers": [
+    "services/partners/service.py::approve_request"
+   ],
+   "type": "event"
+  },
+  {
+   "id": "partners.request_closed_duplicate",
+   "name": "partners.request_closed_duplicate",
+   "orphan": "нет подписчиков",
+   "payload": [
+    "inn",
+    "request_id",
+    "superseded_by"
+   ],
+   "publishers": [
+    "services/partners/service.py::close_duplicates"
+   ],
+   "type": "event"
+  },
+  {
+   "id": "partners.request_rejected",
+   "name": "partners.request_rejected",
+   "orphan": "нет подписчиков",
+   "payload": [
+    "reason",
+    "request_id"
+   ],
+   "publishers": [
+    "services/partners/service.py::reject_request"
+   ],
+   "type": "event"
+  },
+  {
+   "id": "partners.request_submitted",
+   "name": "partners.request_submitted",
+   "orphan": "нет подписчиков",
+   "payload": [
+    "inn",
+    "request_id"
+   ],
+   "publishers": [
+    "services/partners/service.py::submit_request"
+   ],
+   "type": "event"
+  },
+  {
+   "consumer_services": [
+    "applications"
+   ],
+   "consumers": [
+    "services/applications/consumers.py::on_fully_paid"
+   ],
+   "id": "payment.fully_paid",
+   "name": "payment.fully_paid",
+   "payload": [
+    "application_id",
+    "invoice_id",
+    "invoice_kind"
+   ],
+   "publisher_services": [
+    "billing"
+   ],
+   "publishers": [
+    "services/billing/service.py::link_payment"
+   ],
+   "type": "event"
+  },
+  {
+   "consumer_services": [
+    "chat"
+   ],
+   "consumers": [
+    "services/chat/consumers.py::_handler"
+   ],
+   "id": "payment.linked",
+   "name": "payment.linked",
+   "payload": [
+    "amount",
+    "application_id",
+    "invoice_id"
+   ],
+   "publisher_services": [
+    "billing"
+   ],
+   "publishers": [
+    "services/billing/service.py::link_payment"
+   ],
+   "type": "event"
+  },
+  {
+   "consumer_services": [
+    "applications"
+   ],
+   "consumers": [
+    "services/applications/consumers.py::on_payment_refunded"
+   ],
+   "id": "payment.refunded",
+   "name": "payment.refunded",
+   "payload": [
+    "application_id",
+    "invoice_id",
+    "invoice_kind",
+    "reason"
+   ],
+   "publisher_services": [
+    "billing"
+   ],
+   "publishers": [
+    "services/billing/service.py::refund_payment"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/reports/consumers.py::on_definition_deactivated"
+   ],
+   "id": "reports.definition_deactivated",
+   "name": "reports.definition_deactivated",
+   "payload": [
+    "code",
+    "definition_id"
+   ],
+   "publishers": [
+    "services/reports/service.py::deactivate_definition"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/reports/consumers.py::on_run_cancelled"
+   ],
+   "id": "reports.run_cancelled",
+   "name": "reports.run_cancelled",
+   "payload": [
+    "definition_id",
+    "reason",
+    "run_id"
+   ],
+   "publishers": [
+    "services/reports/service.py::_publish_cancelled"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/reports/consumers.py::count_completed_run",
+    "services/reports/consumers.py::on_run_completed"
+   ],
+   "id": "reports.run_completed",
+   "name": "reports.run_completed",
+   "payload": [
+    "code",
+    "definition_id",
+    "finished_on",
+    "run_id",
+    "schedule_id"
+   ],
+   "publishers": [
+    "services/reports/service.py::build_run"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/reports/consumers.py::on_run_failed"
+   ],
+   "id": "reports.run_failed",
+   "name": "reports.run_failed",
+   "payload": [
+    "definition_id",
+    "error",
+    "run_id"
+   ],
+   "publishers": [
+    "services/reports/jobs.py::fail_stuck_runs",
+    "services/reports/service.py::build_run"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/reports/consumers.py::on_run_requested"
+   ],
+   "id": "reports.run_requested",
+   "name": "reports.run_requested",
+   "payload": [
+    "definition_id",
+    "run_id",
+    "scheduled"
+   ],
+   "publishers": [
+    "services/reports/service.py::request_run"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/staff/consumers.py::on_clearance_lost"
+   ],
+   "id": "staff.clearance_expired",
+   "name": "staff.clearance_expired",
+   "payload": [
+    "clearance_id",
+    "employee_id",
+    "kind"
+   ],
+   "publishers": [
+    "services/staff/jobs.py::expire_clearances"
+   ],
+   "type": "event"
+  },
+  {
+   "id": "staff.clearance_granted",
+   "name": "staff.clearance_granted",
+   "orphan": "нет подписчиков",
+   "payload": [
+    "clearance_id",
+    "employee_id",
+    "kind"
+   ],
+   "publishers": [
+    "services/staff/service.py::grant_clearance"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/staff/consumers.py::on_clearance_lost"
+   ],
+   "id": "staff.clearance_revoked",
+   "name": "staff.clearance_revoked",
+   "payload": [
+    "clearance_id",
+    "employee_id",
+    "kind",
+    "reason"
+   ],
+   "publishers": [
+    "services/staff/service.py::_revoke"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/staff/consumers.py::on_employee_dismissed"
+   ],
+   "id": "staff.employee_dismissed",
+   "name": "staff.employee_dismissed",
+   "payload": [
+    "employee_id",
+    "site_id"
+   ],
+   "publishers": [
+    "services/staff/service.py::dismiss_employee"
+   ],
+   "type": "event"
+  },
+  {
+   "id": "staff.employee_hired",
+   "name": "staff.employee_hired",
+   "orphan": "нет подписчиков",
+   "payload": [
+    "employee_id",
+    "role"
+   ],
+   "publishers": [
+    "services/staff/service.py::hire_employee"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/staff/consumers.py::on_employee_transferred"
+   ],
+   "id": "staff.employee_transferred",
+   "name": "staff.employee_transferred",
+   "payload": [
+    "employee_id",
+    "from_site_id",
+    "to_site_id",
+    "was_responsible"
+   ],
+   "publishers": [
+    "services/staff/service.py::transfer_employee"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/staff/consumers.py::on_employee_updated"
+   ],
+   "id": "staff.employee_updated",
+   "name": "staff.employee_updated",
+   "payload": [
+    "employee_id",
+    "fields"
+   ],
+   "publishers": [
+    "services/staff/listeners.py::_employee_changes"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/staff/consumers.py::on_shift_member_removed"
+   ],
+   "id": "staff.shift_member_removed",
+   "name": "staff.shift_member_removed",
+   "payload": [
+    "employee_id",
+    "reason",
+    "shift_id",
+    "site_id"
+   ],
+   "publishers": [
+    "services/staff/service.py::_remove_member"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/staff/consumers.py::on_shift_understaffed"
+   ],
+   "id": "staff.shift_understaffed",
+   "name": "staff.shift_understaffed",
+   "payload": [
+    "min_staff",
+    "shift_id",
+    "site_id",
+    "staffed"
+   ],
+   "publishers": [
+    "services/staff/service.py::check_staffing"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/subscriptions/consumers.py::on_activated"
+   ],
+   "id": "subscriptions.activated",
+   "name": "subscriptions.activated",
+   "payload": [
+    "paid_until",
+    "subscription_id"
+   ],
+   "publishers": [
+    "services/subscriptions/service.py::apply_payment"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/subscriptions/consumers.py::on_closed_duplicate"
+   ],
+   "id": "subscriptions.closed_duplicate",
+   "name": "subscriptions.closed_duplicate",
+   "payload": [
+    "client_ref",
+    "kept_id",
+    "subscription_id"
+   ],
+   "publishers": [
+    "services/subscriptions/service.py::close_duplicates"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/subscriptions/consumers.py::on_created"
+   ],
+   "id": "subscriptions.created",
+   "name": "subscriptions.created",
+   "payload": [
+    "client_ref",
+    "plan_id",
+    "subscription_id"
+   ],
+   "publishers": [
+    "services/subscriptions/service.py::create_subscription"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/subscriptions/consumers.py::on_expired"
+   ],
+   "id": "subscriptions.expired",
+   "name": "subscriptions.expired",
+   "payload": [
+    "reason",
+    "subscription_id"
+   ],
+   "publishers": [
+    "services/subscriptions/jobs.py::expire_overdue",
+    "services/subscriptions/jobs.py::expire_stale_pending"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/subscriptions/consumers.py::on_grace_started"
+   ],
+   "id": "subscriptions.grace_started",
+   "name": "subscriptions.grace_started",
+   "payload": [
+    "grace_until",
+    "subscription_id"
+   ],
+   "publishers": [
+    "services/subscriptions/jobs.py::expire_overdue"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/subscriptions/consumers.py::on_holder_rejected"
+   ],
+   "id": "subscriptions.holder_rejected",
+   "name": "subscriptions.holder_rejected",
+   "payload": [
+    "reason",
+    "subscription_id"
+   ],
+   "publishers": [
+    "services/subscriptions/service.py::recheck_holder"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/subscriptions/consumers.py::on_holder_updated"
+   ],
+   "id": "subscriptions.holder_updated",
+   "name": "subscriptions.holder_updated",
+   "payload": [
+    "changed",
+    "subscription_id"
+   ],
+   "publishers": [
+    "services/subscriptions/service.py::update_holder"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/subscriptions/consumers.py::on_invoice_issued"
+   ],
+   "id": "subscriptions.invoice_issued",
+   "name": "subscriptions.invoice_issued",
+   "payload": [
+    "amount",
+    "invoice_id",
+    "period_start",
+    "subscription_id"
+   ],
+   "publishers": [
+    "services/subscriptions/service.py::issue_invoice"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/subscriptions/consumers.py::on_payment_completed"
+   ],
+   "id": "subscriptions.payment_completed",
+   "name": "subscriptions.payment_completed",
+   "payload": [
+    "invoice_id",
+    "subscription_id"
+   ],
+   "publishers": [
+    "services/subscriptions/service.py::record_payment"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/subscriptions/consumers.py::on_refund_required"
+   ],
+   "id": "subscriptions.refund_required",
+   "name": "subscriptions.refund_required",
+   "payload": [
+    "amount",
+    "invoice_id",
+    "subscription_id"
+   ],
+   "publishers": [
+    "services/subscriptions/service.py::apply_payment",
+    "services/subscriptions/service.py::void_open_invoices"
+   ],
+   "type": "event"
+  },
+  {
+   "consumers": [
+    "services/subscriptions/consumers.py::on_renewed"
+   ],
+   "id": "subscriptions.renewed",
+   "name": "subscriptions.renewed",
+   "payload": [
+    "paid_until",
+    "subscription_id"
+   ],
+   "publishers": [
+    "services/subscriptions/service.py::apply_payment"
+   ],
+   "type": "event"
+  },
+  {
+   "consumer_services": [
+    "scheduling"
+   ],
+   "consumers": [
+    "services/scheduling/consumers.py::on_venue_settings_changed"
+   ],
+   "id": "venue.settings_changed",
+   "name": "venue.settings_changed",
+   "payload": [
+    "max_capacity",
+    "old_max_capacity",
+    "venue_id"
+   ],
+   "publisher_services": [
+    "applications"
+   ],
+   "publishers": [
+    "services/applications/admin.py::set_venue_max_capacity"
+   ],
+   "type": "event"
+  }
+ ]
+}

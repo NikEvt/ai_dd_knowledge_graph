@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+knowledge/index.sqlite
+knowledge/.bootstrap/
+knowledge/index.*.tmp

@@ -1,0 +1,1057 @@
+# Правила модуля partners: извлечены LLM (tools/knowledge/bootstrap_rules.sh) из кода и среза графа.
+# Статус verified ставит только человек. Хэши обновляет tools/knowledge/drift.py --write.
+rules:
+- id: R-PARTNERS-REQUEST-01
+  title: Заявку на подключение принимают только с корректным ИНН
+  text: >
+    Заявка на подключение агентства отклоняется с ошибкой «некорректный ИНН», если ИНН не состоит из 10
+    цифр или не сходится контрольная цифра (веса _INN_WEIGHTS, сумма mod 11 mod 10). В БД формат ИНН дополнительно
+    ограничен CHECK на 10 цифр (контрольную сумму БД не проверяет).
+  kind: guard
+  applies_to:
+  - partners.onboarding_request
+  trigger: symbol:services/partners/service.py::submit_request
+  related:
+  - R-PARTNERS-REQUEST-02
+  implemented_by:
+  - symbol: services/partners/service.py::inn_valid
+    lines: 30-35
+    hash: 1ab8f79d39b5
+  - symbol: services/partners/service.py::submit_request
+    lines: 86-87
+    hash: 3d6b55420bff
+  enforced_by_db:
+  - constraint: onboarding_requests_inn_check
+    hash: 28a050e76626
+  - constraint: partners_inn_check
+    hash: 28a050e76626
+  config:
+  - services/partners/service.py::_INN_WEIGHTS
+  tested_by:
+  - tests/test_partners_onboarding.py::test_request_with_bad_inn_is_refused
+  status: draft
+- id: R-PARTNERS-REQUEST-02
+  title: КПП, если указан, должен состоять из 9 цифр
+  text: >
+    При подаче заявки и при правке реквизитов партнёра непустой КПП проверяется на 9 цифр (ошибка «КПП
+    должен состоять из 9 цифр»). Пустой КПП (None) допускается. Это же ограничение продублировано CHECK
+    в таблицах заявок и партнёров.
+  kind: guard
+  applies_to:
+  - partners.onboarding_request
+  - partners.partner
+  trigger: symbol:services/partners/service.py::_check_kpp
+  related:
+  - R-PARTNERS-REQUEST-01
+  - R-PARTNERS-REQUISITES-01
+  implemented_by:
+  - symbol: services/partners/service.py::_check_kpp
+    lines: 38-40
+    hash: 52df41829684
+  - symbol: services/partners/service.py::submit_request
+    lines: 88-88
+    hash: 3d6b55420bff
+  - symbol: services/partners/service.py::update_requisites
+    lines: 223-224
+    hash: 1f0390f17f89
+  enforced_by_db:
+  - constraint: onboarding_requests_kpp_check
+    hash: 491f4e384657
+  - constraint: partners_kpp_check
+    hash: 491f4e384657
+  status: draft
+- id: R-PARTNERS-REQUEST-03
+  title: Подключённый партнёр не может подать новую заявку
+  text: >
+    Заявка отклоняется с ошибкой «партнёр с таким ИНН уже подключён», если у партнёра с этим ИНН есть
+    договор в статусе active или suspended. Договор в статусе draft подачу не блокирует.
+  kind: guard
+  applies_to:
+  - partners.onboarding_request
+  trigger: symbol:services/partners/service.py::submit_request
+  related:
+  - R-PARTNERS-REQUEST-04
+  implemented_by:
+  - symbol: services/partners/service.py::submit_request
+    lines: 89-95
+    hash: 3d6b55420bff
+  tested_by:
+  - tests/test_partners_onboarding.py::test_connected_partner_cannot_apply_again
+  status: draft
+- id: R-PARTNERS-REQUEST-04
+  title: Новая заявка с тем же ИНН закрывает открытые как дубли
+  text: >
+    При подаче заявки все открытые заявки с тем же ИНН переводятся в статус duplicate (decided_at = текущее
+    время) с публикацией partners.request_closed_duplicate на каждую; затем создаётся новая открытая заявка.
+    Подписчиков у события нет.
+  kind: effect
+  applies_to:
+  - partners.onboarding_request
+  trigger: symbol:services/partners/service.py::submit_request
+  effects:
+  - table:partners.onboarding_requests
+  - event:partners.request_closed_duplicate
+  - event:partners.request_submitted
+  related:
+  - R-PARTNERS-REQUEST-05
+  implemented_by:
+  - symbol: services/partners/service.py::submit_request
+    lines: 97-110
+    hash: 3d6b55420bff
+  - symbol: services/partners/service.py::close_duplicates
+    lines: 57-73
+    hash: d9f8153951e8
+  tested_by:
+  - tests/test_partners_onboarding.py::test_new_request_supersedes_open_one
+  - tests/test_partners_onboarding.py::test_close_duplicates_keeps_given_request
+  status: draft
+- id: R-PARTNERS-REQUEST-05
+  title: В БД не больше одной открытой заявки на ИНН
+  text: >
+    Частичный уникальный индекс запрещает две заявки со статусом open и одинаковым ИНН. Код соблюдает
+    его, закрывая открытые заявки как дубли перед вставкой новой.
+  kind: invariant
+  applies_to:
+  - partners.onboarding_request
+  trigger: table:partners.onboarding_requests
+  related:
+  - R-PARTNERS-REQUEST-04
+  implemented_by:
+  - symbol: services/partners/service.py::close_duplicates
+    lines: 59-66
+    hash: d9f8153951e8
+  enforced_by_db:
+  - constraint: ux_onboarding_requests_open_inn
+    hash: ba8202cc1556
+  tested_by:
+  - tests/test_partners_onboarding.py::test_only_one_open_request_per_inn_in_database
+  status: draft
+- id: R-PARTNERS-REQUEST-06
+  title: Решение по заявке принимается один раз
+  text: >
+    Одобрить или отклонить можно только заявку в статусе open, иначе ошибка «по заявке уже принято решение».
+    При решении фиксируются decided_at и decided_by (manager_id). CHECK в БД требует decided_at у любой
+    не открытой заявки.
+  kind: guard
+  applies_to:
+  - partners.onboarding_request
+  trigger: symbol:services/partners/service.py::_decide
+  effects:
+  - table:partners.onboarding_requests
+  related:
+  - R-PARTNERS-REQUEST-07
+  - R-PARTNERS-ONBOARD-01
+  implemented_by:
+  - symbol: services/partners/service.py::_decide
+    lines: 114-120
+    hash: bdc5226a4c0e
+  enforced_by_db:
+  - constraint: onboarding_requests_check1
+    hash: dcfe8ac70fa3
+  tested_by:
+  - tests/test_partners_onboarding.py::test_request_decided_only_once
+  status: draft
+- id: R-PARTNERS-REQUEST-07
+  title: Отказ по заявке требует причины
+  text: >
+    Отклонение заявки без непустой причины запрещено («укажите причину отказа»); причина сохраняется в
+    reject_reason, публикуется partners.request_rejected (подписчиков нет). CHECK в БД требует reject_reason
+    у отклонённой заявки.
+  kind: guard
+  applies_to:
+  - partners.onboarding_request
+  trigger: symbol:services/partners/service.py::reject_request
+  effects:
+  - event:partners.request_rejected
+  related:
+  - R-PARTNERS-REQUEST-06
+  implemented_by:
+  - symbol: services/partners/service.py::reject_request
+    lines: 133-138
+    hash: 9968fb274b00
+  enforced_by_db:
+  - constraint: onboarding_requests_check
+    hash: 534bbbc7b346
+  tested_by:
+  - tests/test_partners_onboarding.py::test_request_decided_only_once
+  status: draft
+- id: R-PARTNERS-REQUEST-08
+  title: Заявка без решения истекает через ONBOARDING_REQUEST_TTL_DAYS
+  text: >
+    Фоновая задача переводит открытые заявки, поданные раньше чем ONBOARDING_REQUEST_TTL_DAYS (30) дней
+    назад (от submitted_at), в статус expired и проставляет decided_at. Событие при этом не публикуется.
+  kind: timer
+  applies_to:
+  - partners.onboarding_request
+  trigger: symbol:services/partners/jobs.py::expire_requests
+  effects:
+  - table:partners.onboarding_requests
+  roles:
+  - system
+  implemented_by:
+  - symbol: services/partners/jobs.py::expire_requests
+    lines: 46-58
+    hash: c72a4c1d7b19
+  config:
+  - services/partners/settings.py::ONBOARDING_REQUEST_TTL_DAYS
+  tested_by:
+  - tests/test_partners_jobs.py::test_stale_requests_expire
+  status: draft
+- id: R-PARTNERS-ONBOARD-01
+  title: Одобрение заявки заводит партнёра и черновик договора
+  text: >
+    Подписчик на partners.request_approved заводит партнёра по ИНН заявки (или дополняет существующего
+    непустыми полями заявки) и, если у партнёра нет текущего договора (draft/active/suspended), создаёт
+    черновик со ставкой DEFAULT_COMMISSION_PCT и сроком CONTRACT_TERM_DAYS от сегодняшней даты. Менеджером
+    нового партнёра становится одобривший заявку; у существующего партнёра менеджер не меняется. Публикуется
+    partners.partner_onboarded.
+  kind: effect
+  applies_to:
+  - partners.partner
+  - partners.contract
+  trigger: event:partners.request_approved
+  effects:
+  - table:partners.partners
+  - table:partners.contracts
+  - event:partners.partner_onboarded
+  roles:
+  - system
+  related:
+  - R-PARTNERS-REQUEST-06
+  - R-PARTNERS-ONBOARD-02
+  - R-PARTNERS-CONTRACT-01
+  implemented_by:
+  - symbol: services/partners/consumers.py::on_request_approved
+    lines: 10-11
+    hash: b1b9ef93d249
+  - symbol: services/partners/service.py::approve_request
+    lines: 123-127
+    hash: b6196f97450d
+  - symbol: services/partners/service.py::onboard
+    lines: 147-182
+    hash: 613cd2c894ca
+  enforced_by_db:
+  - constraint: partners_inn_key
+    hash: 608dc5b53607
+  config:
+  - services/partners/settings.py::DEFAULT_COMMISSION_PCT
+  - services/partners/settings.py::CONTRACT_TERM_DAYS
+  - services/partners/service.py::CURRENT_CONTRACT
+  tested_by:
+  - tests/test_partners_onboarding.py::test_approved_request_creates_partner_with_draft_contract
+  status: draft
+- id: R-PARTNERS-ONBOARD-02
+  title: Заявка связывается с партнёром после онбординга
+  text: >
+    Подписчик на partners.partner_onboarded записывает partner_id в заявку на подключение. Связь заявки
+    с партнёром устанавливается только этим асинхронным шагом.
+  kind: effect
+  applies_to:
+  - partners.onboarding_request
+  trigger: event:partners.partner_onboarded
+  effects:
+  - table:partners.onboarding_requests
+  roles:
+  - system
+  related:
+  - R-PARTNERS-ONBOARD-01
+  implemented_by:
+  - symbol: services/partners/consumers.py::on_partner_onboarded
+    lines: 15-16
+    hash: 69e8a44edc27
+  - symbol: services/partners/service.py::link_request
+    lines: 185-187
+    hash: 8551b6374237
+  status: draft
+- id: R-PARTNERS-ONBOARD-03
+  title: Номер договора формируется по ИНН, id партнёра и порядковому номеру
+  text: >
+    Номер договора имеет вид «АГ-<последние 4 цифры ИНН>/<id партнёра>-<номер>», где номер — количество
+    договоров партнёра + 1. Номер уникален в БД.
+  kind: calculation
+  applies_to:
+  - partners.contract
+  trigger: symbol:services/partners/service.py::_next_contract_number
+  roles:
+  - system
+  related:
+  - R-PARTNERS-ONBOARD-01
+  - R-PARTNERS-CONTRACT-09
+  implemented_by:
+  - symbol: services/partners/service.py::_next_contract_number
+    lines: 142-144
+    hash: 270204d401fe
+  enforced_by_db:
+  - constraint: contracts_number_key
+    hash: 22af0225753f
+  status: draft
+- id: R-PARTNERS-ACCESS-01
+  title: Партнёром и его договорами управляет только закреплённый менеджер
+  text: >
+    Правка реквизитов, активация, ставка, кредитные условия, расторжение, перезаключение договора и действия
+    со сделками (открытие, предоплата, закрытие, отмена) доступны только менеджеру, за которым закреплён
+    партнёр (partner.manager_id); иначе AccessDenied «партнёр закреплён за другим менеджером». Регистрация
+    оплаты сделки в кредит и чтение договора, истории, комиссий и ведомостей проверки менеджера не имеют.
+  kind: permission
+  applies_to:
+  - partners.partner
+  - partners.contract
+  - partners.deal
+  trigger: symbol:services/partners/service.py::_partner_for_manager
+  related:
+  - R-PARTNERS-DEAL-06
+  implemented_by:
+  - symbol: services/partners/service.py::_partner_for_manager
+    lines: 193-199
+    hash: f7106f8d1f5b
+  - symbol: services/partners/service.py::_contract_for_manager
+    lines: 202-207
+    hash: 81092f217bbf
+  - symbol: services/partners/service.py::_deal_for_manager
+    lines: 387-392
+    hash: 216a5f826a23
+  tested_by:
+  - tests/test_partners_contracts.py::test_contract_managed_only_by_partner_manager
+  status: draft
+- id: R-PARTNERS-REQUISITES-01
+  title: Менеджер правит только разрешённые реквизиты партнёра
+  text: >
+    Через правку реквизитов можно изменить только kpp, legal_name, contact_name, contact_email, contact_phone
+    (EDITABLE_FIELDS); ИНН и прочие поля — ошибка «нельзя изменить поля: …». Ответ API возвращает список
+    незаполненных обязательных реквизитов.
+  kind: guard
+  applies_to:
+  - partners.partner
+  trigger: symbol:services/partners/service.py::update_requisites
+  effects:
+  - table:partners.partners
+  related:
+  - R-PARTNERS-REQUISITES-02
+  - R-PARTNERS-ACCESS-01
+  implemented_by:
+  - symbol: services/partners/service.py::update_requisites
+    lines: 219-232
+    hash: 1f0390f17f89
+  - symbol: services/partners/api.py::update_requisites
+    lines: 114-117
+    hash: 3c669105fe52
+  enforced_by_db:
+  - constraint: partners_contact_email_check
+    hash: 4b3f1294a88c
+  - constraint: partners_legal_name_check
+    hash: 9ad69359d67d
+  config:
+  - services/partners/service.py::EDITABLE_FIELDS
+  status: draft
+- id: R-PARTNERS-REQUISITES-02
+  title: Нельзя очистить обязательные реквизиты при действующем договоре
+  text: >
+    Если у партнёра есть текущий договор не в статусе draft (active/suspended), очистка любого из REQUIRED_PARTNER_FIELDS
+    (inn, kpp, legal_name) запрещена: «нельзя удалить обязательные реквизиты партнёра с действующим договором».
+    При черновике договора очищать можно.
+  kind: guard
+  applies_to:
+  - partners.partner
+  trigger: symbol:services/partners/service.py::update_requisites
+  related:
+  - R-PARTNERS-CONTRACT-02
+  implemented_by:
+  - symbol: services/partners/service.py::update_requisites
+    lines: 225-229
+    hash: 1f0390f17f89
+  config:
+  - services/partners/settings.py::REQUIRED_PARTNER_FIELDS
+  tested_by:
+  - tests/test_partners_contracts.py::test_required_requisites_cannot_be_cleared_on_active_contract
+  status: draft
+- id: R-PARTNERS-CONTRACT-01
+  title: У партнёра не больше одного текущего договора
+  text: >
+    Текущими считаются договоры в статусах draft, active, suspended (CURRENT_CONTRACT). Частичный уникальный
+    индекс в БД запрещает второй такой договор у партнёра; код перед созданием проверяет наличие текущего
+    договора.
+  kind: invariant
+  applies_to:
+  - partners.contract
+  trigger: table:partners.contracts
+  related:
+  - R-PARTNERS-ONBOARD-01
+  - R-PARTNERS-CONTRACT-09
+  implemented_by:
+  - symbol: services/partners/service.py::current_contract
+    lines: 210-213
+    hash: b6246af1888f
+  enforced_by_db:
+  - constraint: ux_contracts_partner_current
+    hash: 92c64fca9370
+  - constraint: contracts_status_check
+    hash: b22e6ae2ec9a
+  config:
+  - services/partners/service.py::CURRENT_CONTRACT
+  status: draft
+- id: R-PARTNERS-CONTRACT-02
+  title: Договор активируется только из черновика при заполненных реквизитах и в сроке
+  text: >
+    Активировать можно только договор в статусе draft; у партнёра должны быть заполнены ИНН, КПП и наименование
+    (REQUIRED_PARTNER_FIELDS, в ошибке — названия из REQUISITE_TITLES); дата окончания договора не должна
+    быть в прошлом. Триггер БД при переходе draft→active повторно проверяет реквизиты партнёра. Публикуется
+    partners.contract_activated (подписчиков нет).
+  kind: guard
+  applies_to:
+  - partners.contract
+  trigger: symbol:services/partners/service.py::activate_contract
+  effects:
+  - table:partners.contracts
+  - event:partners.contract_activated
+  related:
+  - R-PARTNERS-REQUISITES-02
+  implemented_by:
+  - symbol: services/partners/service.py::activate_contract
+    lines: 239-256
+    hash: 015f1dcdf14d
+  - symbol: services/partners/service.py::missing_requisites
+    lines: 43-44
+    hash: 9295b957998f
+  enforced_by_db:
+  - constraint: trg_contract_requisites
+    hash: dbc1b3bc018c
+  - constraint: check_partner_requisites
+    hash: d57cbbd089d3
+  config:
+  - services/partners/settings.py::REQUIRED_PARTNER_FIELDS
+  - services/partners/settings.py::REQUISITE_TITLES
+  tested_by:
+  - tests/test_partners_contracts.py::test_contract_not_activated_without_requisites
+  status: draft
+- id: R-PARTNERS-CONTRACT-03
+  title: Ставка комиссии от 0 до MAX_COMMISSION_PCT, только на текущем договоре
+  text: >
+    Менеджер меняет ставку комиссии только на договоре в статусе draft/active/suspended («договор закрыт»
+    иначе); ставка должна быть в пределах 0..MAX_COMMISSION_PCT (30%). В БД — CHECK 0..100. Публикуется
+    partners.contract_rate_changed (подписчиков нет), изменение пишется в историю триггером.
+  kind: guard
+  applies_to:
+  - partners.contract
+  trigger: symbol:services/partners/service.py::change_commission_rate
+  effects:
+  - event:partners.contract_rate_changed
+  related:
+  - R-PARTNERS-CONTRACT-07
+  - R-PARTNERS-COMMISSION-02
+  implemented_by:
+  - symbol: services/partners/service.py::change_commission_rate
+    lines: 267-278
+    hash: 8fd4880912a5
+  - symbol: services/partners/service.py::_check_rate
+    lines: 259-261
+    hash: ac4759e6fdb2
+  enforced_by_db:
+  - constraint: contracts_commission_pct_check
+    hash: fa328b9cd75e
+  config:
+  - services/partners/settings.py::MAX_COMMISSION_PCT
+  - services/partners/service.py::CURRENT_CONTRACT
+  tested_by:
+  - tests/test_partners_contracts.py::test_commission_rate_bounds
+  status: draft
+- id: R-PARTNERS-CONTRACT-04
+  title: Кредитный лимит от 0 до MAX_CREDIT_LIMIT; без кредита лимит обнуляется
+  text: >
+    Кредитные условия меняются только на текущем договоре; отрицательный лимит и лимит выше MAX_CREDIT_LIMIT
+    (500 000, «без согласования») запрещены. При запрете кредита лимит принудительно ставится 0 (CHECK
+    в БД требует credit_limit = 0 без credit_allowed). Лимит не сверяется с текущей задолженностью; событие
+    не публикуется, изменение попадает в историю триггером.
+  kind: guard
+  applies_to:
+  - partners.contract
+  trigger: symbol:services/partners/service.py::set_credit_terms
+  effects:
+  - table:partners.contracts
+  related:
+  - R-PARTNERS-CREDIT-02
+  - R-PARTNERS-CONTRACT-07
+  implemented_by:
+  - symbol: services/partners/service.py::set_credit_terms
+    lines: 284-294
+    hash: b5979098bf95
+  enforced_by_db:
+  - constraint: contracts_check1
+    hash: a0dfcae0cf88
+  - constraint: contracts_credit_limit_check
+    hash: 745020bae012
+  config:
+  - services/partners/settings.py::MAX_CREDIT_LIMIT
+  - services/partners/service.py::CURRENT_CONTRACT
+  tested_by:
+  - tests/test_partners_api.py::test_contract_terms_through_api
+  status: draft
+- id: R-PARTNERS-CONTRACT-05
+  title: Договор с истёкшим сроком переводится в expired
+  text: >
+    Фоновая задача переводит договоры active/suspended с valid_to раньше сегодняшней даты в статус expired,
+    сбрасывает причину приостановки и отменяет сделки в ожидании предоплаты; открытые и неоплаченные кредитные
+    сделки не трогаются. Публикуется partners.contract_expired (подписчиков нет). Черновики с истёкшим
+    сроком не истекают.
+  kind: timer
+  applies_to:
+  - partners.contract
+  trigger: symbol:services/partners/jobs.py::expire_contracts
+  effects:
+  - table:partners.contracts
+  - table:partners.deals
+  - event:partners.contract_expired
+  roles:
+  - system
+  related:
+  - R-PARTNERS-ONBOARD-01
+  implemented_by:
+  - symbol: services/partners/jobs.py::expire_contracts
+    lines: 33-43
+    hash: 476c3433c893
+  - symbol: services/partners/service.py::expire_contract
+    lines: 541-549
+    hash: fde5da890a83
+  enforced_by_db:
+  - constraint: contracts_check
+    hash: 14836ddca622
+  config:
+  - services/partners/settings.py::CONTRACT_TERM_DAYS
+  tested_by:
+  - tests/test_partners_jobs.py::test_contract_expires_after_term
+  status: draft
+- id: R-PARTNERS-CONTRACT-06
+  title: Расторжение договора требует причины и отсутствия открытых сделок и долга
+  text: >
+    Расторгнуть можно только текущий договор (draft/active/suspended) с непустой причиной; запрещено,
+    если есть сделки в статусе open или неоплаченная задолженность по сделкам в кредит. Сделки в ожидании
+    предоплаты отменяются, договор получает статус terminated, публикуется partners.contract_terminated
+    (подписчиков нет). Причина в договоре не сохраняется — только в событии.
+  kind: guard
+  applies_to:
+  - partners.contract
+  trigger: symbol:services/partners/service.py::terminate_contract
+  effects:
+  - table:partners.deals
+  - event:partners.contract_terminated
+  related:
+  - R-PARTNERS-CREDIT-01
+  - R-PARTNERS-CONTRACT-09
+  implemented_by:
+  - symbol: services/partners/service.py::terminate_contract
+    lines: 555-575
+    hash: 6998d6d84552
+  config:
+  - services/partners/service.py::CURRENT_CONTRACT
+  tested_by:
+  - tests/test_partners_contracts.py::test_terminated_contract_can_be_renewed
+  status: draft
+- id: R-PARTNERS-CONTRACT-07
+  title: Изменения условий договора журналируются триггером БД
+  text: >
+    Триггер AFTER UPDATE на договорах пишет в contract_history старое и новое значение при изменении commission_pct,
+    credit_allowed, credit_limit и status. Код журнал не ведёт, только читает его.
+  kind: effect
+  applies_to:
+  - partners.contract
+  trigger: table:partners.contracts
+  effects:
+  - table:partners.contract_history
+  roles:
+  - system
+  related:
+  - R-PARTNERS-CONTRACT-03
+  - R-PARTNERS-CONTRACT-04
+  implemented_by:
+  - symbol: services/partners/service.py::contract_history
+    lines: 602-606
+    hash: 258c377591cf
+  enforced_by_db:
+  - constraint: trg_contract_history
+    hash: 8e3138097cb2
+  - constraint: log_contract_change
+    hash: 583ae63184f3
+  - constraint: contract_history_field_check
+    hash: e67625c4beda
+  tested_by:
+  - tests/test_partners_commissions.py::test_rate_change_does_not_touch_accrued_commission
+  status: draft
+- id: R-PARTNERS-CONTRACT-08
+  title: Приостановленный договор обязан иметь причину
+  text: >
+    CHECK в БД требует suspend_reason у договора в статусе suspended. Код ставит причину при приостановке
+    и сбрасывает её при возобновлении, истечении и расторжении.
+  kind: invariant
+  applies_to:
+  - partners.contract
+  trigger: table:partners.contracts
+  related:
+  - R-PARTNERS-CREDIT-03
+  implemented_by:
+  - symbol: services/partners/service.py::suspend_contract
+    lines: 314-315
+    hash: bcfdd617b8cc
+  enforced_by_db:
+  - constraint: contracts_check2
+    hash: db3727d4d344
+  status: draft
+- id: R-PARTNERS-CONTRACT-09
+  title: Новый договор создаётся на условиях последнего, если нет текущего
+  text: >
+    Перезаключение возможно, только если у партнёра нет договора в статусе draft/active/suspended. Новый
+    черновик копирует ставку и кредитные условия последнего договора партнёра (или берёт DEFAULT_COMMISSION_PCT
+    и кредит выключен), срок — CONTRACT_TERM_DAYS от сегодня.
+  kind: guard
+  applies_to:
+  - partners.contract
+  trigger: symbol:services/partners/service.py::renew_contract
+  effects:
+  - table:partners.contracts
+  related:
+  - R-PARTNERS-CONTRACT-01
+  - R-PARTNERS-CONTRACT-06
+  implemented_by:
+  - symbol: services/partners/service.py::renew_contract
+    lines: 580-599
+    hash: b15d5fecda48
+  enforced_by_db:
+  - constraint: ux_contracts_partner_current
+    hash: 92c64fca9370
+  config:
+  - services/partners/settings.py::DEFAULT_COMMISSION_PCT
+  - services/partners/settings.py::CONTRACT_TERM_DAYS
+  tested_by:
+  - tests/test_partners_contracts.py::test_terminated_contract_can_be_renewed
+  status: draft
+- id: R-PARTNERS-DEAL-01
+  title: Сделка открывается только по действующему договору в сроке
+  text: >
+    Новая сделка запрещена по приостановленному договору («договор приостановлен, новые сделки запрещены»),
+    по договору не в статусе active и вне периода valid_from..valid_to. Сумма должна быть положительной
+    (также CHECK в БД), внешний номер сделки уникален в пределах договора.
+  kind: guard
+  applies_to:
+  - partners.deal
+  trigger: symbol:services/partners/service.py::open_deal
+  effects:
+  - event:partners.deal_created
+  related:
+  - R-PARTNERS-DEAL-02
+  - R-PARTNERS-CREDIT-02
+  implemented_by:
+  - symbol: services/partners/service.py::_in_force
+    lines: 343-349
+    hash: 6a94600ca29c
+  - symbol: services/partners/service.py::open_deal
+    lines: 355-364
+    hash: bde4ee8479df
+  enforced_by_db:
+  - constraint: deals_amount_check
+    hash: 5ddec6c010bb
+  - constraint: deals_contract_id_external_ref_key
+    hash: 1f7baeafef45
+  tested_by:
+  - tests/test_partners_jobs.py::test_overdue_credit_suspends_contract
+  status: draft
+- id: R-PARTNERS-DEAL-02
+  title: Режим сделки определяется договором — в кредит или с предоплатой
+  text: >
+    Если договор разрешает кредит, сделка открывается сразу в статусе open со сроком оплаты created_at
+    + CREDIT_PAYMENT_DAYS (14 дней); иначе — в статусе awaiting_prepayment без срока. CHECK в БД: due_at
+    задан тогда и только тогда, когда сделка в кредит; кредитная сделка не может ожидать предоплаты или
+    иметь prepaid_at.
+  kind: calculation
+  applies_to:
+  - partners.deal
+  trigger: symbol:services/partners/service.py::open_deal
+  effects:
+  - table:partners.deals
+  related:
+  - R-PARTNERS-DEAL-03
+  - R-PARTNERS-CREDIT-04
+  implemented_by:
+  - symbol: services/partners/service.py::open_deal
+    lines: 366-376
+    hash: bde4ee8479df
+  enforced_by_db:
+  - constraint: deals_check
+    hash: 4a2f9ad3bc87
+  - constraint: deals_check1
+    hash: 5ed67cdf769b
+  - constraint: deals_status_check
+    hash: ac432779693d
+  config:
+  - services/partners/settings.py::CREDIT_PAYMENT_DAYS
+  tested_by:
+  - tests/test_partners_contracts.py::test_credit_deal_goes_without_prepayment
+  - tests/test_partners_contracts.py::test_deal_without_credit_needs_prepayment
+  status: draft
+- id: R-PARTNERS-DEAL-03
+  title: Сделку без кредита закрывают только после предоплаты
+  text: >
+    Предоплата регистрируется только для сделки в статусе awaiting_prepayment (переводит её в open, ставит
+    prepaid_at). Закрытие сделки в ожидании предоплаты запрещено; закрыть можно только сделку в статусе
+    open — ставится closed_at (CHECK в БД) и публикуется partners.deal_closed.
+  kind: guard
+  applies_to:
+  - partners.deal
+  trigger: symbol:services/partners/service.py::close_deal
+  effects:
+  - event:partners.deal_closed
+  related:
+  - R-PARTNERS-COMMISSION-01
+  implemented_by:
+  - symbol: services/partners/service.py::register_prepayment
+    lines: 396-401
+    hash: 9e57c4361b76
+  - symbol: services/partners/service.py::close_deal
+    lines: 405-422
+    hash: be664baaf8f4
+  enforced_by_db:
+  - constraint: deals_check2
+    hash: 82f2d2b9c808
+  tested_by:
+  - tests/test_partners_contracts.py::test_deal_without_credit_needs_prepayment
+  status: draft
+- id: R-PARTNERS-DEAL-04
+  title: Отменить можно только незакрытую сделку
+  text: >
+    Отмена разрешена для сделок в статусах awaiting_prepayment и open; закрытую или уже отменённую сделку
+    отменить нельзя. Отменённая сделка перестаёт учитываться в кредитной задолженности, комиссия по ней
+    не начисляется. Публикуется partners.deal_cancelled (подписчиков нет).
+  kind: guard
+  applies_to:
+  - partners.deal
+  trigger: symbol:services/partners/service.py::cancel_deal
+  effects:
+  - event:partners.deal_cancelled
+  related:
+  - R-PARTNERS-CREDIT-01
+  - R-PARTNERS-COMMISSION-01
+  implemented_by:
+  - symbol: services/partners/service.py::cancel_deal
+    lines: 426-431
+    hash: 167f0bc0ed54
+  tested_by:
+  - tests/test_partners_contracts.py::test_cancelled_deal_releases_credit
+  - tests/test_partners_commissions.py::test_no_commission_for_cancelled_deal
+  status: draft
+- id: R-PARTNERS-DEAL-05
+  title: Оплата регистрируется только по кредитной сделке и один раз
+  text: >
+    Регистрация оплаты запрещена для сделки с предоплатой («сделка оплачена предоплатой»), а также для
+    уже оплаченной или отменённой сделки. Оплата ставит paid_at (статус сделки не меняется) и публикует
+    partners.deal_paid.
+  kind: guard
+  applies_to:
+  - partners.deal
+  trigger: symbol:services/partners/service.py::register_payment
+  effects:
+  - event:partners.deal_paid
+  related:
+  - R-PARTNERS-CREDIT-03
+  - R-PARTNERS-DEAL-06
+  implemented_by:
+  - symbol: services/partners/service.py::register_payment
+    lines: 439-445
+    hash: d6330593a0cb
+  tested_by:
+  - tests/test_partners_contracts.py::test_lowered_limit_blocks_all_deals_until_paid
+  status: draft
+- id: R-PARTNERS-DEAL-06
+  title: Оплату кредитной сделки регистрируют без проверки менеджера
+  text: >
+    Маршрут POST /deals/{deal_id}/payment и register_payment не принимают manager_id и не проверяют закрепление
+    партнёра — в отличие от остальных действий со сделками.
+  kind: permission
+  applies_to:
+  - partners.deal
+  trigger: symbol:services/partners/api.py::payment
+  related:
+  - R-PARTNERS-ACCESS-01
+  - R-PARTNERS-DEAL-05
+  implemented_by:
+  - symbol: services/partners/api.py::payment
+    lines: 161-162
+    hash: e42fd9b8e63d
+  - symbol: services/partners/service.py::register_payment
+    lines: 434-438
+    hash: d6330593a0cb
+  status: draft
+- id: R-PARTNERS-CREDIT-01
+  title: Кредитная задолженность — сумма неоплаченных неотменённых сделок в кредит
+  text: >
+    Задолженность по договору считается как сумма amount сделок on_credit без paid_at и не в статусе cancelled
+    (закрытые неоплаченные входят). Она показывается в карточке договора как credit_used и блокирует расторжение;
+    та же формула используется в триггере лимита.
+  kind: calculation
+  applies_to:
+  - partners.contract
+  trigger: symbol:services/partners/service.py::credit_exposure
+  related:
+  - R-PARTNERS-CREDIT-02
+  - R-PARTNERS-CONTRACT-06
+  implemented_by:
+  - symbol: services/partners/service.py::credit_exposure
+    lines: 297-307
+    hash: 600224dcd41e
+  - symbol: services/partners/api.py::contract
+    lines: 125-133
+    hash: 90e94cf2c5ec
+  enforced_by_db:
+  - constraint: ix_deals_contract_unpaid_credit
+    hash: 724baf812966
+  tested_by:
+  - tests/test_partners_contracts.py::test_cancelled_deal_releases_credit
+  - tests/test_partners_api.py::test_credit_limit_and_commissions_via_api
+  status: draft
+- id: R-PARTNERS-CREDIT-02
+  title: Кредитный лимит проверяет только триггер БД при вставке сделки
+  text: >
+    Триггер BEFORE INSERT на сделках запрещает кредитную сделку по договору без кредита; запрещает любую
+    новую сделку (включая с предоплатой), если текущая задолженность уже выше лимита (например, после
+    снижения лимита); и запрещает кредитную сделку, если задолженность плюс её сумма превысит лимит. В
+    коде проверки лимита нет — ошибка приходит из БД (check_violation).
+  kind: guard
+  applies_to:
+  - partners.deal
+  trigger: table:partners.deals
+  related:
+  - R-PARTNERS-CREDIT-01
+  - R-PARTNERS-CONTRACT-04
+  - R-PARTNERS-DEAL-01
+  implemented_by:
+  - symbol: services/partners/service.py::open_deal
+    lines: 366-378
+    hash: bde4ee8479df
+  enforced_by_db:
+  - constraint: trg_contract_credit_limit
+    hash: 967d17520d2e
+  - constraint: check_credit_limit
+    hash: a8d9a598841b
+  tested_by:
+  - tests/test_partners_contracts.py::test_credit_limit_blocks_new_deal
+  - tests/test_partners_contracts.py::test_lowered_limit_blocks_all_deals_until_paid
+  status: draft
+- id: R-PARTNERS-CREDIT-03
+  title: Просрочка оплаты кредитной сделки приостанавливает договор
+  text: >
+    Фоновая задача помечает overdue_flagged у неоплаченных неотменённых кредитных сделок с due_at в прошлом
+    и публикует partners.credit_overdue по каждой (однократно). Подписчик приостанавливает договор, если
+    он active, с причиной credit_overdue и публикует partners.contract_suspended (подписчиков нет).
+  kind: timer
+  applies_to:
+  - partners.contract
+  - partners.deal
+  trigger: symbol:services/partners/jobs.py::flag_overdue_credit
+  effects:
+  - event:partners.credit_overdue
+  - event:partners.contract_suspended
+  - table:partners.contracts
+  roles:
+  - system
+  related:
+  - R-PARTNERS-CREDIT-04
+  - R-PARTNERS-CONTRACT-08
+  - R-PARTNERS-DEAL-01
+  implemented_by:
+  - symbol: services/partners/jobs.py::flag_overdue_credit
+    lines: 11-30
+    hash: 8c22b384cb6f
+  - symbol: services/partners/consumers.py::on_credit_overdue
+    lines: 30-31
+    hash: d7bd659f2c7d
+  - symbol: services/partners/service.py::suspend_contract
+    lines: 310-317
+    hash: bcfdd617b8cc
+  enforced_by_db:
+  - constraint: contracts_check2
+    hash: db3727d4d344
+  config:
+  - services/partners/settings.py::CREDIT_PAYMENT_DAYS
+  tested_by:
+  - tests/test_partners_jobs.py::test_overdue_credit_suspends_contract
+  status: draft
+- id: R-PARTNERS-CREDIT-04
+  title: Договор возобновляется после оплаты всех просроченных сделок
+  text: >
+    На partners.deal_paid подписчик возобновляет договор (suspended→active, причина сбрасывается, публикуется
+    partners.contract_resumed), только если причина приостановки — credit_overdue и по договору не осталось
+    неоплаченных неотменённых сделок с overdue_flagged.
+  kind: effect
+  applies_to:
+  - partners.contract
+  trigger: event:partners.deal_paid
+  effects:
+  - transition:suspended->active
+  - event:partners.contract_resumed
+  roles:
+  - system
+  related:
+  - R-PARTNERS-CREDIT-03
+  - R-PARTNERS-DEAL-05
+  implemented_by:
+  - symbol: services/partners/consumers.py::on_deal_paid
+    lines: 35-36
+    hash: 1bf8963dd3f7
+  - symbol: services/partners/service.py::resume_if_settled
+    lines: 320-337
+    hash: 27cd47d403f8
+  tested_by:
+  - tests/test_partners_jobs.py::test_paying_all_overdue_deals_resumes_contract
+  status: draft
+- id: R-PARTNERS-COMMISSION-01
+  title: Комиссия начисляется один раз при закрытии сделки
+  text: >
+    На partners.deal_closed подписчик начисляет комиссию по закрытой сделке, если по ней ещё нет начисления
+    (также UNIQUE deal_id в БД): база — сумма сделки, ставка — текущая ставка договора на момент начисления.
+    Публикуется partners.commission_accrued.
+  kind: effect
+  applies_to:
+  - partners.deal
+  - partners.commission
+  trigger: event:partners.deal_closed
+  effects:
+  - table:partners.commissions
+  - event:partners.commission_accrued
+  roles:
+  - system
+  related:
+  - R-PARTNERS-COMMISSION-02
+  - R-PARTNERS-PAYOUT-01
+  implemented_by:
+  - symbol: services/partners/consumers.py::on_deal_closed
+    lines: 20-21
+    hash: 4b3b90273a14
+  - symbol: services/partners/service.py::accrue_commission
+    lines: 455-482
+    hash: 948a06c710b1
+  enforced_by_db:
+  - constraint: commissions_deal_id_key
+    hash: 9b0d33f4d1b4
+  - constraint: commissions_base_amount_check
+    hash: 1476e6927866
+  - constraint: commissions_rate_pct_check
+    hash: 8fd346acd578
+  tested_by:
+  - tests/test_partners_commissions.py::test_commission_accrued_on_deal_closed
+  - tests/test_partners_commissions.py::test_no_commission_for_cancelled_deal
+  status: draft
+- id: R-PARTNERS-COMMISSION-02
+  title: Сумма комиссии включает базу сделки
+  text: >
+    amount комиссии считается как base × (1 + pct/100) с округлением до копейки ROUND_HALF_UP, т.е. это
+    сумма сделки плюс комиссия, а не сама комиссия. CHECK в БД требует amount >= base_amount.
+  kind: calculation
+  applies_to:
+  - partners.commission
+  trigger: symbol:services/partners/service.py::commission_amount
+  related:
+  - R-PARTNERS-COMMISSION-01
+  implemented_by:
+  - symbol: services/partners/service.py::commission_amount
+    lines: 451-452
+    hash: 83ee2acf2b3a
+  enforced_by_db:
+  - constraint: commissions_check
+    hash: 6179d6270797
+  config:
+  - services/partners/service.py::CENT
+  tested_by:
+  - tests/test_partners_commissions.py::test_commission_accrued_on_deal_closed
+  status: draft
+- id: R-PARTNERS-COMMISSION-03
+  title: Начисленная комиссия не пересчитывается
+  text: >
+    Триггер БД запрещает менять amount, rate_pct и base_amount начисленной комиссии; смена ставки договора
+    на уже начисленные комиссии не влияет. Менять можно только payout_id.
+  kind: invariant
+  applies_to:
+  - partners.commission
+  trigger: table:partners.commissions
+  related:
+  - R-PARTNERS-CONTRACT-03
+  implemented_by:
+  - symbol: services/partners/service.py::accrue_commission
+    lines: 462-470
+    hash: 948a06c710b1
+  enforced_by_db:
+  - constraint: trg_commission_frozen
+    hash: d75929f8e50c
+  - constraint: forbid_commission_change
+    hash: 9a1eb0cecad9
+  tested_by:
+  - tests/test_partners_commissions.py::test_accrued_commission_is_frozen_in_database
+  - tests/test_partners_commissions.py::test_rate_change_does_not_touch_accrued_commission
+  status: draft
+- id: R-PARTNERS-PAYOUT-01
+  title: Комиссия попадает в месячную ведомость партнёра
+  text: >
+    На partners.commission_accrued подписчик добавляет комиссию в ведомость партнёра за месяц начисления
+    (period — первое число месяца), увеличивая total и commissions_count. Если ведомость этого месяца
+    уже закрыта, комиссия уходит в ведомость следующего месяца. Ведомость на партнёра и период одна (UNIQUE).
+  kind: effect
+  applies_to:
+  - partners.payout
+  - partners.commission
+  trigger: event:partners.commission_accrued
+  effects:
+  - table:partners.payouts
+  - table:partners.commissions
+  roles:
+  - system
+  related:
+  - R-PARTNERS-COMMISSION-01
+  - R-PARTNERS-PAYOUT-02
+  implemented_by:
+  - symbol: services/partners/consumers.py::on_commission_accrued
+    lines: 25-26
+    hash: c331d568317b
+  - symbol: services/partners/service.py::add_to_payout
+    lines: 485-503
+    hash: 4251552eb3c7
+  - symbol: services/partners/service.py::_open_payout
+    lines: 506-514
+    hash: a95684d861bb
+  enforced_by_db:
+  - constraint: payouts_partner_id_period_key
+    hash: d5e8bdbd9e23
+  - constraint: payouts_period_check
+    hash: ae2da4194701
+  - constraint: payouts_total_check
+    hash: b081fc0f00a9
+  - constraint: payouts_commissions_count_check
+    hash: bbb2ce0bab5f
+  tested_by:
+  - tests/test_partners_commissions.py::test_commissions_collected_into_monthly_payout
+  - tests/test_partners_commissions.py::test_closed_payout_period
+  status: draft
+- id: R-PARTNERS-PAYOUT-02
+  title: Ведомость закрывается только после окончания месяца
+  text: >
+    Закрыть можно только открытую ведомость прошедшего месяца; ведомость текущего месяца закрыть нельзя.
+    Фоновая задача закрывает все открытые ведомости с периодом раньше начала текущего месяца и публикует
+    partners.payout_closed (подписчиков нет).
+  kind: timer
+  applies_to:
+  - partners.payout
+  trigger: symbol:services/partners/jobs.py::close_payouts
+  effects:
+  - table:partners.payouts
+  - event:partners.payout_closed
+  roles:
+  - system
+  related:
+  - R-PARTNERS-PAYOUT-01
+  implemented_by:
+  - symbol: services/partners/jobs.py::close_payouts
+    lines: 61-71
+    hash: 0783c0639dd8
+  - symbol: services/partners/service.py::close_payout
+    lines: 517-531
+    hash: b458a3e46f9e
+  enforced_by_db:
+  - constraint: payouts_status_check
+    hash: 15854b20f6c1
+  tested_by:
+  - tests/test_partners_commissions.py::test_closed_payout_period
+  status: draft

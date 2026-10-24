@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "knowledge": {
+      "command": "uv",
+      "args": ["run", "--quiet", "python", "mcp/knowledge_server.py"]
+    }
+  }
+}

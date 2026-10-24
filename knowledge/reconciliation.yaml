@@ -1,0 +1,386 @@
+# Расхождения схемы, кода и БД. Фиксируются, код не исправляется. Правится руками.
+discrepancies:
+- id: D-01
+  title: Дедупликация закрывает заявку, которая уже дошла до записи
+  schema: '§6: остаётся та заявка, что первой дошла до записи (платная — при полной оплате, в долг — при
+    прохождении проверки)'
+  code: services/applications/dedup.py::OPEN_STAGES:10 включает awaiting_issue; dedup.py::close_duplicates:25
+    вызывается из consumers.py::on_review_passed:43 и on_fully_paid:31 без проверки, что у других заявок
+    booking_reached_at пуст
+  db: ix_applications_client_sphere — обычный индекс, не уникальный
+  rules:
+  - R-APP-DEDUP-01
+  - R-APP-DEDUP-02
+  - R-BILL-PROCESS-01
+  severity: high
+  question: Если у клиента уже есть оплаченная заявка на «Ожидает выдачи», должна ли более поздняя заявка
+    в долг закрыться сама как дубль, а не закрывать оплаченную?
+- id: D-02
+  title: Ссылка на запись нигде не отправляется клиенту
+  schema: '§13: ссылка формируется и уходит на «Ожидает выдачи» и когда книги у клиента; §1: клиент работает
+    только по ссылке из письма'
+  code: services/scheduling/consumers.py::on_ready_for_booking:12 и scheduling/service.py::issue_books:223
+    создают ссылку; notifications подписан только на booking.created и booking.cancelled (notifications/consumers.py:9,20)
+  db: emails_type_check, templates_type_check — только booking и cancel
+  rules:
+  - R-SCHEMA-NOTIF-01
+  - R-SCHEMA-NOTIF-02
+  - R-SCHED-LINK-01
+  - R-NOTIF-TYPES-01
+  - R-NOTIF-RENDER-02
+  severity: high
+  question: Как клиент получает токен ссылки — нужен ли тип письма «ссылка на запись» (за книгами и на
+    сдачу), в том числе после смены площадки?
+- id: D-03
+  title: Роли и закрепление сотрудников в большинстве действий не проверяются
+  schema: '§2, §3, §17: проверяющего назначает только руководитель проверяющих; привязку, отвязку и возврат
+    платежа выполняет только главный бухгалтер; аннулирует счёт закреплённый бухгалтер; данные клиента
+    обновляет проверяющий'
+  code: applications/service.py::assign_reviewer:122 (без исполнителя); update_client:131 (без source_application_id
+    проверки нет); billing/service.py::link_payment:98 (chief_id из тела запроса), unlink_payment:132,
+    refund_payment:143, cancel_invoice:75 (без исполнителя); chat/api.py::list_:35 (role из query)
+  db: ''
+  rules:
+  - R-APP-REVIEW-02
+  - R-APP-CLIENT-01
+  - R-BILL-PAYMENT-03
+  - R-BILL-REFUND-01
+  - R-BILL-UNLINK-01
+  - R-BILL-CANCEL-02
+  - R-CHAT-AUTH-01
+  - R-SCHEMA-ROLE-01
+  severity: high
+  question: Где должна проверяться роль — в сервисах (тогда нужен справочник сотрудников) или во внешнем
+    шлюзе аутентификации, которому сервисы доверяют?
+- id: D-04
+  title: Ограничение «за два дня» и признак оператора обходятся параметром запроса
+  schema: '§2 Клиент, §13: менее чем за два дня переносит или отменяет только оператор; оператор записывает
+    в системе, клиент и представитель — по ссылке'
+  code: services/scheduling/api.py::cancel:41 — by из query; scheduling/service.py::cancel_booking:193
+    доверяет by; api.py::book:35 — booked_by=operator принимается от любого обладателя токена
+  db: bookings_booked_by_check — только допустимые значения, не источник
+  rules:
+  - R-SCHED-CANCEL-02
+  - R-SCHED-BOOK-03
+  - R-SCHED-RESCHEDULE-01
+  severity: high
+  question: Нужно ли закрыть публичным эндпоинтам значения by и booked_by, отличные от client и representative,
+    и пускать оператора только через book_by_operator с проверкой закрепления?
+- id: D-05
+  title: После проверки заявка с частичной оплатой меняет площадку, а счёт остаётся старым
+  schema: '§7: до оплаты счёт аннулируется и выставляется по прайсу и реквизитам новой площадки; после
+    оплаты смена — только через возврат'
+  code: services/applications/service.py::change_venue:199 блокирует paid только на awaiting_issue и books_out;
+    services/billing/consumers.py::on_venue_changed:13 аннулирует счёт только при paid_amount = 0
+  db: trg_invoices_cancel_guard не даёт аннулировать счёт с платежом
+  rules:
+  - R-APP-VENUE-CHANGE-02
+  - R-APP-VENUE-CHANGE-03
+  - R-BILL-VENUE-CHANGE-01
+  severity: high
+  question: Запрещать ли смену площадки при любой привязанной оплате (paid_amount > 0) до её возврата
+    или отвязки?
+- id: D-06
+  title: Возвращённая на проверку из-за обновления клиента заявка сразу уходит в архив по старому сроку
+  schema: '§6: другие заявки клиента, не дошедшие до записи, снова уходят на проверку; §5: архив — если
+    месяц с начала проверки оператор не получил данные'
+  code: services/applications/consumers.py::on_client_updated:51 не сбрасывает review_started_at; services/applications/jobs.py::archive_stale:14
+    архивирует on_review с review_started_at старше REVIEW_ARCHIVE_DAYS
+  db: ''
+  rules:
+  - R-APP-CLIENT-03
+  - R-APP-ARCHIVE-01
+  - R-APP-REVIEW-01
+  severity: high
+  question: С какого момента считать месяц для повторной проверки после обновления данных клиента — с
+    первой проверки или с возврата на проверку?
+- id: D-07
+  title: Без настроенной ставки штраф не создаётся, и заявку можно закрыть
+  schema: '§14: штраф начисляется за утерю, порчу и просрочку; пока штрафы не погашены, заявку закрыть
+    нельзя'
+  code: services/billing/service.py::create_fine:164 поднимает DomainError, если ставки нет, внутри обработчиков
+    on_loan_overdue:39, on_loan_lost:44, on_loan_damaged:49; guard settled видит 0 открытых штрафов
+  db: fine_rates_amount_check допускает 0, а invoices_amount_check требует amount > 0
+  rules:
+  - R-BILL-FINE-02
+  - R-BILL-FINE-SETTLED-01
+  - R-SCHEMA-ADMIN-01
+  severity: high
+  question: Что делать при отсутствии ставки — блокировать выдачу книг, пока ставки не настроены, или
+    создавать штраф без суммы, который ждёт настройки? Как гасить штраф с нулевой ставкой?
+- id: D-08
+  title: Ставки штрафов, шаблоны и прочие настройки админки не связаны с ролью администратора
+  schema: '§2 Администратор, §17: надбавки, работу в долг, штрафы, шаблоны, реквизиты и максимум мест
+    настраивает только администратор'
+  code: services/applications/admin.py::set_representative_terms:13, set_venue_requisites:24, set_venue_max_capacity:32,
+    set_sphere_active:48 и services/notifications/service.py::set_template:15 — без исполнителя и без
+    HTTP-входа; сеттера fine_rates нет
+  db: ''
+  rules:
+  - R-APP-ADMIN-01
+  - R-APP-ADMIN-02
+  - R-APP-ADMIN-03
+  - R-APP-ADMIN-04
+  - R-NOTIF-TEMPLATE-07
+  - R-SCHEMA-ADMIN-01
+  severity: medium
+  question: Будет ли в проекте админка с проверкой роли admin, или настройки сознательно ведутся вне системы
+    (миграциями или скриптами)?
+- id: D-09
+  title: Запрет смены площадки для social и debt после ссылки есть только в триггере; текст R-SCHED-VENUE-CHANGE-01
+    неточен
+  schema: '§7, §9: social и debt меняют площадку только до формирования ссылки; после выдачи — никому'
+  code: services/applications/service.py::change_venue:199 доменной проверки нет; на flush (строка 219)
+    срабатывает триггер с check_violation вместо DomainError
+  db: trg_applications_venue_lock / forbid_venue_change запрещает смену на books_out, closed и closed_duplicate
+    для всех видов, а для social/debt — вне draft, on_review, needs_rework и archived. Поэтому сценарий
+    «debt/social на books_out меняет площадку» из R-SCHED-VENUE-CHANGE-01 в БД невозможен
+  rules:
+  - R-APP-VENUE-CHANGE-02
+  - R-SCHED-VENUE-CHANGE-01
+  severity: medium
+  question: Перенести ли запрет в сервис (с доменным сообщением) и поправить формулировку расхождения
+    в R-SCHED-VENUE-CHANGE-01?
+- id: D-10
+  title: Платную заявку без выставленного счёта автоархив не берёт
+  schema: '§9 Платная: в архив, если за месяц с начала проверки не получены данные для счёта; §5: «месяц»'
+  code: services/applications/jobs.py::archive_stale:20 — только on_review и needs_rework; awaiting_invoice
+    никогда не архивируется; срок — 30 дней из settings.REVIEW_ARCHIVE_DAYS
+  db: ''
+  rules:
+  - R-APP-ARCHIVE-01
+  severity: medium
+  question: Должна ли заявка, которая месяц висит в «Ожидает счёта», уходить в архив, и от какой даты
+    считать этот месяц? Месяц — это календарный месяц или 30 дней?
+- id: D-11
+  title: Ручной архив оператором возможен при частичной оплате; отметка «клиент передумал» не ставится
+  schema: '§5: оператор отправляет в архив неоплаченную заявку, если клиент передумал; оплаченную — через
+    возврат у главного бухгалтера; история хранит «клиент передумал»'
+  code: services/applications/service.py::archive:246 принимает actor и outcome от вызывающего, оплату
+    не проверяет; при actor≠operator закрепление не проверяется. bpm/application_process.yaml:39 разрешает
+    оператору awaiting_payment->archived. Значение client_declined в коде не используется, HTTP-маршрута
+    архива нет
+  db: attempts_outcome_check допускает client_declined — мёртвое значение
+  rules:
+  - R-APP-ARCHIVE-03
+  - R-APP-ARCHIVE-02
+  severity: medium
+  question: Запрещать ли оператору архив при paid_amount > 0 и фиксировать ли outcome=client_declined
+    при ручном архиве вместо произвольного значения?
+- id: D-12
+  title: Возврат платежа «для смены площадки» всегда уводит заявку в архив
+  schema: '§2 Главный бухгалтер, §7: возврат оформляется при смене площадки после оплаты или если клиент
+    передумал; смена площадки после оплаты — через возврат и новую оплату'
+  code: 'services/applications/consumers.py::on_payment_refunded:73 на awaiting_issue всегда архивирует
+    с outcome=refund; после этого unarchive:265 не даёт сменить площадку, потому что booking_reached_at
+    заполнен. Сменить площадку можно только так: возврат из архива → проверка → awaiting_payment → change_venue'
+  db: ''
+  rules:
+  - R-APP-PAY-04
+  - R-APP-PAY-04
+  - R-APP-UNARCHIVE-02
+  severity: medium
+  question: Нужен ли отдельный сценарий «возврат ради смены площадки» без архива и закрытия попытки?
+- id: D-13
+  title: Отвязка или возврат платежа после полной оплаты не откатывают выдачу и штраф
+  schema: '§9, §11: выдачу по платной заявке открывает только полная оплата; штраф гасится оплатой'
+  code: services/billing/service.py::unlink_payment:132 не публикует событие; refund_payment:143 по счёту
+    на штраф не возвращает fines.status в open; issue_fine_invoice:177 не проверяет, оплачен ли штраф
+    и есть ли по нему действующий счёт
+  db: uq_invoices_one_active_books действует только для kind='books'
+  rules:
+  - R-BILL-UNLINK-01
+  - R-BILL-REFUND-01
+  - R-BILL-FINE-INVOICE-01
+  - R-BILL-FINE-PAY-01
+  severity: medium
+  question: Должна ли отвязка или возврат оплаты возвращать заявку в «Ожидает оплаты», а штраф — в open?
+    Можно ли выставлять второй счёт на тот же штраф?
+- id: D-14
+  title: Возврат из архива аннулирует счёт до проверки и по цене без надбавки
+  schema: '§5: если до архива был неоплаченный счёт, новый выставляется после проверки, только если сумма
+    изменилась'
+  code: services/applications/service.py::unarchive:265 сравнивает books_price без markup_pct; services/billing/consumers.py::on_unarchived:27
+    сразу аннулирует счёт, а при частичной оплате cancel_invoice поднимает DomainError внутри обработчика
+  db: trg_invoices_cancel_guard
+  rules:
+  - R-APP-UNARCHIVE-03
+  - R-BILL-UNARCHIVE-01
+  severity: medium
+  question: Сравнивать полную сумму счёта (с надбавкой) и аннулировать после проверки, а не при возврате?
+    Что делать с частично оплаченным счётом?
+- id: D-15
+  title: Частично оплаченный счёт заявки-дубля остаётся действующим
+  schema: '§6: выставленный по второй заявке счёт аннулируется'
+  code: services/billing/consumers.py::on_closed_duplicate:20 аннулирует только счета с paid_amount =
+    0
+  db: trg_invoices_cancel_guard
+  rules:
+  - R-BILL-DUPLICATE-01
+  - R-APP-DEDUP-02
+  severity: medium
+  question: Должен ли главный бухгалтер получать задачу на возврат частичной оплаты по дублю?
+- id: D-16
+  title: Срок просрочки задан литералом и отсчитывается от issued_at, а не от due_at
+  schema: '§14: срок пользования — месяц с даты выдачи; срыв система отмечает автоматически'
+  code: services/scheduling/jobs.py::flag_overdue:16 — timedelta(days=30) вместо settings.LOAN_PERIOD_DAYS
+    или loans.due_at; книгу, возвращённую с опозданием до запуска задачи, не штрафуют
+  db: ''
+  rules:
+  - R-SCHED-OVERDUE-01
+  - R-SCHED-ISSUE-02
+  - R-CHAT-EVENTS-08
+  severity: medium
+  question: Считать ли просрочку по loans.due_at и начислять ли штраф при позднем возврате в return_book?
+- id: D-17
+  title: Фоновые задачи не запускаются из репозитория
+  schema: '§5, §14: автоархив и отметка срыва срока выполняются автоматически'
+  code: services/applications/jobs.py::archive_stale:14 и services/scheduling/jobs.py::flag_overdue:10
+    вызываются только из тестов; планировщика нет
+  db: ''
+  rules:
+  - R-APP-ARCHIVE-01
+  - R-APP-ARCHIVE-02
+  - R-BILL-ARCHIVE-01
+  - R-SCHED-OVERDUE-01
+  severity: medium
+  question: Где и с какой периодичностью запускаются задачи (в docstring — раз в час), и кто за этим следит?
+- id: D-18
+  title: Окно можно переполнить параллельными записями
+  schema: '§12: максимум мест на окно задаёт администратор; §2 Клиент: нельзя записаться на занятое время'
+  code: services/scheduling/service.py::book:136 считает записи без блокировки
+  db: ограничения на число записей в окне нет; trg_slot_capacity_limit проверяет только capacity окна,
+    а не записи
+  rules:
+  - R-SCHED-BOOK-01
+  - R-SCHED-SLOT-03
+  severity: medium
+  question: Нужна ли блокировка окна (SELECT … FOR UPDATE) или триггер на bookings?
+- id: D-19
+  title: После закрытия заявки ссылка на сдачу и запись на сдачу остаются активными
+  schema: '§13: по закрытой заявке ссылка не работает'
+  code: scheduling не подписан на переход books_out->closed; services/scheduling/service.py::return_book:267
+    не закрывает запись с purpose=return
+  db: uq_booking_links_one_active
+  rules:
+  - R-SCHED-LINK-03
+  - R-SCHED-RETURN-01
+  severity: medium
+  question: Гасить ли ссылку и записи на сдачу при закрытии заявки (или при возврате последней книги)?
+- id: D-20
+  title: Бухгалтер может взять заявку любого этапа и вида, кроме debt
+  schema: '§2 Бухгалтер: берёт в работу платные заявки, прошедшие проверку; §3: у социальной заявки бухгалтера
+    нет, пока не понадобится штраф'
+  code: services/billing/service.py::take_application:17 проверяет только kind≠debt
+  db: PK billing.accountant_assignments(application_id)
+  rules:
+  - R-BILL-ASSIGN-01
+  - R-BILL-ASSIGN-02
+  severity: low
+  question: Ограничить ли закрепление этапами от awaiting_invoice (для paid) и наличием штрафа (для social)?
+- id: D-21
+  title: Социальные заявки между собой не дедуплицируются
+  schema: '§6: две заявки клиента по одной сфере — остаётся одна; исключение только между социальными
+    и платными'
+  code: services/applications/consumers.py::on_review_passed:43 вызывает close_duplicates только для debt;
+    для social вызова нет
+  db: ''
+  rules:
+  - R-APP-DEDUP-01
+  severity: medium
+  question: Должна ли вторая социальная заявка клиента по той же сфере закрываться как дубль?
+- id: D-22
+  title: Нет истории действий «кто и когда»
+  schema: '§16: все значимые действия сохраняются в истории заявки, удалить её нельзя'
+  code: libs/bpm/engine.py::transition:53 не сохраняет actor; services/applications/listeners.py::_domain_events
+    пишет stage_changed без исполнителя
+  db: неизменяем только chat.messages (trg_chat_messages_immutable)
+  rules:
+  - R-SCHEMA-HIST-01
+  - R-CHAT-EVENTS-02
+  - R-CHAT-EVENTS-07
+  severity: medium
+  question: Считать ли ленту чата историей заявки (тогда в событиях нужен исполнитель) или нужен отдельный
+    журнал аудита?
+- id: D-23
+  title: Заявку и данные клиента видит кто угодно; клиент заводится повторно
+  schema: '§16: проверяющий оператор видит только свою площадку; §2 Клиент: заявку не видит; §6: клиент
+    заводится один раз'
+  code: services/applications/api.py::get:55 без проверки; services/applications/service.py::create_client:63
+    без проверки дублей и роли
+  db: у applications.clients нет уникальных ключей
+  rules:
+  - R-SCHEMA-ACCESS-01
+  - R-SCHEMA-CLIENT-01
+  severity: medium
+  question: По какому признаку считать клиента тем же (паспорт, ФИО и дата рождения), и нужен ли уникальный
+    индекс?
+- id: D-24
+  title: Письма об отмене уходят по архивной заявке и не содержат новой ссылки
+  schema: '§5: пока заявка в архиве, письма не отправляются; §7: при смене площадки — письмо об отмене
+    и новая ссылка'
+  code: services/notifications/consumers.py::on_booking_cancelled:21 передаёт только starts_at; services/notifications/service.py::send:42
+    не проверяет этап
+  db: ''
+  rules:
+  - R-NOTIF-RESET-01
+  - R-NOTIF-RENDER-02
+  severity: low
+  question: Отправлять ли письмо об отмене в момент архивации и добавлять ли в письмо после смены площадки
+    новую ссылку?
+- id: D-25
+  title: Книги и заявка — упрощения в смене книг и освобождении книг
+  schema: '§4: смена книг после счёта до оплаты — аннулировать и выставить счёт заново; §8: книги освобождаются
+    после отметки о возврате'
+  code: services/applications/service.py::change_books:239 — только draft и needs_rework; services/scheduling/service.py::issue_books:223
+    удаляет holds при выдаче
+  db: ''
+  rules:
+  - R-APP-BOOKS-01
+  - R-SCHED-ISSUE-03
+  severity: low
+  question: Достаточно ли менять книги после проверки только через архив, и подтверждаете ли, что после
+    выдачи книги учитываются в scheduling.loans, а не в holds?
+- id: D-26
+  title: Чат неполон относительно схемы
+  schema: '§15: в чат попадают все события (назначения, платежи, перенос, неявка); к сообщениям прикрепляют
+    файлы'
+  code: services/chat/consumers.py::EVENT_TEXT — нет payment.fully_paid, payment.refunded, loan.lost,
+    loan.damaged, books.issued и назначений; у chat.messages только body
+  db: messages_check
+  rules:
+  - R-CHAT-EVENTS-06
+  - R-CHAT-EVENTS-07
+  - R-CHAT-POST-03
+  - R-SCHED-FINE-01
+  severity: low
+  question: Какие события обязательны в чате для первой версии и нужны ли вложения?
+- id: D-27
+  title: Ограничение БД без правила — уникальное имя сферы
+  schema: '§1: сфера — тематический раздел; об уникальности названия не сказано'
+  code: ''
+  db: spheres_name_key (UNIQUE spheres.name)
+  rules:
+  - R-SCHEMA-SPHERE-01
+  severity: low
+  question: Подтверждаете ли, что название сферы глобально уникально (а не в пределах площадки)?
+- id: D-28
+  title: Удаление заявки не запрещено в БД
+  schema: '§4: удалить заявку нельзя'
+  code: операции удаления нет
+  db: application_books и attempts — ON DELETE CASCADE; триггера, запрещающего DELETE, нет
+  rules:
+  - R-SCHEMA-APP-02
+  - R-SCHEMA-APP-01
+  severity: low
+  question: Добавить ли триггер, запрещающий DELETE заявок и UPDATE operator_id?
+- id: D-29
+  title: Снижение максимума площадки не трогает уже созданные окна
+  schema: '§12: в окне не больше мест, чем максимум площадки'
+  code: services/scheduling/consumers.py::on_venue_settings_changed:35 обновляет только venue_limits
+  db: trg_slot_capacity_limit срабатывает только на INSERT и UPDATE OF capacity
+  rules:
+  - R-SCHED-VENUE-LIMIT-01
+  - R-SCHED-SLOT-03
+  severity: low
+  question: Уменьшать ли capacity существующих будущих окон, если администратор снизил максимум?

@@ -1,0 +1,1111 @@
+# Правила модуля inventory: извлечены LLM (tools/knowledge/bootstrap_rules.sh) из кода и среза графа.
+# Статус verified ставит только человек. Хэши обновляет tools/knowledge/drift.py --write.
+rules:
+- id: R-INVENTORY-CUSTODIAN-01
+  title: Операции с фондом площадки выполняет только её хранитель
+  text: >
+    Регистрация экземпляра, выдача и продление по МБА, приём возврата, утеря, порча, списание по ветхости
+    и исправление места хранения доступны только сотруднику, записанному хранителем фонда нужной площадки
+    (inventory.custodians). Иначе AccessDenied «сотрудник не является хранителем фонда этой площадки».
+    Для операций с экземпляром проверяется площадка, на которой он числится сейчас.
+  kind: permission
+  applies_to:
+  - table:inventory.copies
+  trigger: symbol:services/inventory/service.py::_require_custodian
+  related:
+  - R-INVENTORY-TRANSFER-06
+  - R-INVENTORY-RECONCILE-01
+  implemented_by:
+  - symbol: services/inventory/service.py::_require_custodian
+    lines: 39-41
+    hash: 0835dd3ec002
+  - symbol: services/inventory/service.py::register_copy
+    lines: 78-78
+    hash: 52da43a4bafe
+  - symbol: services/inventory/service.py::_out_loan
+    lines: 324-325
+    hash: fb2162a4e738
+  - symbol: services/inventory/service.py::_on_shelf
+    lines: 381-382
+    hash: a8234e0c1689
+  - symbol: services/inventory/service.py::issue_ill
+    lines: 280-281
+    hash: 3d87da916474
+  tested_by:
+  - tests/test_inventory_copies.py::test_worn_out_write_off_by_custodian_only
+  discrepancy: >
+    В общей схеме роли «хранитель фонда» нет: в модели ролей проекта (operator, admin и т.д.) её тоже
+    нет. Полномочия держатся только на таблице inventory.custodians, а employee_id приходит в теле запроса
+    (custodian_id) и не сверяется с аутентифицированным пользователем.
+  status: draft
+- id: R-INVENTORY-COPY-01
+  title: Инвентарный номер нормализуется и должен иметь вид «ШИФР-00000»
+  text: >
+    При регистрации экземпляра инвентарный номер обрезается от пробелов и переводится в верхний регистр,
+    затем сверяется с шаблоном INVENTORY_NO: 1–4 буквы (кириллица или латиница), дефис, 4–8 цифр. Если
+    номер не подходит — DomainError «инвентарный номер должен иметь вид «ШИФР-00000»».
+  kind: guard
+  applies_to:
+  - table:inventory.copies
+  trigger: symbol:services/inventory/service.py::register_copy
+  related:
+  - R-INVENTORY-COPY-02
+  implemented_by:
+  - symbol: services/inventory/service.py::register_copy
+    lines: 79-81
+    hash: 52da43a4bafe
+  config:
+  - services/inventory/service.py::INVENTORY_NO
+  tested_by:
+  - tests/test_inventory_copies.py::test_inventory_number_is_normalized_and_unique
+  discrepancy: >
+    Формат номера проверяет только код. CHECK на inventory.copies.inventory_no нет, поэтому прямая запись
+    в БД может сохранить номер в любом формате.
+  status: draft
+- id: R-INVENTORY-COPY-02
+  title: Инвентарный номер уникален во всём фонде
+  text: >
+    Инвентарный номер не может повторяться ни на одной площадке. Код проверяет номер после нормализации
+    и бросает DomainError «инвентарный номер … уже занят». В БД то же самое обеспечивает уникальный ключ
+    copies_inventory_no_key.
+  kind: invariant
+  applies_to:
+  - table:inventory.copies
+  trigger: symbol:services/inventory/service.py::register_copy
+  related:
+  - R-INVENTORY-COPY-01
+  implemented_by:
+  - symbol: services/inventory/service.py::register_copy
+    lines: 82-83
+    hash: 52da43a4bafe
+  enforced_by_db:
+  - constraint: copies_inventory_no_key
+    hash: 0e39682785bd
+  tested_by:
+  - tests/test_inventory_copies.py::test_inventory_number_is_normalized_and_unique
+  status: draft
+- id: R-INVENTORY-COPY-03
+  title: Новый экземпляр поступает в фонд доступным и пересчитывает остаток
+  text: >
+    Зарегистрированный экземпляр получает состояние available на площадке хранителя, acquired_at равен
+    текущему моменту. Публикуется inventory.copy_registered, и подписчик on_stock_changed пересчитывает
+    остаток издания на площадке.
+  kind: effect
+  applies_to:
+  - table:inventory.copies
+  trigger: symbol:services/inventory/service.py::register_copy
+  effects:
+  - event:inventory.copy_registered
+  - table:inventory.stock_levels
+  related:
+  - R-INVENTORY-STOCK-01
+  implemented_by:
+  - symbol: services/inventory/service.py::register_copy
+    lines: 84-95
+    hash: 52da43a4bafe
+  - symbol: services/inventory/consumers.py::on_stock_changed
+    lines: 18-20
+    hash: 5c4b50479016
+  tested_by:
+  - tests/test_inventory_copies.py::test_registered_copies_counted_in_stock
+  discrepancy: >
+    В срезе графа у inventory.copy_registered и других событий остатка не указан публикатор: их публикует
+    _stock_event(topic=…), и экстрактор такой вызов не распознаёт.
+  status: draft
+- id: R-INVENTORY-COPY-04
+  title: Состояние экземпляра ограничено фиксированным набором
+  text: >
+    В БД CHECK copies_state_check разрешает только перечисленные состояния: available, on_loan, in_transit,
+    lost, damaged, written_off. Любое другое значение отклоняется на уровне БД.
+  kind: invariant
+  applies_to:
+  - table:inventory.copies
+  trigger: table:inventory.copies
+  related:
+  - R-INVENTORY-WRITEOFF-03
+  implemented_by:
+  - symbol: services/inventory/service.py::_set_state
+    lines: 51-53
+    hash: d071fefa1aa8
+  enforced_by_db:
+  - constraint: copies_state_check
+    hash: ab599e7dbbaa
+  tested_by:
+  - tests/test_inventory_copies.py::test_state_is_constrained
+  status: draft
+- id: R-INVENTORY-STOCK-01
+  title: Остаток издания считается по экземплярам, которые ещё числятся в фонде
+  text: >
+    recount_stock пересчитывает stock_levels для пары (издание, площадка). В total входят экземпляры в
+    состояниях ON_BALANCE (available, on_loan, in_transit), в available — только available. Утерянные,
+    испорченные и списанные экземпляры из остатка выпадают. Экземпляр в пути числится на площадке-отправителе,
+    пока его не примут.
+  kind: calculation
+  applies_to:
+  - table:inventory.stock_levels
+  trigger: symbol:services/inventory/consumers.py::on_stock_changed
+  effects:
+  - table:inventory.stock_levels
+  roles:
+  - system
+  related:
+  - R-INVENTORY-STOCK-02
+  implemented_by:
+  - symbol: services/inventory/service.py::recount_stock
+    lines: 107-125
+    hash: fa8a741272ee
+  config:
+  - services/inventory/models.py::ON_BALANCE
+  tested_by:
+  - tests/test_inventory_copies.py::test_registered_copies_counted_in_stock
+  - tests/test_inventory_copies.py::test_lost_copy_is_written_off_and_leaves_stock
+  - tests/test_inventory_transfers.py::test_transfer_moves_copy_and_stock
+  - tests/test_inventory_ill.py::test_ill_loan_due_in_thirty_days
+  status: draft
+- id: R-INVENTORY-STOCK-02
+  title: Остаток пересчитывается асинхронно по событиям движения экземпляра
+  text: >
+    on_stock_changed подписан на inventory.copy_registered, copy_relocated, copy_written_off, transfer_shipped,
+    transfer_received, transfer_cancelled, ill_issued и ill_returned. Он пересчитывает остаток для каждой
+    площадки из payload.venue_ids: при приёме перемещения и сверке это обе площадки. Остаток в stock_levels
+    обновляется только после доставки событий, а не в транзакции операции.
+  kind: effect
+  applies_to:
+  - table:inventory.stock_levels
+  trigger: event:inventory.copy_registered
+  effects:
+  - table:inventory.stock_levels
+  roles:
+  - system
+  related:
+  - R-INVENTORY-STOCK-01
+  implemented_by:
+  - symbol: services/inventory/consumers.py::on_stock_changed
+    lines: 10-20
+    hash: 5c4b50479016
+  - symbol: services/inventory/service.py::_stock_event
+    lines: 56-59
+    hash: f01d85eb02a4
+  tested_by:
+  - tests/test_inventory_transfers.py::test_transfer_moves_copy_and_stock
+  - tests/test_inventory_transfers.py::test_cancel_in_transit_returns_copy_to_shelf
+  discrepancy: >
+    На inventory.copy_lost и inventory.copy_damaged on_stock_changed не подписан: остаток после утери
+    или порчи пересчитывается только через последующее copy_written_off. Пока событие списания не обработано,
+    total и available включают экземпляр в состоянии lost/damaged по старому значению.
+  status: draft
+- id: R-INVENTORY-STOCK-03
+  title: Остатки в БД неотрицательны, и доступных не больше общего числа
+  text: >
+    CHECK на inventory.stock_levels требует total >= 0 (stock_levels_total_check), available >= 0 (stock_levels_available_check)
+    и available <= total (stock_levels_check).
+  kind: invariant
+  applies_to:
+  - table:inventory.stock_levels
+  trigger: table:inventory.stock_levels
+  related:
+  - R-INVENTORY-STOCK-01
+  implemented_by:
+  - symbol: services/inventory/service.py::recount_stock
+    lines: 116-124
+    hash: fa8a741272ee
+  enforced_by_db:
+  - constraint: stock_levels_total_check
+    hash: 473d1bc288f9
+  - constraint: stock_levels_available_check
+    hash: db6351114082
+  - constraint: stock_levels_check
+    hash: 591a5b8057b0
+  status: draft
+- id: R-INVENTORY-RECONCILE-01
+  title: Сверка переносит экземпляр на другую площадку без оформления перемещения
+  text: >
+    reconcile_venue по итогам инвентаризации меняет venue_id экземпляра напрямую. Требуется хранитель
+    площадки назначения; если по экземпляру есть открытое перемещение — DomainError «по экземпляру оформлено
+    перемещение». Публикуется inventory.copy_relocated с обеими площадками для пересчёта остатков.
+  kind: effect
+  applies_to:
+  - table:inventory.copies
+  trigger: symbol:services/inventory/service.py::reconcile_venue
+  effects:
+  - event:inventory.copy_relocated
+  - table:inventory.stock_levels
+  related:
+  - R-INVENTORY-RECONCILE-02
+  - R-INVENTORY-STOCK-02
+  implemented_by:
+  - symbol: services/inventory/service.py::reconcile_venue
+    lines: 135-145
+    hash: c256599dc4c3
+  enforced_by_db:
+  - constraint: trg_copies_transfer_lock
+    hash: 5ce28ba8bb8b
+  tested_by:
+  - tests/test_inventory_transfers.py::test_loaned_copy_cannot_change_venue_even_on_reconciliation
+  discrepancy: >
+    Код проверяет только хранителя площадки назначения, площадку-источник не проверяет: хранитель любой
+    площадки может «забрать» к себе экземпляр чужой. Состояние экземпляра код не проверяет, его блокирует
+    только триггер БД. У функции нет HTTP-маршрута.
+  status: draft
+- id: R-INVENTORY-RECONCILE-02
+  title: Выданный по МБА экземпляр не может сменить площадку (триггер БД)
+  text: >
+    Триггер trg_copies_transfer_lock (функция forbid_transfer_of_loaned_copy) при изменении venue_id отклоняет
+    обновление, если экземпляр в состоянии on_loan или по нему есть выдача МБА в статусе out. Ограничение
+    срабатывает даже при сверке, где код его не проверяет.
+  kind: invariant
+  applies_to:
+  - table:inventory.copies
+  trigger: table:inventory.copies
+  related:
+  - R-INVENTORY-RECONCILE-01
+  - R-INVENTORY-TRANSFER-02
+  implemented_by:
+  - symbol: services/inventory/service.py::reconcile_venue
+    lines: 141-144
+    hash: c256599dc4c3
+  enforced_by_db:
+  - constraint: trg_copies_transfer_lock
+    hash: 5ce28ba8bb8b
+  - constraint: forbid_transfer_of_loaned_copy
+    hash: cfd8a4d76e08
+  tested_by:
+  - tests/test_inventory_transfers.py::test_loaned_copy_cannot_change_venue_even_on_reconciliation
+  status: draft
+- id: R-INVENTORY-TRANSFER-01
+  title: Перемещение оформляет хранитель площадки, где лежит экземпляр, и только на другую площадку
+  text: >
+    request_transfer требует хранителя текущей площадки экземпляра. Площадка назначения должна отличаться
+    от текущей, иначе «экземпляр уже находится на этой площадке». В БД это дублируют CHECK transfers_check
+    (from_venue_id <> to_venue_id) и триггер trg_transfers_origin: from_venue_id обязан совпадать с текущей
+    площадкой экземпляра.
+  kind: guard
+  applies_to:
+  - table:inventory.transfers
+  trigger: symbol:services/inventory/service.py::request_transfer
+  effects:
+  - table:inventory.transfers
+  related:
+  - R-INVENTORY-TRANSFER-02
+  - R-INVENTORY-TRANSFER-03
+  implemented_by:
+  - symbol: services/inventory/service.py::request_transfer
+    lines: 155-158
+    hash: eca6a8077fdc
+  - symbol: services/inventory/service.py::request_transfer
+    lines: 175-185
+    hash: eca6a8077fdc
+  enforced_by_db:
+  - constraint: transfers_check
+    hash: f4434b36caeb
+  - constraint: trg_transfers_origin
+    hash: 6449ca64100b
+  - constraint: check_transfer_origin
+    hash: 8ccfa600a53e
+  tested_by:
+  - tests/test_inventory_transfers.py::test_transfer_must_start_where_copy_is
+  - tests/test_inventory_transfers.py::test_transfer_moves_copy_and_stock
+  status: draft
+- id: R-INVENTORY-TRANSFER-02
+  title: Перемещать можно только доступный экземпляр
+  text: >
+    Выданный экземпляр (on_loan) переместить нельзя: «экземпляр выдан, перемещение невозможно до возврата».
+    Экземпляр в любом другом состоянии, кроме available, тоже: «перемещать можно только экземпляр, доступный
+    на площадке».
+  kind: guard
+  applies_to:
+  - table:inventory.transfers
+  trigger: symbol:services/inventory/service.py::request_transfer
+  related:
+  - R-INVENTORY-RECONCILE-02
+  implemented_by:
+  - symbol: services/inventory/service.py::request_transfer
+    lines: 159-162
+    hash: eca6a8077fdc
+  tested_by:
+  - tests/test_inventory_transfers.py::test_loaned_copy_cannot_be_transferred
+  status: draft
+- id: R-INVENTORY-TRANSFER-03
+  title: По экземпляру не больше одного незавершённого перемещения
+  text: >
+    Если у экземпляра есть перемещение в статусе requested или in_transit (OPEN_TRANSFER), новое не оформляется:
+    «по экземпляру уже есть незавершённое перемещение». В БД это обеспечивает частичный уникальный индекс
+    uq_transfers_one_open. После отмены или приёма можно оформить новое.
+  kind: invariant
+  applies_to:
+  - table:inventory.transfers
+  trigger: symbol:services/inventory/service.py::request_transfer
+  related:
+  - R-INVENTORY-TRANSFER-01
+  implemented_by:
+  - symbol: services/inventory/service.py::request_transfer
+    lines: 163-164
+    hash: eca6a8077fdc
+  - symbol: services/inventory/service.py::_open_transfer
+    lines: 62-65
+    hash: aaa2ce389d27
+  enforced_by_db:
+  - constraint: uq_transfers_one_open
+    hash: 0af5135c715a
+  config:
+  - services/inventory/models.py::OPEN_TRANSFER
+  tested_by:
+  - tests/test_inventory_transfers.py::test_one_open_transfer_per_copy
+  - tests/test_inventory_transfers.py::test_cancel_in_transit_returns_copy_to_shelf
+  status: draft
+- id: R-INVENTORY-TRANSFER-04
+  title: На площадке должен остаться минимум экземпляров издания
+  text: >
+    Перед оформлением перемещения код считает другие доступные экземпляры того же издания на площадке.
+    Если их меньше MIN_COPIES_ON_VENUE (1), отказ: «на площадке должен остаться хотя бы один экземпляр
+    издания». Выданные и находящиеся в пути экземпляры в этот счёт не входят.
+  kind: guard
+  applies_to:
+  - table:inventory.transfers
+  trigger: symbol:services/inventory/service.py::request_transfer
+  related:
+  - R-INVENTORY-TRANSFER-02
+  implemented_by:
+  - symbol: services/inventory/service.py::request_transfer
+    lines: 165-174
+    hash: eca6a8077fdc
+  config:
+  - services/inventory/settings.py::MIN_COPIES_ON_VENUE
+  tested_by:
+  - tests/test_inventory_transfers.py::test_last_copy_stays_on_venue
+  discrepancy: >
+    Текст ошибки «хотя бы один» зашит в код и не меняется вместе с MIN_COPIES_ON_VENUE. Учитываются только
+    уже оформленные перемещения: два одновременных запроса по разным экземплярам могут вместе вывести
+    площадку ниже минимума (ограничения в БД нет).
+  status: draft
+- id: R-INVENTORY-TRANSFER-05
+  title: Отправка переводит экземпляр в путь, приём переносит его на новую площадку
+  text: >
+    ship_transfer выполняет хранитель площадки-отправителя и только для перемещения в статусе requested
+    с доступным экземпляром. Экземпляр переходит в in_transit, перемещение — в in_transit с shipped_at,
+    публикуется inventory.transfer_shipped. receive_transfer выполняет хранитель площадки назначения и
+    только из in_transit: экземпляр получает новую площадку и состояние available, перемещение — статус
+    received с closed_at, публикуется inventory.transfer_received с обеими площадками.
+  kind: effect
+  applies_to:
+  - table:inventory.transfers
+  - table:inventory.copies
+  trigger: symbol:services/inventory/service.py::ship_transfer
+  effects:
+  - event:inventory.transfer_shipped
+  - event:inventory.transfer_received
+  - table:inventory.stock_levels
+  related:
+  - R-INVENTORY-TRANSFER-06
+  - R-INVENTORY-TRANSFER-08
+  implemented_by:
+  - symbol: services/inventory/service.py::ship_transfer
+    lines: 197-206
+    hash: bb595a80432a
+  - symbol: services/inventory/service.py::receive_transfer
+    lines: 212-227
+    hash: 985977d431d4
+  enforced_by_db:
+  - constraint: transfers_check1
+    hash: 9304f8af03da
+  - constraint: transfers_check2
+    hash: 03cfe99e18c1
+  - constraint: transfers_status_check
+    hash: e14e37653582
+  tested_by:
+  - tests/test_inventory_transfers.py::test_transfer_moves_copy_and_stock
+  status: draft
+- id: R-INVENTORY-TRANSFER-06
+  title: Отменить перемещение может хранитель любой из двух площадок или система
+  text: >
+    cancel_transfer с custodian_id требует, чтобы сотрудник был хранителем площадки-отправителя или площадки
+    назначения, иначе AccessDenied «отменить перемещение может хранитель одной из площадок». custodian_id=None
+    означает системную отмену (истёк срок), права тогда не проверяются. Завершённое перемещение отменить
+    нельзя: «перемещение уже завершено».
+  kind: permission
+  applies_to:
+  - table:inventory.transfers
+  trigger: symbol:services/inventory/service.py::cancel_transfer
+  roles:
+  - system
+  related:
+  - R-INVENTORY-TRANSFER-07
+  - R-INVENTORY-TRANSFER-08
+  implemented_by:
+  - symbol: services/inventory/service.py::cancel_transfer
+    lines: 236-244
+    hash: 91d2d5b3b2e5
+  config:
+  - services/inventory/models.py::OPEN_TRANSFER
+  tested_by:
+  - tests/test_inventory_transfers.py::test_cancel_in_transit_returns_copy_to_shelf
+  status: draft
+- id: R-INVENTORY-TRANSFER-07
+  title: Отмена перемещения в пути возвращает экземпляр на полку отправителя
+  text: >
+    При отмене перемещения в статусе in_transit экземпляр снова становится available и остаётся на площадке-отправителе:
+    venue_id не менялся. Перемещение получает статус cancelled, причину (по API — note или «cancelled»)
+    и closed_at, публикуется inventory.transfer_cancelled.
+  kind: effect
+  applies_to:
+  - table:inventory.transfers
+  - table:inventory.copies
+  trigger: symbol:services/inventory/service.py::cancel_transfer
+  effects:
+  - event:inventory.transfer_cancelled
+  - table:inventory.stock_levels
+  related:
+  - R-INVENTORY-TRANSFER-06
+  implemented_by:
+  - symbol: services/inventory/service.py::cancel_transfer
+    lines: 245-251
+    hash: 91d2d5b3b2e5
+  - symbol: services/inventory/api.py::cancel_transfer
+    lines: 147-148
+    hash: 6f52fd06efd3
+  enforced_by_db:
+  - constraint: transfers_check2
+    hash: 03cfe99e18c1
+  tested_by:
+  - tests/test_inventory_transfers.py::test_cancel_in_transit_returns_copy_to_shelf
+  status: draft
+- id: R-INVENTORY-TRANSFER-08
+  title: Неотправленная заявка на перемещение отменяется по истечении срока
+  text: >
+    Фоновая задача expire_stale_transfers отменяет перемещения в статусе requested, у которых requested_at
+    старше TRANSFER_REQUEST_TTL_DAYS (14 дней), с причиной «expired» от имени системы. Перемещения в пути
+    задача не трогает.
+  kind: timer
+  applies_to:
+  - table:inventory.transfers
+  trigger: symbol:services/inventory/jobs.py::expire_stale_transfers
+  effects:
+  - event:inventory.transfer_cancelled
+  roles:
+  - system
+  related:
+  - R-INVENTORY-TRANSFER-06
+  implemented_by:
+  - symbol: services/inventory/jobs.py::expire_stale_transfers
+    lines: 50-61
+    hash: 96129f6935f1
+  config:
+  - services/inventory/settings.py::TRANSFER_REQUEST_TTL_DAYS
+  tested_by:
+  - tests/test_inventory_transfers.py::test_stale_requests_expire
+  discrepancy: >
+    В репозитории не найден планировщик, вызывающий jobs.py модуля inventory: задача запускается только
+    из тестов. Для перемещений, застрявших в in_transit, таймера нет.
+  status: draft
+- id: R-INVENTORY-ILL-01
+  title: Выдача по МБА только доступного экземпляра без открытого перемещения
+  text: >
+    issue_ill требует хранителя площадки экземпляра. Экземпляр должен быть available, иначе «экземпляр
+    недоступен для выдачи», и без открытого перемещения, иначе «по экземпляру оформлено перемещение».
+    В БД частичный уникальный индекс uq_ill_loans_one_out не допускает двух выдач в статусе out по одному
+    экземпляру.
+  kind: guard
+  applies_to:
+  - table:inventory.ill_loans
+  trigger: symbol:services/inventory/service.py::issue_ill
+  related:
+  - R-INVENTORY-ILL-02
+  - R-INVENTORY-ILL-03
+  implemented_by:
+  - symbol: services/inventory/service.py::issue_ill
+    lines: 287-290
+    hash: 3d87da916474
+  enforced_by_db:
+  - constraint: uq_ill_loans_one_out
+    hash: 2a5e5026e518
+  tested_by:
+  - tests/test_inventory_ill.py::test_ill_loan_due_in_thirty_days
+  status: draft
+- id: R-INVENTORY-ILL-02
+  title: Партнёр без новых выдач при приостановке, просрочке, лимите или долге
+  text: >
+    Библиотеке-партнёру не выдают экземпляр, если: выдачи ей приостановлены (suspended); у неё есть активная
+    выдача с истёкшим due_at; число активных выдач уже достигло max_active_loans; сумма неоплаченных пеней
+    (accruing и final) больше ILL_PARTNER_DEBT_LIMIT.
+  kind: guard
+  applies_to:
+  - table:inventory.ill_loans
+  - table:inventory.partner_libraries
+  trigger: symbol:services/inventory/service.py::issue_ill
+  related:
+  - R-INVENTORY-PARTNER-02
+  - R-INVENTORY-PARTNER-03
+  implemented_by:
+  - symbol: services/inventory/service.py::issue_ill
+    lines: 285-286
+    hash: 3d87da916474
+  - symbol: services/inventory/service.py::issue_ill
+    lines: 292-303
+    hash: 3d87da916474
+  - symbol: services/inventory/service.py::partner_debt
+    lines: 271-276
+    hash: e17f5a84c460
+  enforced_by_db:
+  - constraint: partner_libraries_max_active_loans_check
+    hash: bc3b35704c8c
+  config:
+  - services/inventory/settings.py::ILL_PARTNER_DEBT_LIMIT
+  tested_by:
+  - tests/test_inventory_ill.py::test_partner_with_overdue_loan_gets_nothing_new
+  - tests/test_inventory_ill.py::test_active_loans_limit
+  - tests/test_inventory_ill.py::test_loss_by_partner_charges_and_suspends
+  status: draft
+- id: R-INVENTORY-ILL-03
+  title: Срок выдачи по МБА — ILL_LOAN_PERIOD_DAYS от момента выдачи
+  text: >
+    При выдаче due_at = issued_at + ILL_LOAN_PERIOD_DAYS (30 дней), экземпляр переходит в on_loan, публикуется
+    inventory.ill_issued, и остаток пересчитывается: экземпляр числится в total, но не в available. CHECK
+    ill_loans_check требует due_at > issued_at.
+  kind: calculation
+  applies_to:
+  - table:inventory.ill_loans
+  trigger: symbol:services/inventory/service.py::issue_ill
+  effects:
+  - event:inventory.ill_issued
+  - table:inventory.stock_levels
+  related:
+  - R-INVENTORY-ILL-04
+  implemented_by:
+  - symbol: services/inventory/service.py::issue_ill
+    lines: 305-316
+    hash: 3d87da916474
+  enforced_by_db:
+  - constraint: ill_loans_check
+    hash: 1702d5d73f9b
+  - constraint: ill_loans_status_check
+    hash: 93d592b55f0f
+  config:
+  - services/inventory/settings.py::ILL_LOAN_PERIOD_DAYS
+  tested_by:
+  - tests/test_inventory_ill.py::test_ill_loan_due_in_thirty_days
+  status: draft
+- id: R-INVENTORY-ILL-04
+  title: Выдачу по МБА можно продлить ограниченное число раз и только до просрочки
+  text: >
+    renew_ill сдвигает due_at на ILL_RENEWAL_DAYS (14). Просроченную выдачу продлить нельзя: «просроченную
+    выдачу продлить нельзя». Новый срок не может превышать issued_at + ILL_LOAN_PERIOD_DAYS + ILL_RENEWAL_DAYS
+    × ILL_MAX_RENEWALS, иначе «выдача уже продлевалась». При настройках по умолчанию выдача продлевается
+    один раз, до 44 дней.
+  kind: guard
+  applies_to:
+  - table:inventory.ill_loans
+  trigger: symbol:services/inventory/service.py::renew_ill
+  related:
+  - R-INVENTORY-ILL-03
+  implemented_by:
+  - symbol: services/inventory/service.py::renew_ill
+    lines: 333-341
+    hash: e2f4e1c92dc2
+  config:
+  - services/inventory/settings.py::ILL_RENEWAL_DAYS
+  - services/inventory/settings.py::ILL_MAX_RENEWALS
+  - services/inventory/settings.py::ILL_LOAN_PERIOD_DAYS
+  tested_by:
+  - tests/test_inventory_ill.py::test_renewal_only_once_and_not_when_overdue
+  discrepancy: >
+    Число продлений нигде не хранится: оно выводится из разницы due_at и issued_at. Поэтому смена ILL_LOAN_PERIOD_DAYS
+    или ILL_RENEWAL_DAYS меняет лимит и для уже действующих выдач.
+  status: draft
+- id: R-INVENTORY-ILL-05
+  title: Закрытую выдачу по МБА нельзя вернуть, продлить или объявить утерянной
+  text: >
+    Возврат, продление и утеря по выдаче возможны только в статусе out, иначе «выдача уже закрыта». Права
+    проверяются у хранителя текущей площадки экземпляра. CHECK ill_loans_check1 связывает статус returned
+    с заполненным returned_at.
+  kind: guard
+  applies_to:
+  - table:inventory.ill_loans
+  trigger: symbol:services/inventory/service.py::_out_loan
+  related:
+  - R-INVENTORY-ILL-06
+  - R-INVENTORY-ILL-07
+  implemented_by:
+  - symbol: services/inventory/service.py::_out_loan
+    lines: 320-328
+    hash: fb2162a4e738
+  enforced_by_db:
+  - constraint: ill_loans_check1
+    hash: 81a3fb051f71
+  - constraint: ill_loans_status_check
+    hash: 93d592b55f0f
+  tested_by:
+  - tests/test_inventory_ill.py::test_timely_return_has_no_penalty
+  status: draft
+- id: R-INVENTORY-ILL-06
+  title: Возврат по МБА возвращает экземпляр на полку, испорченный — списывается
+  text: >
+    return_ill закрывает выдачу (status=returned, returned_at=now) и публикует inventory.ill_returned
+    с due_at и returned_at. Экземпляр получает available, а при damaged=true — damaged, и дополнительно
+    публикуется inventory.copy_damaged. Его подписчик on_copy_damaged оформляет акт списания с причиной
+    damaged и ссылкой на выдачу.
+  kind: effect
+  applies_to:
+  - table:inventory.ill_loans
+  - table:inventory.copies
+  trigger: symbol:services/inventory/service.py::return_ill
+  effects:
+  - event:inventory.ill_returned
+  - event:inventory.copy_damaged
+  - table:inventory.write_offs
+  related:
+  - R-INVENTORY-PENALTY-03
+  - R-INVENTORY-WRITEOFF-01
+  implemented_by:
+  - symbol: services/inventory/service.py::return_ill
+    lines: 348-363
+    hash: e75038af6194
+  - symbol: services/inventory/consumers.py::on_copy_damaged
+    lines: 35-44
+    hash: df2c703f21f0
+  tested_by:
+  - tests/test_inventory_ill.py::test_damaged_on_return_is_written_off
+  - tests/test_inventory_ill.py::test_late_return_finalizes_penalty
+  status: draft
+- id: R-INVENTORY-ILL-07
+  title: Утеря экземпляра партнёром списывает его и начисляет компенсацию
+  text: >
+    report_ill_lost переводит выдачу в статус lost, экземпляр — в lost, и публикует inventory.copy_lost
+    с ill_loan_id. Подписчик on_copy_lost оформляет акт списания (reason=lost) и вызывает charge_lost_copy:
+    тот начисляет партнёру пени вида lost на фиксированную сумму ILL_LOST_COMPENSATION (1500.00) сразу
+    в статусе final.
+  kind: effect
+  applies_to:
+  - table:inventory.ill_loans
+  - table:inventory.ill_penalties
+  trigger: symbol:services/inventory/service.py::report_ill_lost
+  effects:
+  - event:inventory.copy_lost
+  - table:inventory.write_offs
+  - table:inventory.ill_penalties
+  - event:inventory.ill_penalty_accrued
+  related:
+  - R-INVENTORY-PENALTY-04
+  - R-INVENTORY-PARTNER-02
+  implemented_by:
+  - symbol: services/inventory/service.py::report_ill_lost
+    lines: 368-373
+    hash: 26b70f3930b2
+  - symbol: services/inventory/consumers.py::on_copy_lost
+    lines: 24-31
+    hash: 59c5582bfa47
+  - symbol: services/inventory/service.py::charge_lost_copy
+    lines: 496-505
+    hash: 93f66119875b
+  config:
+  - services/inventory/settings.py::ILL_LOST_COMPENSATION
+  tested_by:
+  - tests/test_inventory_ill.py::test_loss_by_partner_charges_and_suspends
+  discrepancy: >
+    Компенсация одинакова для любых изданий и партнёров и не зависит от стоимости книги.
+  status: draft
+- id: R-INVENTORY-PENALTY-01
+  title: Просрочка считается в начатых сутках
+  text: >
+    days_late возвращает 0, если момент не позже due_at, иначе число полных суток плюс одни, если есть
+    остаток (округление вверх). Например, 30 дней 5 часов после выдачи на 30 дней — 1 день просрочки.
+  kind: calculation
+  applies_to:
+  - table:inventory.ill_penalties
+  trigger: symbol:services/inventory/service.py::days_late
+  roles:
+  - system
+  related:
+  - R-INVENTORY-PENALTY-02
+  implemented_by:
+  - symbol: services/inventory/service.py::days_late
+    lines: 31-36
+    hash: 16ee10c05b68
+  config:
+  - services/inventory/service.py::DAY
+  tested_by:
+  - tests/test_inventory_ill.py::test_overdue_flag_accrues_penalty
+  - tests/test_inventory_ill.py::test_late_return_finalizes_penalty
+  status: draft
+- id: R-INVENTORY-PENALTY-02
+  title: Просроченная выдача помечается один раз и начинает начислять пени
+  text: >
+    Фоновая задача flag_overdue_ill находит выдачи в статусе out с due_at < now и overdue_flagged=false,
+    ставит overdue_flagged=true и публикует inventory.ill_overdue с числом дней просрочки. Подписчик on_ill_overdue
+    вызывает accrue_overdue: создаётся пеня вида overdue в статусе accruing.
+  kind: timer
+  applies_to:
+  - table:inventory.ill_loans
+  - table:inventory.ill_penalties
+  trigger: symbol:services/inventory/jobs.py::flag_overdue_ill
+  effects:
+  - event:inventory.ill_overdue
+  - table:inventory.ill_penalties
+  roles:
+  - system
+  related:
+  - R-INVENTORY-PENALTY-03
+  - R-INVENTORY-PENALTY-05
+  implemented_by:
+  - symbol: services/inventory/jobs.py::flag_overdue_ill
+    lines: 11-33
+    hash: 7a16ed801924
+  - symbol: services/inventory/consumers.py::on_ill_overdue
+    lines: 48-49
+    hash: d80b449a4534
+  tested_by:
+  - tests/test_inventory_ill.py::test_overdue_flag_accrues_penalty
+  - tests/test_inventory_ill.py::test_penalty_is_capped
+  discrepancy: >
+    В репозитории не найден планировщик, запускающий эту задачу: она вызывается только из тестов.
+  status: draft
+- id: R-INVENTORY-PENALTY-03
+  title: Пени по невозвращённым выдачам ежедневно пересчитываются
+  text: >
+    Фоновая задача accrue_ill_penalties пересчитывает пени по выдачам в статусе out, у которых уже есть
+    пеня overdue в статусе accruing (то есть после пометки flag_overdue_ill). Дни просрочки считаются
+    на текущий момент через days_late. Если пени уже final или paid, accrue_overdue их не меняет.
+  kind: timer
+  applies_to:
+  - table:inventory.ill_penalties
+  trigger: symbol:services/inventory/jobs.py::accrue_ill_penalties
+  effects:
+  - table:inventory.ill_penalties
+  - event:inventory.ill_penalty_accrued
+  roles:
+  - system
+  related:
+  - R-INVENTORY-PENALTY-02
+  - R-INVENTORY-PENALTY-05
+  implemented_by:
+  - symbol: services/inventory/jobs.py::accrue_ill_penalties
+    lines: 36-47
+    hash: c024b1aa6874
+  - symbol: services/inventory/service.py::accrue_overdue
+    lines: 472-474
+    hash: fa8d303c47d9
+  tested_by:
+  - tests/test_inventory_ill.py::test_overdue_flag_accrues_penalty
+  discrepancy: >
+    В докстринге задача названа ежедневной, но расписание в коде не задано и планировщик в репозитории
+    не найден.
+  status: draft
+- id: R-INVENTORY-PENALTY-04
+  title: Пени за просрочку — дневная ставка партнёра × дни, не более ILL_PENALTY_MAX_DAYS
+  text: >
+    accrue_overdue ставит days = min(дни просрочки, ILL_PENALTY_MAX_DAYS (90)) и amount = daily_penalty
+    партнёра × days. Пеня создаётся по выдаче один раз на каждый вид (уникальный ключ ill_penalties_ill_loan_id_kind_key).
+    После каждого начисления публикуется inventory.ill_penalty_accrued.
+  kind: calculation
+  applies_to:
+  - table:inventory.ill_penalties
+  trigger: symbol:services/inventory/service.py::accrue_overdue
+  effects:
+  - event:inventory.ill_penalty_accrued
+  roles:
+  - system
+  related:
+  - R-INVENTORY-PENALTY-01
+  - R-INVENTORY-PARTNER-02
+  implemented_by:
+  - symbol: services/inventory/service.py::accrue_overdue
+    lines: 472-485
+    hash: fa8d303c47d9
+  - symbol: services/inventory/service.py::_penalty
+    lines: 447-464
+    hash: 13b057df9dc3
+  enforced_by_db:
+  - constraint: ill_penalties_ill_loan_id_kind_key
+    hash: b7ed31c34d94
+  - constraint: ill_penalties_amount_check
+    hash: c3e811a7ab5f
+  - constraint: ill_penalties_days_check
+    hash: fc5b854e7b40
+  - constraint: ill_penalties_kind_check
+    hash: 894439ac6bf7
+  - constraint: partner_libraries_daily_penalty_check
+    hash: b61061ab2532
+  config:
+  - services/inventory/settings.py::ILL_PENALTY_MAX_DAYS
+  tested_by:
+  - tests/test_inventory_ill.py::test_penalty_is_capped
+  - tests/test_inventory_ill.py::test_overdue_flag_accrues_penalty
+  status: draft
+- id: R-INVENTORY-PENALTY-05
+  title: Поздний возврат фиксирует итоговые пени даже без фоновой задачи
+  text: >
+    Подписчик on_ill_returned считает дни просрочки между due_at и returned_at из события. Если они есть,
+    вызывает accrue_overdue с final=True: пеня создаётся, если её ещё не было, пересчитывается на дату
+    возврата и получает статус final. Своевременный возврат пеней не создаёт.
+  kind: effect
+  applies_to:
+  - table:inventory.ill_penalties
+  trigger: event:inventory.ill_returned
+  effects:
+  - table:inventory.ill_penalties
+  - event:inventory.ill_penalty_accrued
+  roles:
+  - system
+  related:
+  - R-INVENTORY-PENALTY-04
+  - R-INVENTORY-ILL-06
+  implemented_by:
+  - symbol: services/inventory/consumers.py::on_ill_returned
+    lines: 52-58
+    hash: f456ebabffe3
+  tested_by:
+  - tests/test_inventory_ill.py::test_late_return_finalizes_penalty
+  - tests/test_inventory_ill.py::test_late_return_before_job_still_charges
+  - tests/test_inventory_ill.py::test_timely_return_has_no_penalty
+  status: draft
+- id: R-INVENTORY-PENALTY-06
+  title: При утере партнёром пени за просрочку замораживаются на последнем начислении
+  text: >
+    charge_lost_copy переводит существующую пеню overdue из accruing в final без пересчёта. Сумма остаётся
+    такой, какой её посчитал последний запуск задачи. Компенсация за утерю начисляется отдельной пеней
+    вида lost.
+  kind: effect
+  applies_to:
+  - table:inventory.ill_penalties
+  trigger: symbol:services/inventory/service.py::charge_lost_copy
+  effects:
+  - table:inventory.ill_penalties
+  roles:
+  - system
+  related:
+  - R-INVENTORY-ILL-07
+  implemented_by:
+  - symbol: services/inventory/service.py::charge_lost_copy
+    lines: 491-495
+    hash: 93f66119875b
+  discrepancy: >
+    Если выдача просрочена, но flag_overdue_ill ещё не отработал, пеня за просрочку при утере не начисляется
+    вовсе: on_ill_returned при утере не вызывается, а пени overdue ещё нет.
+  status: draft
+- id: R-INVENTORY-PENALTY-07
+  title: Оплатить можно только итоговые пени
+  text: >
+    settle_penalty отклоняет оплату пеней в статусе accruing («пени ещё начисляются: экземпляр не возвращён»)
+    и уже оплаченных («пени уже оплачены»), в остальных случаях ставит статус paid. CHECK ill_penalties_status_check
+    ограничивает статусы значениями accruing, final, paid.
+  kind: guard
+  applies_to:
+  - table:inventory.ill_penalties
+  trigger: symbol:services/inventory/service.py::settle_penalty
+  effects:
+  - table:inventory.ill_penalties
+  related:
+  - R-INVENTORY-PARTNER-03
+  implemented_by:
+  - symbol: services/inventory/service.py::settle_penalty
+    lines: 516-525
+    hash: 79c695bffd21
+  enforced_by_db:
+  - constraint: ill_penalties_status_check
+    hash: e4d204d4a8cf
+  tested_by:
+  - tests/test_inventory_ill.py::test_settling_debt_resumes_partner
+  discrepancy: >
+    В settle_penalty нет проверки прав и HTTP-маршрута; связи с платежами billing нет, оплата отмечается
+    прямым вызовом.
+  status: draft
+- id: R-INVENTORY-PARTNER-01
+  title: Код библиотеки-партнёра уникален и имеет формат A-Z0-9-
+  text: >
+    register_partner отклоняет уже занятый код («библиотека с кодом … уже зарегистрирована»), в БД это
+    дублирует partner_libraries_code_key. Формат кода (2–16 символов A-Z, 0-9, дефис) проверяет только
+    CHECK partner_libraries_code_check. По умолчанию лимит одновременных выдач max_active_loans=5 задан
+    литералом в сигнатуре функции; CHECK требует, чтобы он был больше 0.
+  kind: invariant
+  applies_to:
+  - table:inventory.partner_libraries
+  trigger: symbol:services/inventory/service.py::register_partner
+  related:
+  - R-INVENTORY-ILL-02
+  implemented_by:
+  - symbol: services/inventory/service.py::register_partner
+    lines: 258-268
+    hash: 6034f2e10b7e
+  enforced_by_db:
+  - constraint: partner_libraries_code_key
+    hash: aa26c8e239e6
+  - constraint: partner_libraries_code_check
+    hash: 1b47914f4e76
+  - constraint: partner_libraries_max_active_loans_check
+    hash: bc3b35704c8c
+  - constraint: partner_libraries_daily_penalty_check
+    hash: b61061ab2532
+  status: draft
+- id: R-INVENTORY-PARTNER-02
+  title: Партнёр приостанавливается, когда долг по пеням превышает лимит
+  text: >
+    На каждое inventory.ill_penalty_accrued подписчик on_penalty_accrued вызывает review_partner_debt.
+    Если партнёр не приостановлен, а сумма неоплаченных пеней (accruing и final) больше ILL_PARTNER_DEBT_LIMIT
+    (1000.00), ставится suspended=true и публикуется inventory.partner_suspended. При настройках по умолчанию
+    любая утеря (компенсация 1500.00) приостанавливает партнёра.
+  kind: effect
+  applies_to:
+  - table:inventory.partner_libraries
+  trigger: event:inventory.ill_penalty_accrued
+  effects:
+  - table:inventory.partner_libraries
+  - event:inventory.partner_suspended
+  roles:
+  - system
+  related:
+  - R-INVENTORY-PARTNER-03
+  - R-INVENTORY-ILL-02
+  implemented_by:
+  - symbol: services/inventory/consumers.py::on_penalty_accrued
+    lines: 61-63
+    hash: b1801faff723
+  - symbol: services/inventory/service.py::review_partner_debt
+    lines: 534-539
+    hash: f1d5ac1ca017
+  config:
+  - services/inventory/settings.py::ILL_PARTNER_DEBT_LIMIT
+  tested_by:
+  - tests/test_inventory_ill.py::test_loss_by_partner_charges_and_suspends
+  discrepancy: >
+    На inventory.partner_suspended нет подписчиков: никого не уведомляют.
+  status: draft
+- id: R-INVENTORY-PARTNER-03
+  title: Оплата пеней возобновляет выдачи, когда долг опускается до лимита
+  text: >
+    После оплаты пеней settle_penalty снимает приостановку (suspended=false) и публикует inventory.partner_resumed,
+    если партнёр был приостановлен и неоплаченный долг теперь не больше ILL_PARTNER_DEBT_LIMIT.
+  kind: effect
+  applies_to:
+  - table:inventory.partner_libraries
+  trigger: symbol:services/inventory/service.py::settle_penalty
+  effects:
+  - table:inventory.partner_libraries
+  - event:inventory.partner_resumed
+  related:
+  - R-INVENTORY-PARTNER-02
+  - R-INVENTORY-PENALTY-07
+  implemented_by:
+  - symbol: services/inventory/service.py::settle_penalty
+    lines: 526-530
+    hash: 79c695bffd21
+  config:
+  - services/inventory/settings.py::ILL_PARTNER_DEBT_LIMIT
+  tested_by:
+  - tests/test_inventory_ill.py::test_settling_debt_resumes_partner
+  discrepancy: >
+    На inventory.partner_resumed нет подписчиков. Приостановка снимается только оплатой, другого пути
+    (например, вручную) нет.
+  status: draft
+- id: R-INVENTORY-WRITEOFF-01
+  title: Утеря или порча на полке ведёт к списанию через событие
+  text: >
+    mark_lost и mark_damaged переводят экземпляр в lost или damaged и публикуют inventory.copy_lost или
+    inventory.copy_damaged. Подписчики on_copy_lost и on_copy_damaged оформляют акт списания с причиной
+    lost/damaged и автором — хранителем. Экземпляр становится written_off и выпадает из остатка.
+  kind: effect
+  applies_to:
+  - table:inventory.copies
+  - table:inventory.write_offs
+  trigger: symbol:services/inventory/service.py::mark_lost
+  effects:
+  - event:inventory.copy_lost
+  - event:inventory.copy_damaged
+  - event:inventory.copy_written_off
+  - table:inventory.write_offs
+  related:
+  - R-INVENTORY-WRITEOFF-02
+  - R-INVENTORY-WRITEOFF-04
+  implemented_by:
+  - symbol: services/inventory/service.py::mark_lost
+    lines: 392-396
+    hash: 771658360dff
+  - symbol: services/inventory/service.py::mark_damaged
+    lines: 399-405
+    hash: 0e7c6153215c
+  - symbol: services/inventory/consumers.py::on_copy_lost
+    lines: 24-29
+    hash: 59c5582bfa47
+  - symbol: services/inventory/consumers.py::on_copy_damaged
+    lines: 35-44
+    hash: df2c703f21f0
+  tested_by:
+  - tests/test_inventory_copies.py::test_lost_copy_is_written_off_and_leaves_stock
+  - tests/test_inventory_copies.py::test_damaged_copy_is_written_off
+  status: draft
+- id: R-INVENTORY-WRITEOFF-02
+  title: Утеря, порча и списание по ветхости — только для экземпляра на полке
+  text: >
+    Экземпляр должен быть доступен на площадке и без открытого перемещения. Выданный по МБА — «экземпляр
+    выдан по МБА, оформите утерю или возврат по выдаче». В другом состоянии, кроме available, — «экземпляр
+    уже выбыл из фонда или находится в пути». С открытым перемещением — «по экземпляру оформлено перемещение».
+  kind: guard
+  applies_to:
+  - table:inventory.copies
+  trigger: symbol:services/inventory/service.py::_on_shelf
+  related:
+  - R-INVENTORY-WRITEOFF-01
+  - R-INVENTORY-ILL-07
+  implemented_by:
+  - symbol: services/inventory/service.py::_on_shelf
+    lines: 380-389
+    hash: a8234e0c1689
+  - symbol: services/inventory/service.py::write_off_worn
+    lines: 411-412
+    hash: 996289c43d82
+  tested_by:
+  - tests/test_inventory_copies.py::test_worn_out_write_off_by_custodian_only
+  status: draft
+- id: R-INVENTORY-WRITEOFF-03
+  title: Списанный экземпляр нельзя изменить (триггер БД)
+  text: >
+    Триггер trg_copies_written_off_final (функция forbid_written_off_change) отклоняет любое UPDATE строки
+    inventory.copies, если её текущее состояние written_off. Списание необратимо и на уровне БД.
+  kind: invariant
+  applies_to:
+  - table:inventory.copies
+  trigger: table:inventory.copies
+  related:
+  - R-INVENTORY-WRITEOFF-04
+  implemented_by:
+  - symbol: services/inventory/service.py::write_off
+    lines: 438-438
+    hash: 870f8f01ff4c
+  enforced_by_db:
+  - constraint: trg_copies_written_off_final
+    hash: 3308f91d94dc
+  - constraint: forbid_written_off_change
+    hash: 81ba9d70ef4f
+  tested_by:
+  - tests/test_inventory_copies.py::test_written_off_copy_cannot_be_changed
+  status: draft
+- id: R-INVENTORY-WRITEOFF-04
+  title: Один акт списания на экземпляр с номером СП-год-id
+  text: >
+    write_off идемпотентен: если по экземпляру уже есть акт, возвращается он, и новый не создаётся. Номер
+    акта собирается как «СП-<год>-<id экземпляра, 6 цифр>». Причина — lost, damaged или worn_out. После
+    списания экземпляр получает written_off, публикуется inventory.copy_written_off. В БД: уникальные
+    write_offs_copy_id_key и write_offs_act_no_key, CHECK write_offs_reason_check.
+  kind: invariant
+  applies_to:
+  - table:inventory.write_offs
+  trigger: symbol:services/inventory/service.py::write_off
+  effects:
+  - event:inventory.copy_written_off
+  - table:inventory.stock_levels
+  related:
+  - R-INVENTORY-WRITEOFF-03
+  implemented_by:
+  - symbol: services/inventory/service.py::write_off
+    lines: 424-440
+    hash: 870f8f01ff4c
+  enforced_by_db:
+  - constraint: write_offs_copy_id_key
+    hash: 5682e5a01bd2
+  - constraint: write_offs_act_no_key
+    hash: 1885bb8f2579
+  - constraint: write_offs_reason_check
+    hash: 181c8351b0fb
+  tested_by:
+  - tests/test_inventory_copies.py::test_lost_copy_is_written_off_and_leaves_stock
+  - tests/test_inventory_copies.py::test_worn_out_write_off_by_custodian_only
+  - tests/test_inventory_ill.py::test_damaged_on_return_is_written_off
+  status: draft

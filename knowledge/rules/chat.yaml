@@ -1,0 +1,590 @@
+# Правила модуля chat: извлечены LLM (tools/knowledge/bootstrap_rules.sh) из кода и среза графа.
+# Статус verified ставит только человек. Хэши обновляет tools/knowledge/drift.py --write.
+rules:
+- id: R-CHAT-PARTICIPANTS-01
+  title: Участники чата — оператор, проверяющий оператор, проверяющий и бухгалтер заявки
+  text: >
+    Участники чата заявки определяются в момент запроса. Это оператор и проверяющий оператор заявки (поля
+    operator_id и site_checker_id из applications.get_brief), проверяющий, если он уже назначен (reviewer_id
+    не пуст), и бухгалтер, закреплённый за заявкой в billing (billing.accountant_of). Этот набор используется
+    и для записи в чат, и для чтения.
+  kind: permission
+  applies_to:
+  - table:chat.messages
+  trigger: symbol:services/chat/service.py::participants
+  roles:
+  - operator
+  - site_checker
+  - reviewer
+  - accountant
+  related:
+  - R-CHAT-POST-02
+  - R-CHAT-READ-02
+  - R-CHAT-PARTICIPANTS-02
+  implemented_by:
+  - symbol: services/chat/service.py::participants
+    lines: 15-22
+    hash: bb500ee14bc3
+  tested_by:
+  - tests/test_chat_api.py::test_operator_posts_and_reads
+  - tests/test_chat_api.py::test_outsider_cannot_post
+  schema_ref: §15 Чат заявки
+  status: draft
+- id: R-CHAT-PARTICIPANTS-02
+  title: Доступ к чату следует за текущим закреплением сотрудника
+  text: >
+    Участников не хранят отдельно: при каждом обращении их заново собирают по текущим значениям в заявке
+    и в billing. Если бухгалтер забрал заявку у коллеги или проверяющего переназначили, прежний сотрудник
+    сразу теряет право писать и читать чат. Проверяющий, который ещё не назначен, доступа к чату не имеет.
+  kind: permission
+  applies_to:
+  - table:chat.messages
+  trigger: symbol:services/chat/service.py::participants
+  roles:
+  - accountant
+  - reviewer
+  related:
+  - R-CHAT-PARTICIPANTS-01
+  implemented_by:
+  - symbol: services/chat/service.py::participants
+    lines: 16-21
+    hash: bb500ee14bc3
+  schema_ref: §15 Чат заявки
+  status: draft
+- id: R-CHAT-POST-01
+  title: После закрытия заявки писать в чат нельзя
+  text: >
+    Если заявка на этапе closed или closed_duplicate, post_message отклоняет сообщение с ошибкой DomainError
+    «после закрытия заявки чат доступен только для чтения». Эта проверка выполняется раньше проверки участника.
+    Этап archived закрытием не считается, и в архивной заявке писать можно.
+  kind: guard
+  applies_to:
+  - stage:closed
+  - stage:closed_duplicate
+  trigger: symbol:services/chat/service.py::post_message
+  roles:
+  - operator
+  - site_checker
+  - reviewer
+  - accountant
+  related:
+  - R-CHAT-EVENTS-05
+  implemented_by:
+  - symbol: services/chat/service.py::post_message
+    lines: 26-28
+    hash: 201ddba10869
+  schema_ref: §15 Чат заявки
+  status: verified
+  verified_at: '2026-10-23'
+- id: R-CHAT-POST-02
+  title: Писать в чат могут только закреплённые за заявкой сотрудники
+  text: >
+    post_message пропускает сообщение, только если author_id входит в участники заявки. В остальных случаях
+    — AccessDenied «писать в чат могут только закреплённые за заявкой сотрудники» (HTTP 403). Поэтому
+    администратор, главный бухгалтер, руководитель проверяющих, а также клиент и представитель писать
+    в чат не могут.
+  kind: permission
+  applies_to:
+  - table:chat.messages
+  trigger: symbol:services/chat/service.py::post_message
+  effects:
+  - 'writes: table:chat.messages'
+  roles:
+  - operator
+  - site_checker
+  - reviewer
+  - accountant
+  related:
+  - R-CHAT-PARTICIPANTS-01
+  - R-CHAT-AUTH-01
+  implemented_by:
+  - symbol: services/chat/service.py::post_message
+    lines: 29-30
+    hash: 201ddba10869
+  - symbol: services/chat/api.py::post
+    lines: 39-41
+    hash: ecd0dec2ae00
+  tested_by:
+  - tests/test_chat_api.py::test_outsider_cannot_post
+  - tests/test_chat_api.py::test_operator_posts_and_reads
+  schema_ref: '§17 Сводная таблица: кто что может'
+  status: draft
+- id: R-CHAT-POST-03
+  title: Сообщение сотрудника записывается как обычное, с автором и временем
+  text: >
+    Сообщение сотрудника сохраняется в chat.messages с is_event=false, указанным author_id и created_at=clock.now().
+    API возвращает 201 и созданное сообщение.
+  kind: effect
+  applies_to:
+  - table:chat.messages
+  trigger: symbol:services/chat/api.py::post
+  effects:
+  - 'writes: table:chat.messages'
+  roles:
+  - operator
+  - site_checker
+  - reviewer
+  - accountant
+  related:
+  - R-CHAT-DB-01
+  implemented_by:
+  - symbol: services/chat/service.py::post_message
+    lines: 31-36
+    hash: 201ddba10869
+  enforced_by_db:
+  - constraint: messages_check
+    hash: e20257837c74
+  tested_by:
+  - tests/test_chat_api.py::test_operator_posts_and_reads
+  schema_ref: §15 Чат заявки
+  discrepancy: >
+    Схема: к сообщениям можно прикреплять файлы. Код: у сообщения есть только текст (body), поддержки
+    вложений нет ни в модели, ни в API.
+  status: draft
+- id: R-CHAT-READ-01
+  title: Главный бухгалтер и руководитель проверяющих не видят чат
+  text: >
+    list_messages сразу отклоняет роли из NO_CHAT_ROLES (chief_accountant, reviewer_lead) с ошибкой AccessDenied
+    «эта роль не видит чат заявки» (HTTP 403). Проверка выполняется раньше проверки участника, поэтому
+    запрет действует, даже если id сотрудника совпадает с одним из участников.
+  kind: permission
+  applies_to:
+  - table:chat.messages
+  trigger: symbol:services/chat/api.py::list_
+  roles:
+  - chief_accountant
+  - reviewer_lead
+  related:
+  - R-CHAT-CONFIG-01
+  - R-CHAT-READ-02
+  implemented_by:
+  - symbol: services/chat/service.py::list_messages
+    lines: 51-52
+    hash: cdd465085f6e
+  config:
+  - services/chat/service.py::NO_CHAT_ROLES
+  tested_by:
+  - tests/test_chat_api.py::test_admin_reads_chief_accountant_does_not
+  schema_ref: §15 Чат заявки
+  status: draft
+- id: R-CHAT-READ-02
+  title: Чат видят участники заявки и администратор
+  text: >
+    Читать чат может роль admin (по любой заявке, проверки участника нет) или сотрудник, чей viewer_id
+    входит в участники заявки. Остальным — AccessDenied «чат видят только закреплённые сотрудники и администратор».
+    Клиент и представитель в чат не попадают, потому что их нет среди участников.
+  kind: permission
+  applies_to:
+  - table:chat.messages
+  trigger: symbol:services/chat/api.py::list_
+  effects:
+  - 'reads: table:chat.messages'
+  roles:
+  - admin
+  - operator
+  - site_checker
+  - reviewer
+  - accountant
+  related:
+  - R-CHAT-PARTICIPANTS-01
+  - R-CHAT-READ-01
+  - R-CHAT-AUTH-01
+  implemented_by:
+  - symbol: services/chat/service.py::list_messages
+    lines: 53-54
+    hash: cdd465085f6e
+  - symbol: services/chat/api.py::list_
+    lines: 34-36
+    hash: 2389c489fff6
+  tested_by:
+  - tests/test_chat_api.py::test_admin_reads_chief_accountant_does_not
+  - tests/test_chat_api.py::test_operator_posts_and_reads
+  - tests/test_chat_api.py::test_stage_changes_appear_in_chat
+  schema_ref: §15 Чат заявки
+  status: draft
+- id: R-CHAT-READ-03
+  title: Один чат на заявку, общий для всех попыток, в порядке создания
+  text: >
+    Сообщения привязаны только к application_id, отдельной сущности «чат» и привязки к попытке нет. list_messages
+    возвращает все сообщения заявки, и сотрудников, и событий, в порядке id. История сохраняется при уходе
+    в архив и возврате из него.
+  kind: invariant
+  applies_to:
+  - table:chat.messages
+  trigger: symbol:services/chat/service.py::list_messages
+  effects:
+  - 'reads: table:chat.messages'
+  related:
+  - R-CHAT-READ-02
+  implemented_by:
+  - symbol: services/chat/service.py::list_messages
+    lines: 55-58
+    hash: cdd465085f6e
+  tested_by:
+  - tests/test_chat_api.py::test_operator_posts_and_reads
+  schema_ref: §15 Чат заявки
+  status: draft
+- id: R-CHAT-READ-04
+  title: Администратор чат только читает
+  text: >
+    Роль admin обходит проверку участника только при чтении (list_messages). Записи в чат это не касается:
+    администратора нет среди участников, поэтому post_message от его имени отклоняется с AccessDenied.
+  kind: permission
+  applies_to:
+  - table:chat.messages
+  trigger: symbol:services/chat/service.py::post_message
+  roles:
+  - admin
+  related:
+  - R-CHAT-READ-02
+  - R-CHAT-POST-02
+  implemented_by:
+  - symbol: services/chat/service.py::list_messages
+    lines: 53-54
+    hash: cdd465085f6e
+  - symbol: services/chat/service.py::post_message
+    lines: 29-30
+    hash: 201ddba10869
+  tested_by:
+  - tests/test_chat_api.py::test_admin_reads_chief_accountant_does_not
+  schema_ref: §3 Администратор
+  status: draft
+- id: R-CHAT-AUTH-01
+  title: Личность и роль в API чата берутся из параметров запроса без проверки
+  text: >
+    GET принимает viewer_id и role как query-параметры, POST принимает author_id в теле. Сервис чата не
+    сверяет их с аутентифицированным пользователем и с реальной ролью сотрудника: проверки прав в list_messages
+    и post_message доверяют переданным значениям.
+  kind: permission
+  applies_to:
+  - table:chat.messages
+  trigger: symbol:services/chat/api.py::list_
+  related:
+  - R-CHAT-READ-01
+  - R-CHAT-READ-02
+  - R-CHAT-POST-02
+  implemented_by:
+  - symbol: services/chat/api.py::list_
+    lines: 35-36
+    hash: 2389c489fff6
+  - symbol: services/chat/api.py::post
+    lines: 40-41
+    hash: ecd0dec2ae00
+  discrepancy: >
+    Схема: доступ к чату определяется ролью сотрудника и закреплением за заявкой. Код: роль приходит от
+    клиента API — если передать role=admin, проверка участника для чтения отключается.
+  status: draft
+- id: R-CHAT-CONFIG-01
+  title: Список ролей без доступа к чату задан константой NO_CHAT_ROLES
+  text: >
+    Роли, которым запрещено читать чат, заданы константой модуля NO_CHAT_ROLES = ("chief_accountant",
+    "reviewer_lead") в services/chat/service.py, а не в libs/settings.py.
+  kind: config
+  applies_to:
+  - table:chat.messages
+  trigger: symbol:services/chat/service.py::list_messages
+  roles:
+  - chief_accountant
+  - reviewer_lead
+  related:
+  - R-CHAT-READ-01
+  implemented_by:
+  - symbol: services/chat/service.py::NO_CHAT_ROLES
+    lines: 12-12
+    hash: 92e11b3c1306
+  config:
+  - services/chat/service.py::NO_CHAT_ROLES
+  tested_by:
+  - tests/test_chat_api.py::test_admin_reads_chief_accountant_does_not
+  status: draft
+- id: R-CHAT-DB-01
+  title: Сообщение без автора допустимо только для события (CHECK в БД)
+  text: >
+    CHECK messages_check на chat.messages требует is_event OR author_id IS NOT NULL. Сообщение сотрудника
+    обязано иметь автора, автоматическая запись события может быть без автора. В коде это соответствует
+    log_event (author_id=None, is_event=true) и post_message (author_id задан).
+  kind: invariant
+  applies_to:
+  - table:chat.messages
+  trigger: table:chat.messages
+  related:
+  - R-CHAT-POST-03
+  - R-CHAT-EVENTS-01
+  implemented_by:
+  - symbol: services/chat/service.py::log_event
+    lines: 40-42
+    hash: 29ef925f101f
+  - symbol: services/chat/service.py::post_message
+    lines: 31-33
+    hash: 201ddba10869
+  enforced_by_db:
+  - constraint: messages_check
+    hash: e20257837c74
+  status: verified
+  verified_at: '2026-10-23'
+- id: R-CHAT-DB-02
+  title: Сообщения чата нельзя редактировать и удалять (триггер БД)
+  text: >
+    Триггер trg_chat_messages_immutable (BEFORE UPDATE OR DELETE, FOR EACH ROW) вызывает chat.forbid_message_changes,
+    которая бросает исключение «chat messages cannot be edited or deleted» с кодом check_violation. В
+    коде операций редактирования и удаления нет, запрет держится только на БД.
+  kind: invariant
+  applies_to:
+  - table:chat.messages
+  trigger: table:chat.messages
+  enforced_by_db:
+  - constraint: trg_chat_messages_immutable
+    hash: d83d76e532f3
+  - constraint: forbid_message_changes
+    hash: d67e5f27ecc8
+  schema_ref: §15 Чат заявки
+  status: draft
+- id: R-CHAT-EVENTS-01
+  title: 11 топиков из EVENT_TEXT автоматически пишутся в чат системными сообщениями
+  text: >
+    Модуль подписывает обработчик _handler на каждый топик из EVENT_TEXT: при загрузке модуля проходит
+    по словарю и регистрирует обработчик через subscribe. Обработчик подставляет payload события в шаблон
+    (template.format(**payload)) и вызывает log_event: запись в chat.messages с is_event=true, author_id=NULL,
+    application_id из payload. В чат попадают только топики из EVENT_TEXT; например, payment.refunded,
+    payment.fully_paid, books.issued, loan.lost, loan.damaged, application.review_passed, application.ready_for_booking
+    и client.updated туда не пишутся.
+  kind: effect
+  applies_to:
+  - table:chat.messages
+  trigger: symbol:services/chat/consumers.py::_handler
+  effects:
+  - 'writes: table:chat.messages'
+  roles:
+  - system
+  related:
+  - R-CHAT-CONFIG-02
+  - R-CHAT-DB-01
+  implemented_by:
+  - symbol: services/chat/consumers.py::<module>
+    lines: 30-31
+    hash: 6a691004e68b
+  - symbol: services/chat/consumers.py::_handler
+    lines: 23-27
+    hash: f46c9b143853
+  - symbol: services/chat/service.py::log_event
+    lines: 39-45
+    hash: 29ef925f101f
+  enforced_by_db:
+  - constraint: messages_check
+    hash: e20257837c74
+  config:
+  - services/chat/consumers.py::EVENT_TEXT
+  tested_by:
+  - tests/test_chat_api.py::test_stage_changes_appear_in_chat
+  schema_ref: §15 Чат заявки
+  status: verified
+  verified_at: '2026-10-23'
+- id: R-CHAT-CONFIG-02
+  title: Набор событий для чата и их тексты заданы словарём EVENT_TEXT
+  text: >
+    Словарь EVENT_TEXT в services/chat/consumers.py одновременно определяет, на какие топики подписан
+    чат, и текст записи для каждого. Новое событие попадёт в чат, только если добавить его в словарь.
+    Плейсхолдеры шаблона должны совпадать с ключами payload, иначе обработчик упадёт с KeyError.
+  kind: config
+  applies_to:
+  - table:chat.messages
+  trigger: config:services/chat/consumers.py::EVENT_TEXT
+  roles:
+  - system
+  related:
+  - R-CHAT-EVENTS-01
+  - R-CHAT-EVENTS-07
+  implemented_by:
+  - symbol: services/chat/consumers.py::EVENT_TEXT
+    lines: 8-20
+    hash: 5226d3aa3215
+  - symbol: services/chat/consumers.py::_handler
+    lines: 24-25
+    hash: f46c9b143853
+  config:
+  - services/chat/consumers.py::EVENT_TEXT
+  status: draft
+- id: R-CHAT-EVENTS-02
+  title: Каждая смена этапа заявки появляется в чате
+  text: >
+    Слушатель ORM before_flush в applications (_domain_events) публикует application.stage_changed при
+    любом изменении поля stage, в payload передаются from и to. Чат записывает «Этап: {from} → {to}» с
+    кодами этапов, например «Этап: draft → on_review».
+  kind: effect
+  applies_to:
+  - table:chat.messages
+  trigger: event:application.stage_changed
+  effects:
+  - 'writes: table:chat.messages'
+  roles:
+  - system
+  related:
+  - R-CHAT-EVENTS-01
+  implemented_by:
+  - symbol: services/applications/listeners.py::_domain_events
+    lines: 16-22
+    hash: ae1acbff72cf
+  - symbol: services/chat/consumers.py::_handler
+    lines: 24-25
+    hash: f46c9b143853
+  config:
+  - services/chat/consumers.py::EVENT_TEXT
+  tested_by:
+  - tests/test_chat_api.py::test_stage_changes_appear_in_chat
+  schema_ref: §15 Чат заявки
+  status: draft
+- id: R-CHAT-EVENTS-03
+  title: Смена площадки, архив, возврат из архива и закрытие как дубль пишутся в чат
+  text: >
+    Чат обрабатывает события application.venue_changed («Площадка изменена: {old_venue_id} → {new_venue_id}»),
+    application.archived («Заявка ушла в архив ({outcome})»), application.unarchived («Заявка возвращена
+    из архива») и application.closed_duplicate («Заявка закрыта как дубль заявки {winner_id}»). Архив,
+    возврат из архива и закрытие дублем меняют stage, поэтому рядом появляется ещё запись application.stage_changed.
+    Смена площадки (change_venue) этап не меняет, и записи stage_changed рядом с ней нет.
+  kind: effect
+  applies_to:
+  - table:chat.messages
+  trigger: event:application.venue_changed
+  effects:
+  - 'writes: table:chat.messages'
+  roles:
+  - system
+  related:
+  - R-CHAT-EVENTS-02
+  implemented_by:
+  - symbol: services/chat/consumers.py::_handler
+    lines: 24-25
+    hash: f46c9b143853
+  config:
+  - services/chat/consumers.py::EVENT_TEXT
+  schema_ref: §15 Чат заявки
+  status: verified
+  verified_at: '2026-10-23'
+- id: R-CHAT-EVENTS-04
+  title: Выставление и аннулирование счёта и привязка платежа пишутся в чат
+  text: >
+    Подписки на события billing: invoice.issued («Выставлен счёт {invoice_id} на {amount}», и для счёта
+    за книги, и для штрафа), invoice.cancelled («Счёт {invoice_id} аннулирован ({reason})»), payment.linked
+    («Привязан платёж {amount} к счёту {invoice_id}»).
+  kind: effect
+  applies_to:
+  - table:chat.messages
+  trigger: event:invoice.issued
+  effects:
+  - 'writes: table:chat.messages'
+  roles:
+  - system
+  related:
+  - R-CHAT-EVENTS-07
+  implemented_by:
+  - symbol: services/chat/consumers.py::_handler
+    lines: 24-25
+    hash: f46c9b143853
+  config:
+  - services/chat/consumers.py::EVENT_TEXT
+  schema_ref: §15 Чат заявки
+  status: draft
+- id: R-CHAT-EVENTS-05
+  title: События пишутся в чат и после закрытия заявки
+  text: >
+    log_event, в отличие от post_message, не проверяет этап заявки. Системные записи о событиях добавляются
+    и в заявку на этапе closed или closed_duplicate — например, аннулирование счёта по дублю после его
+    закрытия.
+  kind: effect
+  applies_to:
+  - stage:closed
+  - stage:closed_duplicate
+  trigger: symbol:services/chat/service.py::log_event
+  effects:
+  - 'writes: table:chat.messages'
+  roles:
+  - system
+  related:
+  - R-CHAT-POST-01
+  implemented_by:
+  - symbol: services/chat/service.py::log_event
+    lines: 39-45
+    hash: 29ef925f101f
+  status: draft
+- id: R-CHAT-EVENTS-06
+  title: Запись, отмена, перенос и неявка видны в чате как события брони
+  text: >
+    Чат обрабатывает booking.created («Запись на {starts_at}») и booking.cancelled («Запись на {starts_at}
+    отменена ({reason})»). Отдельного события переноса нет: reschedule отменяет запись (reason=cancelled)
+    и создаёт новую, поэтому в чате появляются две записи. Неявка выглядит как отмена с причиной «no_show».
+  kind: effect
+  applies_to:
+  - table:chat.messages
+  trigger: event:booking.cancelled
+  effects:
+  - 'writes: table:chat.messages'
+  roles:
+  - system
+  related:
+  - R-CHAT-EVENTS-01
+  implemented_by:
+  - symbol: services/chat/consumers.py::_handler
+    lines: 24-25
+    hash: f46c9b143853
+  config:
+  - services/chat/consumers.py::EVENT_TEXT
+  schema_ref: §15 Чат заявки
+  discrepancy: >
+    Схема называет перенос и неявку отдельными событиями чата. Код: перенос не отличить от отмены с новой
+    записью, неявка показывается кодом причины «no_show» внутри текста об отмене.
+  status: verified
+  verified_at: '2026-10-23'
+- id: R-CHAT-EVENTS-07
+  title: Часть событий заявки в чат не попадает
+  text: >
+    Топиков payment.fully_paid, payment.refunded, books.issued, loan.damaged, loan.lost, application.review_passed
+    и application.ready_for_booking нет в EVENT_TEXT, поэтому в чат они не пишутся. Выдача книг видна
+    только через смену этапа. Отвязка платежа (unlink_payment) и назначение проверяющего или бухгалтера
+    событий не публикуют и в чате тоже не отражаются.
+  kind: effect
+  applies_to:
+  - table:chat.messages
+  trigger: config:services/chat/consumers.py::EVENT_TEXT
+  roles:
+  - system
+  related:
+  - R-CHAT-CONFIG-02
+  - R-CHAT-EVENTS-04
+  implemented_by:
+  - symbol: services/chat/consumers.py::EVENT_TEXT
+    lines: 8-20
+    hash: 5226d3aa3215
+  config:
+  - services/chat/consumers.py::EVENT_TEXT
+  schema_ref: §15 Чат заявки
+  discrepancy: >
+    Схема: в чат автоматически попадают все события заявки, включая назначения и платежи. Код: назначения,
+    возврат и отвязка платежа, порча и утеря книг в чате не фиксируются.
+  status: draft
+- id: R-CHAT-EVENTS-08
+  title: Срыв срока возврата книги пишется в чат
+  text: >
+    Фоновая задача scheduling flag_overdue отмечает выданные книги (status=out), у которых с issued_at
+    прошло больше 30 дней, и публикует loan.overdue. Чат записывает «Срыв срока возврата книги {book_id}».
+    Срок 30 дней задан литералом timedelta(days=30) в jobs.py, а не настройкой.
+  kind: timer
+  applies_to:
+  - table:chat.messages
+  trigger: event:loan.overdue
+  effects:
+  - 'writes: table:chat.messages'
+  roles:
+  - system
+  related:
+  - R-CHAT-EVENTS-01
+  implemented_by:
+  - symbol: services/scheduling/jobs.py::flag_overdue
+    lines: 11-26
+    hash: 60a1ef28c116
+  - symbol: services/chat/consumers.py::_handler
+    lines: 24-25
+    hash: f46c9b143853
+  config:
+  - services/chat/consumers.py::EVENT_TEXT
+  schema_ref: §15 Чат заявки
+  status: draft

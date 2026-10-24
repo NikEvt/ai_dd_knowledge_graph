@@ -1,0 +1,63 @@
+<!-- Сгенерировано tools/knowledge/render_docs.py. Не править руками: правьте модель и перегенерируйте. -->
+
+# billing.invoices
+Миграция: [`migrations/versions/0001_initial.py:163`](../../migrations/versions/0001_initial.py#L163)
+
+## Поля
+- id: integer NOT NULL PK
+- application_id: integer NOT NULL
+- kind: text NOT NULL
+- fine_id: integer
+- amount: numeric NOT NULL
+- status: text NOT NULL
+- issued_at: timestamp with time zone NOT NULL
+- payment_clock_started_at: timestamp with time zone NOT NULL
+- venue_id: integer NOT NULL
+- requisites: jsonb NOT NULL
+- cancel_reason: text
+
+## Связи (FK)
+- fine_id → billing.fines
+- billing.payments.invoice_id → сюда
+
+## Ограничения и триггеры
+- invoices_amount_check (check на billing.invoices): CHECK ((amount > (0)::numeric)) (migrations/versions/0001_initial.py:168)
+- invoices_check (check на billing.invoices): CHECK (((kind = 'fine'::text) = (fine_id IS NOT NULL))) (migrations/versions/0001_initial.py:175)
+- invoices_kind_check (check на billing.invoices): CHECK ((kind = ANY (ARRAY['books'::text, 'fine'::text]))) (migrations/versions/0001_initial.py:166)
+- invoices_status_check (check на billing.invoices): CHECK ((status = ANY (ARRAY['active'::text, 'cancelled'::text]))) (migrations/versions/0001_initial.py:169)
+- uq_invoices_one_active_books (partial_unique_index на billing.invoices): CREATE UNIQUE INDEX uq_invoices_one_active_books ON billing.invoices USING btree (application_id) WHERE ((kin… (migrations/versions/0001_initial.py:177)
+- trg_invoices_cancel_guard: BEFORE UPDATE OF status ON billing.invoices FOR EACH ROW EXECUTE FUNCTION billing.forbid_cancel_paid_invoice() (migrations/versions/0001_initial.py:212)
+  - forbid_cancel_paid_invoice(): 'invoice % has a linked payment'
+
+## ORM
+- services/billing/models.py::Invoice:35 (orm_model)
+
+## Пишут (код)
+- services/billing/consumers.py::on_unarchived [payment_clock_started_at]
+- services/billing/service.py::cancel_invoice [cancel_reason, status]
+- services/billing/service.py::issue_books_invoice
+- services/billing/service.py::issue_fine_invoice
+
+## Правила
+- R-APP-ADMIN-02 [verified] Реквизиты площадки задаёт администратор; без них счёт не выставить
+- R-APP-CALC-01 [draft] Стоимость книг заявки — сумма цен прайса текущей площадки, надбавку берёт billing у представителя
+- R-APP-UNARCHIVE-03 [draft] После возврата из архива счёт аннулируется при изменении суммы, иначе срок оплаты отсчитывается заново
+
+- R-BILL-ASSIGN-03 [draft] Счёт выставляет только бухгалтер, закреплённый за заявкой
+- R-BILL-CANCEL-01 [verified] Счёт с привязанным платежом аннулировать нельзя
+- R-BILL-CANCEL-02 [draft] Аннулирование уже аннулированного счёта ничего не делает
+- R-BILL-CANCEL-03 [draft] Аннулирование счёта за книги возвращает заявку в «Ожидает счёта»
+- R-BILL-DUPLICATE-01 [draft] Закрытие заявки как дубля аннулирует все её неоплаченные счета
+- R-BILL-FINE-INVOICE-01 [draft] Счёт на штраф выставляет закреплённый бухгалтер на реквизиты площадки
+- R-BILL-FINE-INVOICE-02 [draft] По заявке в долг счёт на штраф не выставляется
+- R-BILL-INVOICE-01 [draft] Счёт за книги выставляется только по платной заявке
+- R-BILL-INVOICE-02 [draft] Счёт за книги выставляется только на этапе «Ожидает счёта»
+- R-BILL-INVOICE-03 [draft] Без реквизитов организации площадки счёт не выставить
+- R-BILL-INVOICE-04 [draft] Сумма счёта за книги = цена по прайсу площадки + надбавка представителя
+- R-BILL-INVOICE-05 [draft] Счёт сохраняет площадку и снимок её реквизитов
+- R-BILL-INVOICE-06 [draft] У заявки не больше одного действующего счёта за книги
+- R-BILL-INVOICE-07 [draft] Вид счёта — books или fine; счёт на штраф ссылается на штраф
+- R-BILL-INVOICE-08 [verified] Выставление счёта за книги переводит заявку в «Ожидает оплаты»
+- R-BILL-PAYMENT-02 [draft] Оплаченная сумма — сумма действующих платежей без отвязанных и возвращённых
+- R-BILL-UNARCHIVE-01 [draft] При возврате из архива счёт аннулируется, только если сумма изменилась
+- R-BILL-VENUE-CHANGE-01 [draft] Смена площадки аннулирует неоплаченный счёт за книги

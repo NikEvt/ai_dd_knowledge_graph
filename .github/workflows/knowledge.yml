@@ -1,0 +1,117 @@
+name: knowledge
+
+# Модель знаний на каждый PR: пересборка слоёв БД и кода -> diff графа -> drift, покрытие, @rule ->
+# документация актуальна. Раз в неделю — отчёт о suspect-правилах старше двух недель.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+env:
+  DB_PORT: "55432"
+  REDIS_PORT: "56379"
+
+jobs:
+  model:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: erp
+          POSTGRES_PASSWORD: erp
+          POSTGRES_DB: erp
+        ports: ["55432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U erp" --health-interval 2s --health-timeout 5s --health-retries 30
+      redis:
+        image: redis:7
+        ports: ["56379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync
+
+      - name: Base revision
+        id: base
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "args=--base origin/${{ github.base_ref }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Пересборка слоёв (БД после alembic upgrade head, код, события, процесс) и индекса
+        run: uv run python tools/knowledge/build_index.py --all
+
+      - name: Diff графа
+        if: github.event_name == 'pull_request'
+        run: |
+          {
+            echo "## Diff модели знаний относительно ${{ github.base_ref }}"
+            echo '```'
+            git diff --stat "origin/${{ github.base_ref }}" -- knowledge/ || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Модель в PR совпадает с кодом и миграциями
+        run: |
+          git diff --exit-code -- knowledge/model \
+            || { echo "::error::модель устарела: uv run python tools/knowledge/build_index.py --all и закоммитить knowledge/model"; exit 1; }
+
+      - name: Drift (suspect), новые ограничения БД без правил, покрытие
+        run: uv run python tools/knowledge/drift.py --skip-model-check ${{ steps.base.outputs.args }}
+
+      - name: Правила и аннотации @rule
+        run: uv run python tools/knowledge/check_rules.py ${{ steps.base.outputs.args }}
+
+      - name: Документация сгенерирована из модели
+        run: |
+          uv run python tools/knowledge/render_docs.py
+          git diff --exit-code -- docs AGENTS.md \
+            || { echo "::error::docs/ устарели: uv run python tools/knowledge/render_docs.py"; exit 1; }
+
+  tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: erp
+          POSTGRES_PASSWORD: erp
+          POSTGRES_DB: erp
+        ports: ["55432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U erp" --health-interval 2s --health-timeout 5s --health-retries 30
+      redis:
+        image: redis:7
+        ports: ["56379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run pytest
+
+  stale-suspects:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync
+      - name: suspect старше двух недель -> задача на разбор
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          uv run python tools/knowledge/drift.py --skip-model-check 2> drift.log || true
+          if grep -q "suspect дольше" drift.log; then
+            grep "suspect дольше" drift.log | sed 's/^::warning:://' > body.md
+            gh issue create --title "Модель знаний: suspect-правила старше двух недель" --body-file body.md
+          fi

@@ -1,0 +1,542 @@
+# Правила модуля notifications: извлечены LLM (tools/knowledge/bootstrap_rules.sh) из кода и среза графа.
+# Статус verified ставит только человек. Хэши обновляет tools/knowledge/drift.py --write.
+rules:
+- id: R-NOTIF-BOOKING-01
+  title: При записи на визит отправляется письмо о записи
+  text: >
+    Подписчик notifications на событие booking.created (его публикует scheduling при записи по ссылке,
+    записи оператором и при второй половине переноса) создаёт письмо типа booking. Площадка для поиска
+    шаблона берётся из payload события, в контекст подстановки передаётся только starts_at.
+  kind: effect
+  trigger: event:booking.created
+  effects:
+  - table:notifications.emails
+  - symbol:services/notifications/service.py::send
+  roles:
+  - client
+  - representative
+  - operator
+  related:
+  - R-NOTIF-RECIPIENTS-01
+  - R-NOTIF-TEMPLATE-01
+  - R-NOTIF-RENDER-01
+  implemented_by:
+  - symbol: services/notifications/consumers.py::on_booking_created
+    lines: 9-17
+    hash: b765a21d3fc7
+  - symbol: services/notifications/service.py::send
+    lines: 42-58
+    hash: 49ccca1187a7
+  tested_by:
+  - tests/test_notifications.py::test_booking_email_goes_to_client_and_representative
+  - tests/test_notifications.py::test_social_uses_social_templates
+  schema_ref: §13 Запись на визит и письма
+  status: draft
+- id: R-NOTIF-CANCEL-01
+  title: Любая отмена записи даёт письмо об отмене
+  text: >
+    Подписчик notifications на booking.cancelled создаёт письмо типа cancel. Событие публикуется при каждой
+    отмене действующей записи: отмена клиентом, представителем или оператором, неявка (no_show), удаление
+    окна (slot_removed), смена площадки (venue_changed), архивирование (archived), дубль (duplicate).
+    Причину модуль не различает: на все случаи уходит одно и то же письмо об отмене.
+  kind: effect
+  trigger: event:booking.cancelled
+  effects:
+  - table:notifications.emails
+  - symbol:services/notifications/service.py::send
+  roles:
+  - client
+  - representative
+  - operator
+  - site_checker
+  - system
+  related:
+  - R-NOTIF-RENDER-02
+  - R-NOTIF-NOSHOW-01
+  - R-NOTIF-RESET-01
+  - R-NOTIF-SLOT-01
+  implemented_by:
+  - symbol: services/notifications/consumers.py::on_booking_cancelled
+    lines: 20-28
+    hash: 9cb13a16e669
+  - symbol: services/notifications/service.py::send
+    lines: 42-58
+    hash: 49ccca1187a7
+  tested_by:
+  - tests/test_notifications.py::test_reschedule_sends_cancel_and_booking
+  schema_ref: §13 Запись на визит и письма
+  status: draft
+- id: R-NOTIF-RESCHEDULE-01
+  title: Перенос даёт письмо об отмене и письмо о новой записи
+  text: >
+    Отдельного письма о переносе нет. Перенос в scheduling — это отмена записи (booking.cancelled) и новая
+    запись (booking.created), поэтому по нему уходят два письма: cancel, затем booking.
+  kind: effect
+  trigger: event:booking.cancelled
+  effects:
+  - event:booking.created
+  - table:notifications.emails
+  roles:
+  - client
+  - representative
+  - operator
+  related:
+  - R-NOTIF-BOOKING-01
+  - R-NOTIF-CANCEL-01
+  implemented_by:
+  - symbol: services/notifications/consumers.py::on_booking_cancelled
+    lines: 20-28
+    hash: 9cb13a16e669
+  - symbol: services/notifications/consumers.py::on_booking_created
+    lines: 9-17
+    hash: b765a21d3fc7
+  tested_by:
+  - tests/test_notifications.py::test_reschedule_sends_cancel_and_booking
+  schema_ref: §13 Запись на визит и письма
+  status: draft
+- id: R-NOTIF-NOSHOW-01
+  title: Неявка отправляет письмо об отмене
+  text: >
+    Когда проверяющий оператор отмечает неявку, scheduling отменяет запись с reason=no_show и публикует
+    booking.cancelled. Notifications отправляет на него обычное письмо об отмене, а не отдельный тип письма.
+  kind: effect
+  trigger: event:booking.cancelled
+  effects:
+  - table:notifications.emails
+  roles:
+  - site_checker
+  related:
+  - R-NOTIF-CANCEL-01
+  - R-NOTIF-RENDER-02
+  implemented_by:
+  - symbol: services/notifications/consumers.py::on_booking_cancelled
+    lines: 20-28
+    hash: 9cb13a16e669
+  schema_ref: §13 Запись на визит и письма
+  status: verified
+  verified_at: '2026-10-23'
+- id: R-NOTIF-SLOT-01
+  title: Удаление окна с записями рассылает письма об отмене
+  text: >
+    Когда проверяющий оператор удаляет окно расписания, каждая действующая запись в нём отменяется с reason=slot_removed,
+    и каждый записанный клиент со своим представителем получает письмо об отмене.
+  kind: effect
+  trigger: event:booking.cancelled
+  effects:
+  - table:notifications.emails
+  roles:
+  - site_checker
+  related:
+  - R-NOTIF-CANCEL-01
+  implemented_by:
+  - symbol: services/notifications/consumers.py::on_booking_cancelled
+    lines: 20-28
+    hash: 9cb13a16e669
+  schema_ref: §12 Расписание площадок
+  status: verified
+  verified_at: '2026-10-23'
+- id: R-NOTIF-RESET-01
+  title: Архивирование, дубль и смена площадки отправляют письмо об отмене
+  text: >
+    При архивировании заявки, признании её дублем и смене площадки scheduling сбрасывает действующие записи
+    (reset_bookings с reason archived, duplicate или venue_changed). На каждую отменённую запись notifications
+    отправляет письмо об отмене. Сам метод send этап заявки не проверяет. То, что по заявке в архиве письма
+    потом не идут, держится только на том, что scheduling гасит ссылку на запись.
+  kind: effect
+  trigger: event:booking.cancelled
+  effects:
+  - table:notifications.emails
+  roles:
+  - operator
+  - system
+  related:
+  - R-NOTIF-CANCEL-01
+  implemented_by:
+  - symbol: services/notifications/consumers.py::on_booking_cancelled
+    lines: 20-28
+    hash: 9cb13a16e669
+  - symbol: services/notifications/service.py::send
+    lines: 42-58
+    hash: 49ccca1187a7
+  schema_ref: §5 Архив и попытки
+  discrepancy: >
+    Схема (§5): пока заявка в архиве, письма не отправляются. Код: в момент архивирования письмо об отмене
+    всё-таки уходит. В send нет проверки этапа и архивного статуса, поэтому любое событие booking.* по
+    заявке в архиве тоже приведёт к письму.
+  status: verified
+  verified_at: '2026-10-23'
+- id: R-NOTIF-RECIPIENTS-01
+  title: Письма получают только клиент и представитель
+  text: >
+    Получатели письма — email клиента и email представителя заявки, именно в этом порядке. Список берётся
+    из applications.public.recipients в момент отправки и сохраняется в письме. Сотрудники писем не получают.
+  kind: invariant
+  trigger: symbol:services/notifications/service.py::send
+  effects:
+  - table:notifications.emails
+  roles:
+  - client
+  - representative
+  related:
+  - R-NOTIF-CHAT-01
+  implemented_by:
+  - symbol: services/notifications/service.py::send
+    lines: 49-49
+    hash: 49ccca1187a7
+  - symbol: services/applications/public.py::recipients
+    lines: 83-90
+    hash: 7e834c395ef9
+  tested_by:
+  - tests/test_notifications.py::test_booking_email_goes_to_client_and_representative
+  schema_ref: §13 Запись на визит и письма
+  status: draft
+- id: R-NOTIF-CHAT-01
+  title: События записи параллельно попадают в чат заявки
+  text: >
+    У booking.created и booking.cancelled два подписчика: notifications (письмо) и chat (consumers.py::_handler
+    пишет в чат заявки «Запись на {starts_at}» или «Запись на {starts_at} отменена ({reason})»). Так сотрудники
+    узнают о событиях записи, не получая писем.
+  kind: effect
+  trigger: event:booking.created
+  effects:
+  - event:booking.cancelled
+  - symbol:services/chat/consumers.py::_handler
+  roles:
+  - system
+  related:
+  - R-NOTIF-RECIPIENTS-01
+  implemented_by:
+  - symbol: services/notifications/consumers.py::on_booking_created
+    lines: 9-17
+    hash: b765a21d3fc7
+  - symbol: services/notifications/consumers.py::on_booking_cancelled
+    lines: 20-28
+    hash: 9cb13a16e669
+  schema_ref: §13 Запись на визит и письма
+  status: draft
+- id: R-NOTIF-TEMPLATE-01
+  title: Шаблон выбирается по площадке, группе вида заявки и типу письма
+  text: >
+    find_template ищет шаблон по тройке (venue_id из события, группа вида заявки через TEMPLATE_GROUP,
+    тип письма booking или cancel). Вид заявки берётся из get_brief на момент отправки.
+  kind: guard
+  trigger: symbol:services/notifications/service.py::send
+  effects:
+  - table:notifications.templates
+  roles:
+  - system
+  related:
+  - R-NOTIF-TEMPLATE-02
+  - R-NOTIF-TEMPLATE-04
+  - R-NOTIF-MISSING-01
+  implemented_by:
+  - symbol: services/notifications/service.py::find_template
+    lines: 32-39
+    hash: 57f0666eac23
+  - symbol: services/notifications/service.py::send
+    lines: 45-46
+    hash: 49ccca1187a7
+  config:
+  - services/notifications/config.py::TEMPLATE_GROUP
+  tested_by:
+  - tests/test_notifications.py::test_booking_email_goes_to_client_and_representative
+  - tests/test_notifications.py::test_social_uses_social_templates
+  schema_ref: §13 Запись на визит и письма
+  status: draft
+- id: R-NOTIF-TEMPLATE-02
+  title: Заявки в долг используют шаблоны платных заявок
+  text: >
+    TEMPLATE_GROUP сопоставляет вид заявки группе шаблонов: paid→paid, debt→paid, social→social. Для заявок
+    в долг отдельных шаблонов нет, берутся шаблоны платных.
+  kind: config
+  applies_to:
+  - application.kind=debt
+  trigger: symbol:services/notifications/service.py::find_template
+  effects:
+  - config:services/notifications/config.py::TEMPLATE_GROUP
+  roles:
+  - system
+  related:
+  - R-NOTIF-TEMPLATE-01
+  - R-NOTIF-TEMPLATE-03
+  implemented_by:
+  - symbol: services/notifications/config.py::TEMPLATE_GROUP
+    lines: 2-6
+    hash: 49661d5548de
+  - symbol: services/notifications/service.py::find_template
+    lines: 36-36
+    hash: 57f0666eac23
+  config:
+  - services/notifications/config.py::TEMPLATE_GROUP
+  tested_by:
+  - tests/test_notifications.py::test_social_uses_social_templates
+  schema_ref: §13 Запись на визит и письма
+  status: draft
+- id: R-NOTIF-TEMPLATE-03
+  title: Вид заявки без записи в TEMPLATE_GROUP ломает отправку
+  text: >
+    find_template обращается к TEMPLATE_GROUP[kind] напрямую, без значения по умолчанию. Если появится
+    вид заявки, которого нет в словаре, обработчик booking.* упадёт с KeyError, а не создаст письмо со
+    статусом no_template.
+  kind: config
+  trigger: symbol:services/notifications/service.py::find_template
+  effects:
+  - config:services/notifications/config.py::TEMPLATE_GROUP
+  roles:
+  - system
+  related:
+  - R-NOTIF-TEMPLATE-02
+  - R-NOTIF-MISSING-01
+  implemented_by:
+  - symbol: services/notifications/service.py::find_template
+    lines: 36-36
+    hash: 57f0666eac23
+  config:
+  - services/notifications/config.py::TEMPLATE_GROUP
+  status: draft
+- id: R-NOTIF-TEMPLATE-04
+  title: Один шаблон на площадку, группу и тип письма
+  text: >
+    На каждую комбинацию (venue_id, kind_group, type) в notifications.templates допускается не больше
+    одного шаблона: это гарантирует уникальный индекс БД. Код опирается на это и делает upsert в set_template
+    и scalar-выборку в find_template.
+  kind: invariant
+  trigger: symbol:services/notifications/service.py::set_template
+  effects:
+  - table:notifications.templates
+  roles:
+  - admin
+  related:
+  - R-NOTIF-TEMPLATE-05
+  - R-NOTIF-TEMPLATE-06
+  implemented_by:
+  - symbol: services/notifications/service.py::set_template
+    lines: 18-27
+    hash: e944ddc8f1ad
+  enforced_by_db:
+  - constraint: templates_venue_id_kind_group_type_key
+    hash: 22edef15da0d
+  schema_ref: §13 Запись на визит и письма
+  status: draft
+- id: R-NOTIF-TEMPLATE-05
+  title: Допустимые группы шаблонов — paid и social, типы — booking и cancel
+  text: >
+    Ограничения CHECK в БД разрешают в notifications.templates только kind_group из {paid, social} и type
+    из {booking, cancel}. Группы debt в БД нет: долговые заявки сводятся к paid через TEMPLATE_GROUP.
+    set_template значения сам не проверяет, недопустимое отклонит БД.
+  kind: invariant
+  trigger: symbol:services/notifications/service.py::set_template
+  effects:
+  - table:notifications.templates
+  roles:
+  - admin
+  related:
+  - R-NOTIF-TEMPLATE-02
+  - R-NOTIF-TYPES-01
+  implemented_by:
+  - symbol: services/notifications/service.py::set_template
+    lines: 15-29
+    hash: e944ddc8f1ad
+  enforced_by_db:
+  - constraint: templates_kind_group_check
+    hash: 115f01b40a7d
+  - constraint: templates_type_check
+    hash: 4f2f9153f03c
+  schema_ref: §13 Запись на визит и письма
+  status: draft
+- id: R-NOTIF-TEMPLATE-06
+  title: Сохранение шаблона создаёт его или заменяет текст
+  text: >
+    set_template ищет шаблон по (venue_id, kind_group, type). Если шаблона нет, создаёт его, если есть,
+    перезаписывает только body. Уже отправленные письма хранят свой текст и при смене шаблона не меняются.
+  kind: effect
+  trigger: symbol:services/notifications/service.py::set_template
+  effects:
+  - table:notifications.templates
+  roles:
+  - admin
+  related:
+  - R-NOTIF-TEMPLATE-04
+  - R-NOTIF-TEMPLATE-07
+  - R-NOTIF-LOG-01
+  implemented_by:
+  - symbol: services/notifications/service.py::set_template
+    lines: 18-28
+    hash: e944ddc8f1ad
+  enforced_by_db:
+  - constraint: templates_venue_id_kind_group_type_key
+    hash: 22edef15da0d
+  schema_ref: §13 Запись на визит и письма
+  status: draft
+- id: R-NOTIF-TEMPLATE-07
+  title: Настройка шаблонов не ограничена ролью администратора
+  text: >
+    У set_template нет параметра пользователя и проверки роли, а в приложении notifications нет HTTP-эндпоинтов
+    (app.py только подключает wiring и обработчики ошибок). Кто может настраивать шаблоны, в модуле не
+    задано.
+  kind: permission
+  trigger: symbol:services/notifications/service.py::set_template
+  effects:
+  - table:notifications.templates
+  roles:
+  - admin
+  related:
+  - R-NOTIF-TEMPLATE-06
+  implemented_by:
+  - symbol: services/notifications/service.py::set_template
+    lines: 15-29
+    hash: e944ddc8f1ad
+  schema_ref: '§17 Сводная таблица: кто что может'
+  discrepancy: >
+    Схема (§2, §17): шаблоны писем настраивает только администратор в админке. Код: в set_template нет
+    проверки роли и нет точки входа для администратора.
+  status: draft
+- id: R-NOTIF-MISSING-01
+  title: Без шаблона письмо фиксируется со статусом no_template
+  text: >
+    Если для площадки, группы и типа шаблон не найден, send не бросает ошибку. Письмо сохраняется со status=no_template,
+    template_id=NULL и пустым body. Запись или отмена визита при этом проходит.
+  kind: effect
+  trigger: symbol:services/notifications/service.py::send
+  effects:
+  - table:notifications.emails
+  roles:
+  - system
+  related:
+  - R-NOTIF-TEMPLATE-01
+  - R-NOTIF-LOG-02
+  implemented_by:
+  - symbol: services/notifications/service.py::send
+    lines: 51-53
+    hash: 49ccca1187a7
+  enforced_by_db:
+  - constraint: emails_status_check
+    hash: f2c64c746a6f
+  status: draft
+- id: R-NOTIF-RENDER-01
+  title: Текст письма — шаблон с подстановкой $starts_at
+  text: >
+    Тело письма собирается через string.Template.safe_substitute из тела шаблона и контекста. Обработчики
+    передают в контекст только starts_at (время окна в ISO-формате). Неизвестные плейсхолдеры остаются
+    в тексте как есть, ошибки нет.
+  kind: calculation
+  trigger: symbol:services/notifications/service.py::send
+  effects:
+  - table:notifications.emails
+  roles:
+  - system
+  related:
+  - R-NOTIF-RENDER-02
+  implemented_by:
+  - symbol: services/notifications/service.py::send
+    lines: 52-52
+    hash: 49ccca1187a7
+  - symbol: services/notifications/consumers.py::on_booking_created
+    lines: 16-16
+    hash: b765a21d3fc7
+  - symbol: services/notifications/consumers.py::on_booking_cancelled
+    lines: 27-27
+    hash: 9cb13a16e669
+  tested_by:
+  - tests/test_notifications.py::test_booking_email_goes_to_client_and_representative
+  status: draft
+- id: R-NOTIF-RENDER-02
+  title: В письмо об отмене не попадают причина и новая ссылка
+  text: >
+    Payload booking.cancelled содержит reason, но on_booking_cancelled передаёт в контекст только starts_at.
+    Поэтому письмо об отмене одинаково при отмене клиентом, неявке, удалении окна, архивировании и смене
+    площадки, и ссылки на новую запись в нём нет.
+  kind: effect
+  trigger: event:booking.cancelled
+  effects:
+  - table:notifications.emails
+  roles:
+  - system
+  related:
+  - R-NOTIF-CANCEL-01
+  - R-NOTIF-RENDER-01
+  implemented_by:
+  - symbol: services/notifications/consumers.py::on_booking_cancelled
+    lines: 22-28
+    hash: 9cb13a16e669
+  schema_ref: §7 Площадки и цены
+  discrepancy: >
+    Схема (§7): при смене площадки клиент и представитель получают письмо об отмене и новую ссылку. Код:
+    в письме об отмене нет ссылки, а отдельного письма со ссылкой модуль не отправляет.
+  status: verified
+  verified_at: '2026-10-23'
+- id: R-NOTIF-TYPES-01
+  title: Существует только два типа писем — booking и cancel
+  text: >
+    notifications.emails и notifications.templates ограничением CHECK допускают только type из {booking,
+    cancel}. Писем о переносе, выдаче, счетах, штрафах или архиве в модуле нет.
+  kind: invariant
+  trigger: symbol:services/notifications/service.py::send
+  effects:
+  - table:notifications.emails
+  - table:notifications.templates
+  roles:
+  - system
+  related:
+  - R-NOTIF-RESCHEDULE-01
+  - R-NOTIF-TEMPLATE-05
+  implemented_by:
+  - symbol: services/notifications/consumers.py::on_booking_created
+    lines: 14-14
+    hash: b765a21d3fc7
+  - symbol: services/notifications/consumers.py::on_booking_cancelled
+    lines: 25-25
+    hash: 9cb13a16e669
+  enforced_by_db:
+  - constraint: emails_type_check
+    hash: 4f2f9153f03c
+  - constraint: templates_type_check
+    hash: 4f2f9153f03c
+  tested_by:
+  - tests/test_notifications.py::test_reschedule_sends_cancel_and_booking
+  schema_ref: §13 Запись на визит и письма
+  status: draft
+- id: R-NOTIF-LOG-01
+  title: Каждое письмо сохраняется в журнале emails
+  text: >
+    send записывает в notifications.emails заявку, список получателей, тип, ссылку на шаблон, готовый
+    текст, статус и created_at (clock.now()). Запись идёт в той же сессии, что и обработка события. Реальной
+    доставки (SMTP и т. п.) в модуле нет: status=sent значит «письмо сформировано».
+  kind: effect
+  trigger: symbol:services/notifications/service.py::send
+  effects:
+  - table:notifications.emails
+  roles:
+  - system
+  related:
+  - R-NOTIF-MISSING-01
+  - R-NOTIF-LOG-02
+  implemented_by:
+  - symbol: services/notifications/service.py::send
+    lines: 47-57
+    hash: 49ccca1187a7
+  tested_by:
+  - tests/test_notifications.py::test_booking_email_goes_to_client_and_representative
+  status: draft
+- id: R-NOTIF-LOG-02
+  title: Статус письма — только sent или no_template
+  text: >
+    Ограничение CHECK в БД разрешает в notifications.emails.status только sent и no_template. Код выставляет
+    sent, если шаблон найден, и no_template, если нет. Статусов доставки или ошибки отправки нет.
+  kind: invariant
+  trigger: symbol:services/notifications/service.py::send
+  effects:
+  - table:notifications.emails
+  roles:
+  - system
+  related:
+  - R-NOTIF-MISSING-01
+  - R-NOTIF-LOG-01
+  implemented_by:
+  - symbol: services/notifications/service.py::send
+    lines: 53-53
+    hash: 49ccca1187a7
+  enforced_by_db:
+  - constraint: emails_status_check
+    hash: f2c64c746a6f
+  status: draft

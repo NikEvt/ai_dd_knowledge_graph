@@ -1,0 +1,952 @@
+# Правила модуля halls: извлечены LLM (tools/knowledge/bootstrap_rules.sh) из кода и среза графа.
+# Статус verified ставит только человек. Хэши обновляет tools/knowledge/drift.py --write.
+rules:
+- id: R-HALLS-ACCESS-01
+  title: Залами, бронями и шаблонами управляет только менеджер, закреплённый за площадкой
+  text: >
+    Перед созданием зала, его выводом из аренды, бронированием, сменой площадки, отменой брони и сохранением
+    шаблона письма код проверяет, что менеджер есть в halls.hall_managers для площадки. Если его там нет,
+    код отклоняет действие с AccessDenied «менеджер не закреплён за площадкой». При смене площадки проверяется
+    менеджер текущей площадки брони, а менеджер новой площадки не проверяется. Отдельной роли из общей
+    ролевой модели у менеджера нет: доступ даёт только запись в hall_managers.
+  kind: permission
+  applies_to:
+  - table:halls.hall_managers
+  trigger: symbol:services/halls/service.py::_require_manager
+  effects:
+  - 'reads: table:halls.hall_managers'
+  related:
+  - R-HALLS-VENUE-CHANGE-01
+  implemented_by:
+  - symbol: services/halls/service.py::_require_manager
+    lines: 27-29
+    hash: af8c6d6d825b
+  - symbol: services/halls/service.py::create_hall
+    lines: 58-58
+    hash: 0c00f402763e
+  - symbol: services/halls/service.py::deactivate_hall
+    lines: 73-73
+    hash: 463f1d8bd0b0
+  - symbol: services/halls/service.py::create_booking
+    lines: 154-154
+    hash: 6ae4bf600aef
+  - symbol: services/halls/service.py::change_venue
+    lines: 196-196
+    hash: d7993f23b253
+  - symbol: services/halls/service.py::cancel_booking
+    lines: 237-237
+    hash: 34bda12f9139
+  - symbol: services/halls/service.py::set_template
+    lines: 402-402
+    hash: 1a6fca3d45f7
+  tested_by:
+  - tests/test_halls_booking.py::test_manager_of_other_venue_cannot_book
+  - tests/test_halls_booking.py::test_change_venue_requires_manager_of_current_venue
+  status: draft
+- id: R-HALLS-ACCESS-02
+  title: Права на внесение платежа по счёту зала не проверяются
+  text: >
+    record_payment не проверяет ни роль, ни закрепление за площадкой. Идентификатор recorded_by из запроса
+    только сохраняется в halls.hall_payments. Внести платёж через POST /invoices/{invoice_id}/payments
+    может любой вызывающий.
+  kind: permission
+  applies_to:
+  - table:halls.hall_payments
+  trigger: symbol:services/halls/api.py::record_payment
+  effects:
+  - 'writes: table:halls.hall_payments'
+  related:
+  - R-HALLS-PAYMENT-01
+  implemented_by:
+  - symbol: services/halls/service.py::record_payment
+    lines: 352-358
+    hash: 8e553f1bc21f
+  - symbol: services/halls/api.py::record_payment
+    lines: 129-131
+    hash: a208cbcc9116
+  status: draft
+- id: R-HALLS-HALL-01
+  title: Название зала обязательно и уникально в пределах площадки
+  text: >
+    При создании зала название обрезается по краям. Пустое название отклоняется («у зала должно быть название»),
+    повтор на той же площадке тоже («на площадке уже есть зал …»). Уникальность дублирует ограничение
+    UNIQUE (venue_id, name).
+  kind: invariant
+  applies_to:
+  - table:halls.halls
+  trigger: symbol:services/halls/service.py::create_hall
+  effects:
+  - 'writes: table:halls.halls'
+  related:
+  - R-HALLS-HALL-02
+  implemented_by:
+  - symbol: services/halls/service.py::create_hall
+    lines: 59-64
+    hash: 0c00f402763e
+  enforced_by_db:
+  - constraint: halls_venue_id_name_key
+    hash: e402efb2ce5d
+  status: draft
+- id: R-HALLS-HALL-02
+  title: Вместимость и почасовая ставка зала положительны — только на уровне БД
+  text: >
+    create_hall не проверяет capacity и hourly_rate. Нулевые и отрицательные значения отклоняет только
+    БД через CHECK capacity > 0 и hourly_rate > 0, и пользователь получает ошибку БД, а не доменную.
+  kind: invariant
+  applies_to:
+  - table:halls.halls
+  trigger: symbol:services/halls/service.py::create_hall
+  related:
+  - R-HALLS-HALL-01
+  - R-HALLS-INVOICE-01
+  enforced_by_db:
+  - constraint: halls_capacity_check
+    hash: f197e4338295
+  - constraint: halls_hourly_rate_check
+    hash: 445577cb7730
+  status: draft
+- id: R-HALLS-HALL-03
+  title: Зал нельзя вывести из аренды, пока в нём есть предстоящие брони
+  text: >
+    deactivate_hall отклоняет вывод зала из аренды, если в нём есть бронь в статусе из ACTIVE_STATUSES
+    (draft, prepaid, confirmed) с ends_at позже текущего момента: «в зале есть предстоящие брони — сначала
+    перенесите или отмените их». Иначе ставит active = false.
+  kind: guard
+  applies_to:
+  - table:halls.halls
+  trigger: symbol:services/halls/service.py::deactivate_hall
+  effects:
+  - 'writes: table:halls.halls'
+  related:
+  - R-HALLS-HALL-04
+  implemented_by:
+  - symbol: services/halls/service.py::deactivate_hall
+    lines: 74-83
+    hash: 463f1d8bd0b0
+  config:
+  - services/halls/settings.py::ACTIVE_STATUSES
+  tested_by:
+  - tests/test_halls_booking.py::test_deactivate_hall_with_upcoming_bookings_rejected
+  status: draft
+- id: R-HALLS-HALL-04
+  title: Неактивный зал не показывается в списке и не бронируется
+  text: >
+    В списке залов площадки (GET /venues/{venue_id}/halls) только залы с active = true. При бронировании
+    и при переносе брони неактивный зал отклоняется: «зал … не сдаётся».
+  kind: guard
+  applies_to:
+  - table:halls.halls
+  trigger: symbol:services/halls/service.py::_check_fits
+  related:
+  - R-HALLS-HALL-03
+  - R-HALLS-VENUE-CHANGE-01
+  implemented_by:
+  - symbol: services/halls/service.py::venue_halls
+    lines: 88-90
+    hash: f4b33ae8e42d
+  - symbol: services/halls/service.py::_check_fits
+    lines: 131-132
+    hash: 0ed3c2d133cd
+  tested_by:
+  - tests/test_halls_booking.py::test_deactivate_hall_with_upcoming_bookings_rejected
+  status: draft
+- id: R-HALLS-BOOKING-01
+  title: Вид мероприятия — из фиксированного списка
+  text: >
+    Бронь принимается только для вида мероприятия из EVENT_KINDS (ключи TEMPLATE_GROUP: wedding, birthday,
+    party, corporate, conference), иначе «неизвестный вид мероприятия». Список дублируется CHECK на event_kind
+    в БД. Новый вид нужно добавить в обоих местах.
+  kind: config
+  applies_to:
+  - table:halls.hall_bookings
+  trigger: symbol:services/halls/service.py::create_booking
+  related:
+  - R-HALLS-EMAIL-01
+  implemented_by:
+  - symbol: services/halls/service.py::create_booking
+    lines: 155-156
+    hash: 6ae4bf600aef
+  enforced_by_db:
+  - constraint: hall_bookings_event_kind_check
+    hash: e770d8e97cea
+  config:
+  - services/halls/settings.py::EVENT_KINDS
+  - services/halls/settings.py::TEMPLATE_GROUP
+  status: draft
+- id: R-HALLS-BOOKING-02
+  title: Число гостей положительно и не больше вместимости зала
+  text: >
+    При бронировании число гостей должно быть больше нуля («число гостей должно быть положительным») и
+    не больше capacity зала («зал … вмещает не больше N гостей»). Вместимость проверяется и при переносе
+    брони в другой зал. Положительность дублирует CHECK guests > 0.
+  kind: guard
+  applies_to:
+  - table:halls.hall_bookings
+  trigger: symbol:services/halls/service.py::create_booking
+  related:
+  - R-HALLS-VENUE-CHANGE-01
+  implemented_by:
+  - symbol: services/halls/service.py::create_booking
+    lines: 157-159
+    hash: 6ae4bf600aef
+  - symbol: services/halls/service.py::_check_fits
+    lines: 133-134
+    hash: 0ed3c2d133cd
+  enforced_by_db:
+  - constraint: hall_bookings_guests_check
+    hash: 2c3e2b190044
+  tested_by:
+  - tests/test_halls_booking.py::test_guests_over_capacity_rejected
+  status: draft
+- id: R-HALLS-BOOKING-03
+  title: Зал бронируется не позже чем за 2 дня и не дальше чем на 365 дней вперёд
+  text: >
+    От текущего момента до начала мероприятия должно быть не меньше MIN_LEAD_DAYS (2) дней и не больше
+    BOOKING_HORIZON_DAYS (365) дней. Проверка идёт только при создании брони, при смене площадки сроки
+    не перепроверяются.
+  kind: guard
+  applies_to:
+  - table:halls.hall_bookings
+  trigger: symbol:services/halls/service.py::create_booking
+  related:
+  - R-HALLS-BOOKING-04
+  - R-HALLS-VENUE-CHANGE-01
+  implemented_by:
+  - symbol: services/halls/service.py::_check_period
+    lines: 98-102
+    hash: f00bc59cdf36
+  config:
+  - services/halls/settings.py::MIN_LEAD_DAYS
+  - services/halls/settings.py::BOOKING_HORIZON_DAYS
+  tested_by:
+  - tests/test_halls_booking.py::test_booking_period_rules
+  status: draft
+- id: R-HALLS-BOOKING-04
+  title: Аренда длится от 2 до 12 часов
+  text: >
+    Длительность брони (ends_at − starts_at) должна быть не меньше MIN_DURATION_HOURS (2) и не больше
+    MAX_DURATION_HOURS (12) часов. БД дополнительно требует ends_at > starts_at.
+  kind: guard
+  applies_to:
+  - table:halls.hall_bookings
+  trigger: symbol:services/halls/service.py::create_booking
+  related:
+  - R-HALLS-BOOKING-03
+  - R-HALLS-INVOICE-01
+  implemented_by:
+  - symbol: services/halls/service.py::_check_period
+    lines: 103-107
+    hash: f00bc59cdf36
+  enforced_by_db:
+  - constraint: hall_bookings_check
+    hash: dd255e1b45f0
+  config:
+  - services/halls/settings.py::MIN_DURATION_HOURS
+  - services/halls/settings.py::MAX_DURATION_HOURS
+  tested_by:
+  - tests/test_halls_booking.py::test_booking_period_rules
+  status: draft
+- id: R-HALLS-BOOKING-05
+  title: Брони одного зала не пересекаются с учётом часа на уборку
+  text: >
+    Новая или перенесённая бронь отклоняется («зал … занят в это время»), если в зале есть бронь в статусе
+    из ACTIVE_STATUSES (draft, prepaid, confirmed), чей интервал, расширенный на CLEANUP_MINUTES (60)
+    с каждой стороны, пересекает новый. Отменённые и проведённые брони зал не занимают. В БД есть только
+    частичный уникальный индекс (hall_id, starts_at) WHERE status <> 'cancelled': он ловит лишь совпадение
+    времени начала, а пересечения и зазор на уборку проверяет только код.
+  kind: guard
+  applies_to:
+  - table:halls.hall_bookings
+  trigger: symbol:services/halls/service.py::_check_hall_free
+  related:
+  - R-HALLS-CANCEL-01
+  - R-HALLS-VENUE-CHANGE-01
+  implemented_by:
+  - symbol: services/halls/service.py::_check_hall_free
+    lines: 117-127
+    hash: d82b455c040c
+  - symbol: services/halls/service.py::create_booking
+    lines: 161-161
+    hash: 6ae4bf600aef
+  - symbol: services/halls/service.py::change_venue
+    lines: 203-203
+    hash: d7993f23b253
+  enforced_by_db:
+  - constraint: hall_bookings_hall_start_uq
+    hash: e9c169083892
+  config:
+  - services/halls/settings.py::CLEANUP_MINUTES
+  - services/halls/settings.py::ACTIVE_STATUSES
+  tested_by:
+  - tests/test_halls_booking.py::test_overlapping_booking_rejected_with_cleanup_gap
+  - tests/test_halls_booking.py::test_cancelled_booking_frees_hall
+  status: draft
+- id: R-HALLS-BOOKING-06
+  title: Новая бронь создаётся черновиком, и на неё сразу выставляется счёт
+  text: >
+    create_booking создаёт бронь в статусе draft с created_at = текущий момент и публикует halls.booking_created
+    (подписчиков нет). Затем сразу выставляет счёт на всю сумму аренды через issue_invoice.
+  kind: effect
+  applies_to:
+  - table:halls.hall_bookings
+  trigger: symbol:services/halls/api.py::create_booking
+  effects:
+  - 'writes: table:halls.hall_bookings'
+  - event:halls.booking_created
+  - 'writes: table:halls.hall_invoices'
+  - event:halls.invoice_issued
+  related:
+  - R-HALLS-INVOICE-01
+  - R-HALLS-INVOICE-04
+  implemented_by:
+  - symbol: services/halls/service.py::create_booking
+    lines: 163-187
+    hash: 6ae4bf600aef
+  tested_by:
+  - tests/test_halls_booking.py::test_booking_starts_as_draft_with_invoice
+  status: draft
+- id: R-HALLS-BOOKING-07
+  title: Ссылка на клиента в брони не может быть пустой — только на уровне БД
+  text: >
+    create_booking не проверяет client_ref. Пустую строку или строку из пробелов отклоняет только CHECK
+    length(trim(client_ref)) > 0.
+  kind: invariant
+  applies_to:
+  - table:halls.hall_bookings
+  trigger: symbol:services/halls/service.py::create_booking
+  enforced_by_db:
+  - constraint: hall_bookings_client_ref_check
+    hash: f1e2a8c85bdb
+  status: draft
+- id: R-HALLS-INVOICE-01
+  title: Сумма счёта — почасовая ставка зала за фактические минуты аренды
+  text: >
+    Сумма счёта = hourly_rate × целые минуты аренды / 60, округлённая до копеек (CENT = 0.01, quantize
+    с банковским округлением по умолчанию). Неполные часы оплачиваются поминутно, секунды отбрасываются.
+    Скидок и надбавок нет.
+  kind: calculation
+  applies_to:
+  - table:halls.hall_invoices
+  trigger: symbol:services/halls/service.py::issue_invoice
+  related:
+  - R-HALLS-BOOKING-06
+  - R-HALLS-VENUE-CHANGE-03
+  implemented_by:
+  - symbol: services/halls/service.py::rent_amount
+    lines: 137-139
+    hash: 6b00dca29b6e
+  - symbol: services/halls/service.py::issue_invoice
+    lines: 280-285
+    hash: 4bc441cc2313
+  enforced_by_db:
+  - constraint: hall_invoices_amount_check
+    hash: 5ddec6c010bb
+  config:
+  - services/halls/service.py::CENT
+  tested_by:
+  - tests/test_halls_booking.py::test_partial_hours_are_billed_by_minutes
+  status: draft
+- id: R-HALLS-INVOICE-02
+  title: У брони не больше одного действующего счёта
+  text: >
+    Действующим считается счёт брони в статусе open или paid (любой, кроме void): так его ищет active_invoice.
+    БД это гарантирует частичным уникальным индексом по booking_id WHERE status <> 'void'. Поэтому при
+    перевыставлении старый счёт аннулируется (flush) до создания нового.
+  kind: invariant
+  applies_to:
+  - table:halls.hall_invoices
+  trigger: symbol:services/halls/service.py::issue_invoice
+  related:
+  - R-HALLS-VENUE-CHANGE-03
+  implemented_by:
+  - symbol: services/halls/service.py::active_invoice
+    lines: 262-265
+    hash: cd3c332a2cb3
+  - symbol: services/halls/service.py::reissue_invoice
+    lines: 301-306
+    hash: e78ff7026ba9
+  enforced_by_db:
+  - constraint: hall_invoices_booking_active_uq
+    hash: c688418e9440
+  tested_by:
+  - tests/test_halls_booking.py::test_change_venue_moves_booking_and_reissues_invoice
+  status: draft
+- id: R-HALLS-INVOICE-03
+  title: Закрытый счёт (paid/void) всегда имеет дату закрытия
+  text: >
+    Статус счёта — open, paid или void. По CHECK closed_at пуст тогда и только тогда, когда счёт open.
+    Код проставляет closed_at в трёх местах: при полной оплате, при аннулировании по отмене брони и при
+    перевыставлении.
+  kind: invariant
+  applies_to:
+  - table:halls.hall_invoices
+  trigger: table:halls.hall_invoices
+  related:
+  - R-HALLS-PAYMENT-04
+  - R-HALLS-CANCEL-02
+  - R-HALLS-VENUE-CHANGE-03
+  implemented_by:
+  - symbol: services/halls/service.py::record_payment
+    lines: 361-363
+    hash: 8e553f1bc21f
+  - symbol: services/halls/service.py::void_invoice
+    lines: 322-324
+    hash: 587acc766c48
+  - symbol: services/halls/service.py::reissue_invoice
+    lines: 303-304
+    hash: e78ff7026ba9
+  enforced_by_db:
+  - constraint: hall_invoices_check
+    hash: ccc1da068602
+  - constraint: hall_invoices_status_check
+    hash: 48c39f75916d
+  status: draft
+- id: R-HALLS-INVOICE-04
+  title: При выставлении счёта клиенту уходит письмо со счётом
+  text: >
+    issue_invoice публикует halls.invoice_issued с суммой. Подписчик on_invoice_issued записывает письмо
+    типа invoice по шаблону площадки с подстановкой amount. Это касается и перевыставления при смене площадки,
+    так что клиент получает второе письмо со счётом.
+  kind: effect
+  applies_to:
+  - table:halls.hall_invoices
+  trigger: event:halls.invoice_issued
+  effects:
+  - 'writes: table:halls.hall_emails'
+  roles:
+  - system
+  related:
+  - R-HALLS-EMAIL-01
+  - R-HALLS-VENUE-CHANGE-03
+  implemented_by:
+  - symbol: services/halls/service.py::issue_invoice
+    lines: 288-292
+    hash: 4bc441cc2313
+  - symbol: services/halls/consumers.py::on_invoice_issued
+    lines: 10-11
+    hash: 3bc5574d692c
+  tested_by:
+  - tests/test_halls_booking.py::test_change_venue_moves_booking_and_reissues_invoice
+  status: draft
+- id: R-HALLS-PAYMENT-01
+  title: Платёж принимается только на открытый счёт неотменённой брони
+  text: >
+    record_payment отклоняет платёж на счёт не в статусе open («счёт закрыт, платёж принять нельзя») и
+    на счёт отменённой брони («бронь отменена, платёж принять нельзя»). Проверку открытого счёта дублирует
+    BEFORE INSERT триггер на hall_payments. Проверку отменённой брони делает только код.
+  kind: guard
+  applies_to:
+  - table:halls.hall_payments
+  trigger: symbol:services/halls/api.py::record_payment
+  related:
+  - R-HALLS-CANCEL-02
+  - R-HALLS-ACCESS-02
+  implemented_by:
+  - symbol: services/halls/service.py::record_payment
+    lines: 337-341
+    hash: 8e553f1bc21f
+  enforced_by_db:
+  - constraint: trg_hall_payments_open_invoice
+    hash: ff9ff5f99272
+  - constraint: forbid_payment_on_closed_invoice
+    hash: 57dcff27b7ab
+  tested_by:
+  - tests/test_halls_payments.py::test_payment_to_void_invoice_rejected_in_service_and_db
+  - tests/test_halls_cancel.py::test_cancelled_and_held_bookings_cannot_be_cancelled_or_paid
+  status: draft
+- id: R-HALLS-PAYMENT-02
+  title: Сумма платежа положительна и не больше остатка по счёту
+  text: >
+    Платёж с суммой ≤ 0 отклоняется («сумма платежа должна быть положительной»), как и платёж больше остатка:
+    сумма счёта минус уже внесённое («сумма больше остатка по счёту»). Переплатить одним платежом нельзя.
+    Положительность дублирует CHECK amount > 0.
+  kind: guard
+  applies_to:
+  - table:halls.hall_payments
+  trigger: symbol:services/halls/api.py::record_payment
+  related:
+  - R-HALLS-PAYMENT-01
+  implemented_by:
+  - symbol: services/halls/service.py::record_payment
+    lines: 342-350
+    hash: 8e553f1bc21f
+  enforced_by_db:
+  - constraint: hall_payments_amount_check
+    hash: 5ddec6c010bb
+  tested_by:
+  - tests/test_halls_payments.py::test_payment_over_rest_rejected
+  status: draft
+- id: R-HALLS-PAYMENT-03
+  title: Банковская ссылка платежа учитывается один раз
+  text: >
+    Если у платежа указан external_ref и платёж с такой ссылкой уже есть, record_payment отклоняет его
+    («платёж … уже учтён»). Уникальность дублирует частичный уникальный индекс WHERE external_ref IS NOT
+    NULL. Платежи без ссылки не дедуплицируются.
+  kind: invariant
+  applies_to:
+  - table:halls.hall_payments
+  trigger: symbol:services/halls/api.py::record_payment
+  implemented_by:
+  - symbol: services/halls/service.py::record_payment
+    lines: 344-347
+    hash: 8e553f1bc21f
+  enforced_by_db:
+  - constraint: hall_payments_external_ref_uq
+    hash: ef78d4cd09be
+  tested_by:
+  - tests/test_halls_payments.py::test_duplicate_bank_reference_rejected
+  status: draft
+- id: R-HALLS-PAYMENT-04
+  title: Полная оплата закрывает счёт, любой платёж пересчитывает статус брони
+  text: >
+    После записи платежа счёт, оплаченный полностью, получает статус paid и closed_at. В любом случае
+    публикуется halls.payment_received. Его подписчик on_payment_received вызывает apply_payments и пересчитывает
+    статус брони.
+  kind: effect
+  applies_to:
+  - table:halls.hall_invoices
+  trigger: symbol:services/halls/api.py::record_payment
+  effects:
+  - 'writes: table:halls.hall_payments'
+  - 'writes: table:halls.hall_invoices'
+  - event:halls.payment_received
+  roles:
+  - system
+  related:
+  - R-HALLS-STATUS-01
+  - R-HALLS-STATUS-02
+  implemented_by:
+  - symbol: services/halls/service.py::record_payment
+    lines: 359-368
+    hash: 8e553f1bc21f
+  - symbol: services/halls/consumers.py::on_payment_received
+    lines: 15-16
+    hash: cfdceccc4146
+  tested_by:
+  - tests/test_halls_payments.py::test_full_payment_confirms_booking_in_one_step
+  status: draft
+- id: R-HALLS-STATUS-01
+  title: Полностью оплаченная бронь подтверждается, клиенту уходит письмо
+  text: >
+    apply_payments переводит бронь в статусе draft или prepaid в confirmed, если внесённое покрывает действующий
+    счёт, ставит confirmed_at и публикует halls.booking_confirmed. Подписчик записывает письмо типа confirmed.
+    Полная оплата черновика подтверждает его сразу, минуя prepaid и письмо о предоплате. CHECK требует
+    confirmed_at для статусов confirmed и held.
+  kind: effect
+  applies_to:
+  - table:halls.hall_bookings
+  trigger: event:halls.payment_received
+  effects:
+  - 'writes: table:halls.hall_bookings'
+  - event:halls.booking_confirmed
+  - 'writes: table:halls.hall_emails'
+  roles:
+  - system
+  related:
+  - R-HALLS-STATUS-02
+  - R-HALLS-PAYMENT-04
+  implemented_by:
+  - symbol: services/halls/service.py::apply_payments
+    lines: 375-385
+    hash: 3075d1e9f784
+  - symbol: services/halls/consumers.py::on_booking_confirmed
+    lines: 25-26
+    hash: 6415340c9ce2
+  enforced_by_db:
+  - constraint: hall_bookings_check2
+    hash: c1a03a373d7d
+  tested_by:
+  - tests/test_halls_payments.py::test_full_payment_confirms_booking_in_one_step
+  - tests/test_halls_booking.py::test_status_history_written_by_trigger
+  status: draft
+- id: R-HALLS-STATUS-02
+  title: Оплата половины счёта делает черновик предоплаченным
+  text: >
+    Если внесено не меньше PREPAY_SHARE (0.5) суммы действующего счёта, но не всё, apply_payments переводит
+    бронь из draft в prepaid и публикует halls.booking_prepaid с внесённой суммой. Подписчик записывает
+    письмо типа prepaid. Повторные частичные платежи по предоплаченной брони статус не меняют и писем
+    не дают.
+  kind: effect
+  applies_to:
+  - table:halls.hall_bookings
+  trigger: event:halls.payment_received
+  effects:
+  - transition:draft->prepaid
+  - event:halls.booking_prepaid
+  - 'writes: table:halls.hall_emails'
+  roles:
+  - system
+  related:
+  - R-HALLS-STATUS-01
+  - R-HALLS-STATUS-03
+  - R-HALLS-TIMER-01
+  implemented_by:
+  - symbol: services/halls/service.py::apply_payments
+    lines: 386-389
+    hash: 3075d1e9f784
+  - symbol: services/halls/consumers.py::on_booking_prepaid
+    lines: 20-21
+    hash: 08b51442fa1c
+  config:
+  - services/halls/settings.py::PREPAY_SHARE
+  tested_by:
+  - tests/test_halls_payments.py::test_half_payment_makes_booking_prepaid
+  status: draft
+- id: R-HALLS-STATUS-03
+  title: Предоплаченная бронь возвращается в черновик, если после перевыставления не хватает предоплаты
+  text: >
+    Если по действующему счёту внесено меньше PREPAY_SHARE его суммы (например, после переноса в более
+    дорогой зал), apply_payments молча возвращает бронь из prepaid в draft: без события и без письма клиенту.
+    created_at не меняется. Поэтому задача cancel_unpaid может сразу отменить такую бронь, если с её создания
+    прошло больше UNPAID_CANCEL_DAYS.
+  kind: effect
+  applies_to:
+  - table:halls.hall_bookings
+  trigger: event:halls.payment_received
+  effects:
+  - transition:prepaid->draft
+  roles:
+  - system
+  related:
+  - R-HALLS-VENUE-CHANGE-03
+  - R-HALLS-TIMER-01
+  implemented_by:
+  - symbol: services/halls/service.py::apply_payments
+    lines: 390-392
+    hash: 3075d1e9f784
+  config:
+  - services/halls/settings.py::PREPAY_SHARE
+  tested_by:
+  - tests/test_halls_booking.py::test_change_venue_to_pricier_hall_can_drop_prepaid
+  status: draft
+- id: R-HALLS-STATUS-04
+  title: Статусы брони и согласованность дат отмены и подтверждения
+  text: >
+    Статус брони — draft, prepaid, confirmed, held или cancelled (CHECK). По CHECK cancelled_at задан
+    тогда и только тогда, когда статус cancelled. Для confirmed и held обязателен confirmed_at. Код ставит
+    эти поля вместе со статусом: в _cancel и в apply_payments.
+  kind: invariant
+  applies_to:
+  - table:halls.hall_bookings
+  trigger: table:halls.hall_bookings
+  related:
+  - R-HALLS-STATUS-01
+  - R-HALLS-CANCEL-01
+  implemented_by:
+  - symbol: services/halls/service.py::_cancel
+    lines: 218-220
+    hash: d43cac3c650c
+  - symbol: services/halls/service.py::apply_payments
+    lines: 383-384
+    hash: 3075d1e9f784
+  enforced_by_db:
+  - constraint: hall_bookings_status_check
+    hash: aa8ec4f23e10
+  - constraint: hall_bookings_check1
+    hash: d1fa6eb29314
+  - constraint: hall_bookings_check2
+    hash: c1a03a373d7d
+  status: draft
+- id: R-HALLS-STATUS-05
+  title: История статусов брони пишется триггером БД
+  text: >
+    AFTER INSERT OR UPDATE OF status на hall_bookings добавляет строку в halls.hall_booking_history: при
+    создании (NULL → статус) и при каждой реальной смене статуса (старый → новый). В коде записи истории
+    нет: модель BookingHistory только читает таблицу.
+  kind: effect
+  applies_to:
+  - table:halls.hall_bookings
+  trigger: table:halls.hall_bookings
+  effects:
+  - 'writes: table:halls.hall_booking_history'
+  roles:
+  - system
+  related:
+  - R-HALLS-STATUS-04
+  enforced_by_db:
+  - constraint: trg_hall_bookings_history
+    hash: 2e2c28b2c96c
+  - constraint: log_status_change
+    hash: a528675aaca7
+  tested_by:
+  - tests/test_halls_booking.py::test_status_history_written_by_trigger
+  status: draft
+- id: R-HALLS-VENUE-CHANGE-01
+  title: Бронь переносится на другую площадку только до подтверждения
+  text: >
+    change_venue разрешён только для броней в статусе draft или prepaid («площадку можно сменить только
+    до подтверждения брони»). Новый зал должен быть на другой площадке («зал находится на той же площадке»),
+    сдаваться, вмещать гостей и быть свободным в то же время. Время брони не меняется, сроки MIN_LEAD_DAYS
+    и BOOKING_HORIZON_DAYS не перепроверяются. Перенос в другой зал той же площадки не поддерживается.
+  kind: guard
+  applies_to:
+  - table:halls.hall_bookings
+  trigger: symbol:services/halls/api.py::change_venue
+  effects:
+  - 'writes: table:halls.hall_bookings'
+  - event:halls.venue_changed
+  related:
+  - R-HALLS-VENUE-CHANGE-02
+  - R-HALLS-VENUE-CHANGE-03
+  - R-HALLS-ACCESS-01
+  - R-HALLS-BOOKING-05
+  implemented_by:
+  - symbol: services/halls/service.py::change_venue
+    lines: 195-213
+    hash: d7993f23b253
+  enforced_by_db:
+  - constraint: trg_hall_bookings_venue_lock
+    hash: f5c8afe5a4a3
+  tested_by:
+  - tests/test_halls_booking.py::test_change_venue_after_confirmation_forbidden
+  - tests/test_halls_booking.py::test_change_venue_within_same_venue_rejected
+  - tests/test_halls_booking.py::test_change_venue_requires_manager_of_current_venue
+  - tests/test_halls_booking.py::test_change_venue_moves_booking_and_reissues_invoice
+  status: draft
+- id: R-HALLS-VENUE-CHANGE-02
+  title: Триггер БД запрещает менять площадку подтверждённой или проведённой брони
+  text: >
+    BEFORE UPDATE OF venue_id на hall_bookings выбрасывает check_violation («бронь … подтверждена, площадку
+    сменить нельзя»), если старый статус confirmed или held и venue_id меняется. Триггер дублирует проверку
+    в change_venue. Смену hall_id внутри той же площадки он не ловит.
+  kind: invariant
+  applies_to:
+  - table:halls.hall_bookings
+  trigger: table:halls.hall_bookings
+  related:
+  - R-HALLS-VENUE-CHANGE-01
+  enforced_by_db:
+  - constraint: trg_hall_bookings_venue_lock
+    hash: f5c8afe5a4a3
+  - constraint: halls.forbid_venue_change
+    hash: 7cd85c16137c
+  tested_by:
+  - tests/test_halls_booking.py::test_venue_lock_trigger_protects_confirmed_booking
+  status: draft
+- id: R-HALLS-VENUE-CHANGE-03
+  title: Смена площадки перевыставляет счёт по ставке нового зала с переносом платежей
+  text: >
+    На halls.venue_changed подписчик вызывает reissue_invoice (только для draft и prepaid). Код аннулирует
+    действующий счёт и выставляет новый по ставке нового зала, после чего уходит письмо со счётом. Все
+    платежи старого счёта перепривязываются к новому. Если их хватает на новую сумму, счёт сразу закрывается
+    как paid. Затем публикуется halls.payment_received, и apply_payments пересчитывает статус: бронь может
+    стать confirmed, остаться prepaid или откатиться в draft. Если внесено больше суммы нового (более
+    дешёвого) счёта, переплата не возвращается.
+  kind: effect
+  applies_to:
+  - table:halls.hall_bookings
+  trigger: event:halls.venue_changed
+  effects:
+  - 'invalidates: table:halls.hall_invoices'
+  - 'writes: table:halls.hall_payments'
+  - event:halls.invoice_issued
+  - event:halls.payment_received
+  roles:
+  - system
+  related:
+  - R-HALLS-VENUE-CHANGE-01
+  - R-HALLS-STATUS-03
+  - R-HALLS-INVOICE-02
+  - R-HALLS-INVOICE-04
+  implemented_by:
+  - symbol: services/halls/consumers.py::on_venue_changed
+    lines: 30-31
+    hash: e496734681f6
+  - symbol: services/halls/service.py::reissue_invoice
+    lines: 298-316
+    hash: e78ff7026ba9
+  enforced_by_db:
+  - constraint: hall_invoices_booking_active_uq
+    hash: c688418e9440
+  tested_by:
+  - tests/test_halls_booking.py::test_change_venue_moves_booking_and_reissues_invoice
+  - tests/test_halls_booking.py::test_change_venue_keeps_prepayment
+  - tests/test_halls_booking.py::test_change_venue_to_pricier_hall_can_drop_prepaid
+  status: draft
+- id: R-HALLS-CANCEL-01
+  title: Отменить можно любую бронь, кроме уже отменённой и проведённой
+  text: >
+    cancel_booking отклоняет повторную отмену («бронь уже отменена») и отмену проведённого мероприятия
+    («мероприятие уже прошло»). Отменить можно бронь в статусе draft, prepaid и даже confirmed (полностью
+    оплаченную). Отмена ставит cancelled, cancelled_at и cancel_reason (по умолчанию client_request) и
+    публикует halls.booking_cancelled. Отменённая бронь освобождает зал.
+  kind: guard
+  applies_to:
+  - table:halls.hall_bookings
+  trigger: symbol:services/halls/api.py::cancel_booking
+  effects:
+  - 'writes: table:halls.hall_bookings'
+  - event:halls.booking_cancelled
+  related:
+  - R-HALLS-CANCEL-02
+  - R-HALLS-BOOKING-05
+  implemented_by:
+  - symbol: services/halls/service.py::cancel_booking
+    lines: 236-242
+    hash: 34bda12f9139
+  - symbol: services/halls/service.py::_cancel
+    lines: 218-230
+    hash: d43cac3c650c
+  enforced_by_db:
+  - constraint: hall_bookings_check1
+    hash: d1fa6eb29314
+  tested_by:
+  - tests/test_halls_cancel.py::test_cancelled_and_held_bookings_cannot_be_cancelled_or_paid
+  - tests/test_halls_booking.py::test_cancelled_booking_frees_hall
+  status: draft
+- id: R-HALLS-CANCEL-02
+  title: Отмена брони аннулирует открытый счёт и отправляет письмо об отмене
+  text: >
+    На halls.booking_cancelled подписчик аннулирует действующий счёт, если тот open, и записывает письмо
+    типа cancel с причиной отмены. Счёт со статусом paid (отмена подтверждённой брони) остаётся paid.
+    Платежи по аннулированному или оплаченному счёту не возвращаются: возврата в модуле нет.
+  kind: effect
+  applies_to:
+  - table:halls.hall_bookings
+  trigger: event:halls.booking_cancelled
+  effects:
+  - 'invalidates: table:halls.hall_invoices'
+  - 'writes: table:halls.hall_emails'
+  roles:
+  - system
+  related:
+  - R-HALLS-CANCEL-01
+  - R-HALLS-EMAIL-01
+  implemented_by:
+  - symbol: services/halls/consumers.py::on_booking_cancelled
+    lines: 35-37
+    hash: 65dba943b8de
+  - symbol: services/halls/service.py::void_invoice
+    lines: 321-324
+    hash: 587acc766c48
+  tested_by:
+  - tests/test_halls_cancel.py::test_cancel_sends_letter_from_event_group_template
+  status: draft
+- id: R-HALLS-TIMER-01
+  title: Черновик без предоплаты автоматически отменяется через 30 дней после создания
+  text: >
+    Задача cancel_unpaid отменяет с причиной unpaid брони в статусе draft, у которых created_at ≤ now
+    − UNPAID_CANCEL_DAYS (30). Строки берутся с блокировкой FOR UPDATE SKIP LOCKED. Срок отсчитывается
+    от создания брони, а не от даты мероприятия: если мероприятие ближе 30 дней, неоплаченный черновик
+    доживёт до него и останется draft. Предоплаченные (prepaid) брони задача не трогает.
+  kind: timer
+  applies_to:
+  - table:halls.hall_bookings
+  trigger: symbol:services/halls/jobs.py::cancel_unpaid
+  effects:
+  - 'writes: table:halls.hall_bookings'
+  - event:halls.booking_cancelled
+  roles:
+  - system
+  related:
+  - R-HALLS-CANCEL-02
+  - R-HALLS-STATUS-03
+  implemented_by:
+  - symbol: services/halls/jobs.py::cancel_unpaid
+    lines: 12-24
+    hash: 382d2d428f01
+  - symbol: services/halls/service.py::cancel_unpaid
+    lines: 246-247
+    hash: 39ed85f950bb
+  config:
+  - services/halls/settings.py::UNPAID_CANCEL_DAYS
+  tested_by:
+  - tests/test_halls_cancel.py::test_unpaid_booking_cancelled_after_thirty_days
+  status: draft
+- id: R-HALLS-TIMER-02
+  title: Подтверждённая бронь после окончания мероприятия становится проведённой
+  text: >
+    Задача close_past_events переводит брони в статусе confirmed с ends_at ≤ now в held и публикует halls.booking_held
+    (подписчиков нет). Брони draft и prepaid с прошедшей датой не закрываются и не отменяются. prepaid-бронь
+    не трогает ни эта задача, ни cancel_unpaid.
+  kind: timer
+  applies_to:
+  - table:halls.hall_bookings
+  trigger: symbol:services/halls/jobs.py::close_past_events
+  effects:
+  - 'writes: table:halls.hall_bookings'
+  - event:halls.booking_held
+  roles:
+  - system
+  related:
+  - R-HALLS-TIMER-01
+  - R-HALLS-CANCEL-01
+  implemented_by:
+  - symbol: services/halls/jobs.py::close_past_events
+    lines: 30-38
+    hash: 0fedc2799034
+  - symbol: services/halls/service.py::mark_held
+    lines: 250-256
+    hash: ec6146a31d9a
+  enforced_by_db:
+  - constraint: hall_bookings_check2
+    hash: c1a03a373d7d
+  tested_by:
+  - tests/test_halls_cancel.py::test_close_past_events_skips_unconfirmed
+  - tests/test_halls_cancel.py::test_cancelled_and_held_bookings_cannot_be_cancelled_or_paid
+  status: draft
+- id: R-HALLS-EMAIL-01
+  title: Письмо клиенту берётся из шаблона площадки по группе вида мероприятия
+  text: >
+    send_email ищет шаблон по площадке брони, группе вида мероприятия (TEMPLATE_GROUP: wedding, birthday,
+    party → private; corporate, conference → corporate) и типу письма (invoice, prepaid, confirmed, cancel).
+    В шаблон подставляются hall, starts_at, guests и доп. поля. Если шаблона нет, письмо всё равно записывается
+    со статусом no_template и пустым телом, без ошибки.
+  kind: effect
+  applies_to:
+  - table:halls.hall_emails
+  trigger: symbol:services/halls/service.py::send_email
+  effects:
+  - 'writes: table:halls.hall_emails'
+  roles:
+  - system
+  related:
+  - R-HALLS-EMAIL-02
+  - R-HALLS-INVOICE-04
+  - R-HALLS-CANCEL-02
+  implemented_by:
+  - symbol: services/halls/service.py::find_template
+    lines: 424-430
+    hash: 02654244f287
+  - symbol: services/halls/service.py::send_email
+    lines: 436-455
+    hash: bc9ae5140bcf
+  enforced_by_db:
+  - constraint: hall_emails_status_check
+    hash: f2c64c746a6f
+  config:
+  - services/halls/settings.py::TEMPLATE_GROUP
+  tested_by:
+  - tests/test_halls_cancel.py::test_cancel_sends_letter_from_event_group_template
+  - tests/test_halls_cancel.py::test_venue_without_templates_records_unsent_letter
+  status: draft
+- id: R-HALLS-EMAIL-02
+  title: Шаблон письма — один на площадку, группу и тип
+  text: >
+    set_template (менеджер площадки) проверяет, что группа шаблона есть среди значений TEMPLATE_GROUP
+    («неизвестная группа шаблонов»). Дальше он обновляет тело существующего шаблона для пары (площадка,
+    группа, тип) или создаёт новый. Тип письма код не проверяет: недопустимый тип отклоняет только CHECK
+    в БД. Уникальность тройки обеспечивает UNIQUE (venue_id, kind_group, type).
+  kind: config
+  applies_to:
+  - table:halls.hall_templates
+  trigger: symbol:services/halls/service.py::set_template
+  effects:
+  - 'writes: table:halls.hall_templates'
+  related:
+  - R-HALLS-EMAIL-01
+  - R-HALLS-ACCESS-01
+  implemented_by:
+  - symbol: services/halls/service.py::set_template
+    lines: 403-417
+    hash: 1a6fca3d45f7
+  enforced_by_db:
+  - constraint: hall_templates_kind_group_check
+    hash: 3b555ffa7e77
+  - constraint: hall_templates_type_check
+    hash: e56eb8514eb9
+  - constraint: hall_templates_venue_id_kind_group_type_key
+    hash: 22edef15da0d
+  config:
+  - services/halls/settings.py::TEMPLATE_GROUP
+  status: draft

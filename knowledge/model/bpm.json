@@ -1,0 +1,1590 @@
+{
+ "edges": [
+  {
+   "dst": "role:system",
+   "src": "archived->closed_duplicate",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:operator",
+   "src": "archived->on_review",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:operator",
+   "src": "awaiting_invoice->archived",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:accountant",
+   "kinds": "paid",
+   "src": "awaiting_invoice->awaiting_payment",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:system",
+   "src": "awaiting_invoice->closed_duplicate",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:system",
+   "src": "awaiting_invoice->on_review",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:chief_accountant",
+   "kinds": "paid",
+   "src": "awaiting_issue->archived",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:site_checker",
+   "src": "awaiting_issue->books_out",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:system",
+   "src": "awaiting_issue->closed_duplicate",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:operator",
+   "src": "awaiting_payment->archived",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:system",
+   "kinds": "paid",
+   "src": "awaiting_payment->archived",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:system",
+   "kinds": "paid",
+   "src": "awaiting_payment->awaiting_invoice",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:system",
+   "kinds": "paid",
+   "src": "awaiting_payment->awaiting_issue",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:system",
+   "src": "awaiting_payment->closed_duplicate",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:system",
+   "src": "awaiting_payment->on_review",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:site_checker",
+   "src": "books_out->closed",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:operator",
+   "src": "draft->archived",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:system",
+   "src": "draft->closed_duplicate",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:operator",
+   "src": "draft->on_review",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:operator",
+   "src": "needs_rework->archived",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:system",
+   "src": "needs_rework->archived",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:system",
+   "src": "needs_rework->closed_duplicate",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:operator",
+   "src": "needs_rework->on_review",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:operator",
+   "src": "on_review->archived",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:system",
+   "src": "on_review->archived",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:reviewer",
+   "kinds": "paid",
+   "src": "on_review->awaiting_invoice",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:reviewer",
+   "kinds": "debt,social",
+   "src": "on_review->awaiting_issue",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:reviewer",
+   "kinds": "paid",
+   "src": "on_review->awaiting_payment",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:system",
+   "src": "on_review->closed_duplicate",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "role:reviewer",
+   "src": "on_review->needs_rework",
+   "type": "allowed_for"
+  },
+  {
+   "dst": "stage:archived",
+   "src": "archived->closed_duplicate",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:archived",
+   "src": "archived->on_review",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:awaiting_invoice",
+   "src": "awaiting_invoice->archived",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:awaiting_invoice",
+   "src": "awaiting_invoice->awaiting_payment",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:awaiting_invoice",
+   "src": "awaiting_invoice->closed_duplicate",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:awaiting_invoice",
+   "src": "awaiting_invoice->on_review",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:awaiting_issue",
+   "src": "awaiting_issue->archived",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:awaiting_issue",
+   "src": "awaiting_issue->books_out",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:awaiting_issue",
+   "src": "awaiting_issue->closed_duplicate",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:awaiting_payment",
+   "src": "awaiting_payment->archived",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:awaiting_payment",
+   "src": "awaiting_payment->awaiting_invoice",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:awaiting_payment",
+   "src": "awaiting_payment->awaiting_issue",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:awaiting_payment",
+   "src": "awaiting_payment->closed_duplicate",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:awaiting_payment",
+   "src": "awaiting_payment->on_review",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:books_out",
+   "src": "books_out->closed",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:draft",
+   "src": "draft->archived",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:draft",
+   "src": "draft->closed_duplicate",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:draft",
+   "src": "draft->on_review",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:needs_rework",
+   "src": "needs_rework->archived",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:needs_rework",
+   "src": "needs_rework->closed_duplicate",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:needs_rework",
+   "src": "needs_rework->on_review",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:on_review",
+   "src": "on_review->archived",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:on_review",
+   "src": "on_review->awaiting_invoice",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:on_review",
+   "src": "on_review->awaiting_issue",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:on_review",
+   "src": "on_review->awaiting_payment",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:on_review",
+   "src": "on_review->closed_duplicate",
+   "type": "from_stage"
+  },
+  {
+   "dst": "stage:on_review",
+   "src": "on_review->needs_rework",
+   "type": "from_stage"
+  },
+  {
+   "dst": "guard:fully_paid",
+   "src": "awaiting_payment->awaiting_issue",
+   "type": "guarded_by"
+  },
+  {
+   "dst": "guard:settled",
+   "src": "books_out->closed",
+   "type": "guarded_by"
+  },
+  {
+   "dst": "guard:has_active_invoice",
+   "src": "on_review->awaiting_payment",
+   "type": "guarded_by"
+  },
+  {
+   "dst": "services/billing/guards.py::fully_paid",
+   "lines": [
+    10
+   ],
+   "src": "guard:fully_paid",
+   "type": "implemented_by"
+  },
+  {
+   "dst": "services/billing/guards.py::has_active_invoice",
+   "lines": [
+    16
+   ],
+   "src": "guard:has_active_invoice",
+   "type": "implemented_by"
+  },
+  {
+   "dst": "services/applications/guards.py::settled",
+   "lines": [
+    10
+   ],
+   "src": "guard:settled",
+   "type": "implemented_by"
+  },
+  {
+   "dst": "stage:closed_duplicate",
+   "src": "archived->closed_duplicate",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:on_review",
+   "src": "archived->on_review",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:archived",
+   "src": "awaiting_invoice->archived",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:awaiting_payment",
+   "src": "awaiting_invoice->awaiting_payment",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:closed_duplicate",
+   "src": "awaiting_invoice->closed_duplicate",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:on_review",
+   "src": "awaiting_invoice->on_review",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:archived",
+   "src": "awaiting_issue->archived",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:books_out",
+   "src": "awaiting_issue->books_out",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:closed_duplicate",
+   "src": "awaiting_issue->closed_duplicate",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:archived",
+   "src": "awaiting_payment->archived",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:awaiting_invoice",
+   "src": "awaiting_payment->awaiting_invoice",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:awaiting_issue",
+   "src": "awaiting_payment->awaiting_issue",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:closed_duplicate",
+   "src": "awaiting_payment->closed_duplicate",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:on_review",
+   "src": "awaiting_payment->on_review",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:closed",
+   "src": "books_out->closed",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:archived",
+   "src": "draft->archived",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:closed_duplicate",
+   "src": "draft->closed_duplicate",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:on_review",
+   "src": "draft->on_review",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:archived",
+   "src": "needs_rework->archived",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:closed_duplicate",
+   "src": "needs_rework->closed_duplicate",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:on_review",
+   "src": "needs_rework->on_review",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:archived",
+   "src": "on_review->archived",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:awaiting_invoice",
+   "src": "on_review->awaiting_invoice",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:awaiting_issue",
+   "src": "on_review->awaiting_issue",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:awaiting_payment",
+   "src": "on_review->awaiting_payment",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:closed_duplicate",
+   "src": "on_review->closed_duplicate",
+   "type": "to_stage"
+  },
+  {
+   "dst": "stage:needs_rework",
+   "src": "on_review->needs_rework",
+   "type": "to_stage"
+  },
+  {
+   "actor": "site_checker",
+   "dst": "awaiting_issue->books_out",
+   "lines": [
+    69
+   ],
+   "src": "services/applications/consumers.py::on_books_issued",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "system",
+   "dst": "awaiting_invoice->on_review",
+   "lines": [
+    63
+   ],
+   "src": "services/applications/consumers.py::on_client_updated",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "system",
+   "dst": "awaiting_payment->on_review",
+   "lines": [
+    63
+   ],
+   "src": "services/applications/consumers.py::on_client_updated",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "system",
+   "dst": "awaiting_payment->awaiting_issue",
+   "lines": [
+    37
+   ],
+   "src": "services/applications/consumers.py::on_fully_paid",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "system",
+   "condition": "app.stage == 'awaiting_payment'",
+   "dst": "awaiting_payment->awaiting_invoice",
+   "lines": [
+    27
+   ],
+   "src": "services/applications/consumers.py::on_invoice_cancelled",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "accountant",
+   "condition": "app.stage == 'awaiting_invoice'",
+   "dst": "awaiting_invoice->awaiting_payment",
+   "lines": [
+    18
+   ],
+   "src": "services/applications/consumers.py::on_invoice_issued",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "system",
+   "dst": "archived->closed_duplicate",
+   "lines": [
+    40
+   ],
+   "src": "services/applications/dedup.py::close_duplicates",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "system",
+   "dst": "awaiting_invoice->closed_duplicate",
+   "lines": [
+    40
+   ],
+   "src": "services/applications/dedup.py::close_duplicates",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "system",
+   "dst": "awaiting_issue->closed_duplicate",
+   "lines": [
+    40
+   ],
+   "src": "services/applications/dedup.py::close_duplicates",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "system",
+   "dst": "awaiting_payment->closed_duplicate",
+   "lines": [
+    40
+   ],
+   "src": "services/applications/dedup.py::close_duplicates",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "system",
+   "dst": "draft->closed_duplicate",
+   "lines": [
+    40
+   ],
+   "src": "services/applications/dedup.py::close_duplicates",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "system",
+   "dst": "needs_rework->closed_duplicate",
+   "lines": [
+    40
+   ],
+   "src": "services/applications/dedup.py::close_duplicates",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "system",
+   "dst": "on_review->closed_duplicate",
+   "lines": [
+    40
+   ],
+   "src": "services/applications/dedup.py::close_duplicates",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "reviewer",
+   "dst": "on_review->awaiting_invoice",
+   "lines": [
+    182
+   ],
+   "src": "services/applications/service.py::approve",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "reviewer",
+   "dst": "on_review->awaiting_issue",
+   "lines": [
+    182
+   ],
+   "src": "services/applications/service.py::approve",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "reviewer",
+   "dst": "on_review->awaiting_payment",
+   "lines": [
+    182
+   ],
+   "src": "services/applications/service.py::approve",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "(параметр)",
+   "dst": "awaiting_invoice->archived",
+   "lines": [
+    257
+   ],
+   "src": "services/applications/service.py::archive",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "(параметр)",
+   "dst": "awaiting_issue->archived",
+   "lines": [
+    257
+   ],
+   "src": "services/applications/service.py::archive",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "(параметр)",
+   "dst": "awaiting_payment->archived",
+   "lines": [
+    257
+   ],
+   "src": "services/applications/service.py::archive",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "(параметр)",
+   "dst": "draft->archived",
+   "lines": [
+    257
+   ],
+   "src": "services/applications/service.py::archive",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "(параметр)",
+   "dst": "needs_rework->archived",
+   "lines": [
+    257
+   ],
+   "src": "services/applications/service.py::archive",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "(параметр)",
+   "dst": "on_review->archived",
+   "lines": [
+    257
+   ],
+   "src": "services/applications/service.py::archive",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "site_checker",
+   "dst": "books_out->closed",
+   "lines": [
+    311
+   ],
+   "src": "services/applications/service.py::close",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "reviewer",
+   "dst": "on_review->needs_rework",
+   "lines": [
+    195
+   ],
+   "src": "services/applications/service.py::return_for_rework",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "operator",
+   "dst": "archived->on_review",
+   "lines": [
+    116
+   ],
+   "src": "services/applications/service.py::submit_for_review",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "operator",
+   "dst": "draft->on_review",
+   "lines": [
+    116
+   ],
+   "src": "services/applications/service.py::submit_for_review",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "operator",
+   "dst": "needs_rework->on_review",
+   "lines": [
+    116
+   ],
+   "src": "services/applications/service.py::submit_for_review",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "operator",
+   "dst": "archived->on_review",
+   "lines": [
+    298
+   ],
+   "src": "services/applications/service.py::unarchive",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "operator",
+   "dst": "draft->on_review",
+   "lines": [
+    298
+   ],
+   "src": "services/applications/service.py::unarchive",
+   "type": "transitions_to"
+  },
+  {
+   "actor": "operator",
+   "dst": "needs_rework->on_review",
+   "lines": [
+    298
+   ],
+   "src": "services/applications/service.py::unarchive",
+   "type": "transitions_to"
+  },
+  {
+   "columns": [
+    "stage"
+   ],
+   "dst": "applications.applications",
+   "lines": [
+    69
+   ],
+   "src": "services/applications/consumers.py::on_books_issued",
+   "type": "writes",
+   "via": "libs/bpm/engine.py"
+  },
+  {
+   "columns": [
+    "stage"
+   ],
+   "dst": "applications.applications",
+   "lines": [
+    63
+   ],
+   "src": "services/applications/consumers.py::on_client_updated",
+   "type": "writes",
+   "via": "libs/bpm/engine.py"
+  },
+  {
+   "columns": [
+    "stage"
+   ],
+   "dst": "applications.applications",
+   "lines": [
+    37
+   ],
+   "src": "services/applications/consumers.py::on_fully_paid",
+   "type": "writes",
+   "via": "libs/bpm/engine.py"
+  },
+  {
+   "columns": [
+    "stage"
+   ],
+   "dst": "applications.applications",
+   "lines": [
+    27
+   ],
+   "src": "services/applications/consumers.py::on_invoice_cancelled",
+   "type": "writes",
+   "via": "libs/bpm/engine.py"
+  },
+  {
+   "columns": [
+    "stage"
+   ],
+   "dst": "applications.applications",
+   "lines": [
+    18
+   ],
+   "src": "services/applications/consumers.py::on_invoice_issued",
+   "type": "writes",
+   "via": "libs/bpm/engine.py"
+  },
+  {
+   "columns": [
+    "stage"
+   ],
+   "dst": "applications.applications",
+   "lines": [
+    40
+   ],
+   "src": "services/applications/dedup.py::close_duplicates",
+   "type": "writes",
+   "via": "libs/bpm/engine.py"
+  },
+  {
+   "columns": [
+    "stage"
+   ],
+   "dst": "applications.applications",
+   "lines": [
+    182
+   ],
+   "src": "services/applications/service.py::approve",
+   "type": "writes",
+   "via": "libs/bpm/engine.py"
+  },
+  {
+   "columns": [
+    "stage"
+   ],
+   "dst": "applications.applications",
+   "lines": [
+    257
+   ],
+   "src": "services/applications/service.py::archive",
+   "type": "writes",
+   "via": "libs/bpm/engine.py"
+  },
+  {
+   "columns": [
+    "stage"
+   ],
+   "dst": "applications.applications",
+   "lines": [
+    311
+   ],
+   "src": "services/applications/service.py::close",
+   "type": "writes",
+   "via": "libs/bpm/engine.py"
+  },
+  {
+   "columns": [
+    "stage"
+   ],
+   "dst": "applications.applications",
+   "lines": [
+    195
+   ],
+   "src": "services/applications/service.py::return_for_rework",
+   "type": "writes",
+   "via": "libs/bpm/engine.py"
+  },
+  {
+   "columns": [
+    "stage"
+   ],
+   "dst": "applications.applications",
+   "lines": [
+    116
+   ],
+   "src": "services/applications/service.py::submit_for_review",
+   "type": "writes",
+   "via": "libs/bpm/engine.py"
+  },
+  {
+   "columns": [
+    "stage"
+   ],
+   "dst": "applications.applications",
+   "lines": [
+    298
+   ],
+   "src": "services/applications/service.py::unarchive",
+   "type": "writes",
+   "via": "libs/bpm/engine.py"
+  }
+ ],
+ "generated_by": "tools/knowledge/extract_bpm.py",
+ "nodes": [
+  {
+   "id": "guard:fully_paid",
+   "implemented_by": "services/billing/guards.py::fully_paid",
+   "name": "fully_paid",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_guard"
+  },
+  {
+   "id": "guard:has_active_invoice",
+   "implemented_by": "services/billing/guards.py::has_active_invoice",
+   "name": "has_active_invoice",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_guard"
+  },
+  {
+   "doc": "Все книги возвращены или списаны, штрафы погашены.",
+   "id": "guard:settled",
+   "implemented_by": "services/applications/guards.py::settled",
+   "name": "settled",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_guard"
+  },
+  {
+   "id": "process:application",
+   "name": "application",
+   "path": "bpm/application_process.yaml",
+   "paths": {
+    "debt": [
+     "draft",
+     "on_review",
+     "awaiting_issue",
+     "books_out",
+     "closed"
+    ],
+    "paid": [
+     "draft",
+     "on_review",
+     "awaiting_invoice",
+     "awaiting_payment",
+     "awaiting_issue",
+     "books_out",
+     "closed"
+    ],
+    "social": [
+     "draft",
+     "on_review",
+     "awaiting_issue",
+     "books_out",
+     "closed"
+    ]
+   },
+   "table": "applications.applications",
+   "type": "bpm_process"
+  },
+  {
+   "hash": "bb5857d29271",
+   "id": "archived->closed_duplicate",
+   "line": 43,
+   "name": "archived->closed_duplicate",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "system"
+     ],
+     "line": 43
+    }
+   ]
+  },
+  {
+   "hash": "6080e315f1cc",
+   "id": "archived->on_review",
+   "line": 41,
+   "name": "archived->on_review",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "operator"
+     ],
+     "line": 41
+    }
+   ]
+  },
+  {
+   "hash": "6080e315f1cc",
+   "id": "awaiting_invoice->archived",
+   "line": 39,
+   "name": "awaiting_invoice->archived",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "operator"
+     ],
+     "line": 39
+    }
+   ]
+  },
+  {
+   "hash": "eed6b5e042e5",
+   "id": "awaiting_invoice->awaiting_payment",
+   "line": 27,
+   "name": "awaiting_invoice->awaiting_payment",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "accountant"
+     ],
+     "kinds": [
+      "paid"
+     ],
+     "line": 27
+    }
+   ]
+  },
+  {
+   "hash": "bb5857d29271",
+   "id": "awaiting_invoice->closed_duplicate",
+   "line": 43,
+   "name": "awaiting_invoice->closed_duplicate",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "system"
+     ],
+     "line": 43
+    }
+   ]
+  },
+  {
+   "hash": "bb5857d29271",
+   "id": "awaiting_invoice->on_review",
+   "line": 32,
+   "name": "awaiting_invoice->on_review",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "system"
+     ],
+     "line": 32
+    }
+   ]
+  },
+  {
+   "hash": "191f005d1e70",
+   "id": "awaiting_issue->archived",
+   "line": 40,
+   "name": "awaiting_issue->archived",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "chief_accountant"
+     ],
+     "kinds": [
+      "paid"
+     ],
+     "line": 40
+    }
+   ]
+  },
+  {
+   "hash": "771af805e9ca",
+   "id": "awaiting_issue->books_out",
+   "line": 34,
+   "name": "awaiting_issue->books_out",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "site_checker"
+     ],
+     "line": 34
+    }
+   ]
+  },
+  {
+   "hash": "bb5857d29271",
+   "id": "awaiting_issue->closed_duplicate",
+   "line": 43,
+   "name": "awaiting_issue->closed_duplicate",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "system"
+     ],
+     "line": 43
+    }
+   ]
+  },
+  {
+   "hash": "6d4d7f1696d6",
+   "id": "awaiting_payment->archived",
+   "line": 38,
+   "name": "awaiting_payment->archived",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "system"
+     ],
+     "kinds": [
+      "paid"
+     ],
+     "line": 38
+    },
+    {
+     "actor": [
+      "operator"
+     ],
+     "line": 39
+    }
+   ]
+  },
+  {
+   "hash": "91fd7d7e8505",
+   "id": "awaiting_payment->awaiting_invoice",
+   "line": 28,
+   "name": "awaiting_payment->awaiting_invoice",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "system"
+     ],
+     "kinds": [
+      "paid"
+     ],
+     "line": 28
+    }
+   ]
+  },
+  {
+   "hash": "6fe11e269daf",
+   "id": "awaiting_payment->awaiting_issue",
+   "line": 29,
+   "name": "awaiting_payment->awaiting_issue",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "system"
+     ],
+     "guard": "fully_paid",
+     "kinds": [
+      "paid"
+     ],
+     "line": 29
+    }
+   ]
+  },
+  {
+   "hash": "bb5857d29271",
+   "id": "awaiting_payment->closed_duplicate",
+   "line": 43,
+   "name": "awaiting_payment->closed_duplicate",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "system"
+     ],
+     "line": 43
+    }
+   ]
+  },
+  {
+   "hash": "bb5857d29271",
+   "id": "awaiting_payment->on_review",
+   "line": 32,
+   "name": "awaiting_payment->on_review",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "system"
+     ],
+     "line": 32
+    }
+   ]
+  },
+  {
+   "hash": "39283bcffd77",
+   "id": "books_out->closed",
+   "line": 35,
+   "name": "books_out->closed",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "site_checker"
+     ],
+     "guard": "settled",
+     "line": 35
+    }
+   ]
+  },
+  {
+   "hash": "6080e315f1cc",
+   "id": "draft->archived",
+   "line": 39,
+   "name": "draft->archived",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "operator"
+     ],
+     "line": 39
+    }
+   ]
+  },
+  {
+   "hash": "bb5857d29271",
+   "id": "draft->closed_duplicate",
+   "line": 43,
+   "name": "draft->closed_duplicate",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "system"
+     ],
+     "line": 43
+    }
+   ]
+  },
+  {
+   "hash": "6080e315f1cc",
+   "id": "draft->on_review",
+   "line": 20,
+   "name": "draft->on_review",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "operator"
+     ],
+     "line": 20
+    }
+   ]
+  },
+  {
+   "hash": "9f1416124f1e",
+   "id": "needs_rework->archived",
+   "line": 37,
+   "name": "needs_rework->archived",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "system"
+     ],
+     "line": 37
+    },
+    {
+     "actor": [
+      "operator"
+     ],
+     "line": 39
+    }
+   ]
+  },
+  {
+   "hash": "bb5857d29271",
+   "id": "needs_rework->closed_duplicate",
+   "line": 43,
+   "name": "needs_rework->closed_duplicate",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "system"
+     ],
+     "line": 43
+    }
+   ]
+  },
+  {
+   "hash": "6080e315f1cc",
+   "id": "needs_rework->on_review",
+   "line": 20,
+   "name": "needs_rework->on_review",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "operator"
+     ],
+     "line": 20
+    }
+   ]
+  },
+  {
+   "hash": "9f1416124f1e",
+   "id": "on_review->archived",
+   "line": 37,
+   "name": "on_review->archived",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "system"
+     ],
+     "line": 37
+    },
+    {
+     "actor": [
+      "operator"
+     ],
+     "line": 39
+    }
+   ]
+  },
+  {
+   "hash": "a323ed5d9506",
+   "id": "on_review->awaiting_invoice",
+   "line": 23,
+   "name": "on_review->awaiting_invoice",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "reviewer"
+     ],
+     "kinds": [
+      "paid"
+     ],
+     "line": 23
+    }
+   ]
+  },
+  {
+   "hash": "0e48e83290df",
+   "id": "on_review->awaiting_issue",
+   "line": 25,
+   "name": "on_review->awaiting_issue",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "reviewer"
+     ],
+     "kinds": [
+      "debt",
+      "social"
+     ],
+     "line": 25
+    }
+   ]
+  },
+  {
+   "hash": "9a48761d6b51",
+   "id": "on_review->awaiting_payment",
+   "line": 24,
+   "name": "on_review->awaiting_payment",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "reviewer"
+     ],
+     "guard": "has_active_invoice",
+     "kinds": [
+      "paid"
+     ],
+     "line": 24
+    }
+   ]
+  },
+  {
+   "hash": "bb5857d29271",
+   "id": "on_review->closed_duplicate",
+   "line": 43,
+   "name": "on_review->closed_duplicate",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "system"
+     ],
+     "line": 43
+    }
+   ]
+  },
+  {
+   "hash": "585ef125d882",
+   "id": "on_review->needs_rework",
+   "line": 21,
+   "name": "on_review->needs_rework",
+   "path": "bpm/application_process.yaml",
+   "type": "bpm_transition",
+   "variants": [
+    {
+     "actor": [
+      "reviewer"
+     ],
+     "line": 21
+    }
+   ]
+  },
+  {
+   "id": "role:accountant",
+   "name": "accountant",
+   "type": "role"
+  },
+  {
+   "id": "role:chief_accountant",
+   "name": "chief_accountant",
+   "type": "role"
+  },
+  {
+   "id": "role:operator",
+   "name": "operator",
+   "type": "role"
+  },
+  {
+   "id": "role:reviewer",
+   "name": "reviewer",
+   "type": "role"
+  },
+  {
+   "id": "role:site_checker",
+   "name": "site_checker",
+   "type": "role"
+  },
+  {
+   "id": "role:system",
+   "name": "system",
+   "type": "role"
+  },
+  {
+   "id": "stage:archived",
+   "name": "archived",
+   "order": 8,
+   "path": "bpm/application_process.yaml",
+   "type": "status"
+  },
+  {
+   "id": "stage:awaiting_invoice",
+   "kinds": [
+    "paid"
+   ],
+   "name": "awaiting_invoice",
+   "order": 3,
+   "path": "bpm/application_process.yaml",
+   "type": "status"
+  },
+  {
+   "id": "stage:awaiting_issue",
+   "kinds": [
+    "paid",
+    "debt",
+    "social"
+   ],
+   "name": "awaiting_issue",
+   "order": 5,
+   "path": "bpm/application_process.yaml",
+   "type": "status"
+  },
+  {
+   "id": "stage:awaiting_payment",
+   "kinds": [
+    "paid"
+   ],
+   "name": "awaiting_payment",
+   "order": 4,
+   "path": "bpm/application_process.yaml",
+   "type": "status"
+  },
+  {
+   "id": "stage:books_out",
+   "kinds": [
+    "paid",
+    "debt",
+    "social"
+   ],
+   "name": "books_out",
+   "order": 6,
+   "path": "bpm/application_process.yaml",
+   "type": "status"
+  },
+  {
+   "id": "stage:closed",
+   "kinds": [
+    "paid",
+    "debt",
+    "social"
+   ],
+   "name": "closed",
+   "order": 7,
+   "path": "bpm/application_process.yaml",
+   "type": "status"
+  },
+  {
+   "id": "stage:closed_duplicate",
+   "name": "closed_duplicate",
+   "order": 9,
+   "path": "bpm/application_process.yaml",
+   "type": "status"
+  },
+  {
+   "id": "stage:draft",
+   "kinds": [
+    "paid",
+    "debt",
+    "social"
+   ],
+   "name": "draft",
+   "order": 0,
+   "path": "bpm/application_process.yaml",
+   "type": "status"
+  },
+  {
+   "id": "stage:needs_rework",
+   "name": "needs_rework",
+   "order": 2,
+   "path": "bpm/application_process.yaml",
+   "type": "status"
+  },
+  {
+   "id": "stage:on_review",
+   "kinds": [
+    "paid",
+    "debt",
+    "social"
+   ],
+   "name": "on_review",
+   "order": 1,
+   "path": "bpm/application_process.yaml",
+   "type": "status"
+  }
+ ],
+ "paths": {
+  "debt": [
+   "draft",
+   "on_review",
+   "awaiting_issue",
+   "books_out",
+   "closed"
+  ],
+  "paid": [
+   "draft",
+   "on_review",
+   "awaiting_invoice",
+   "awaiting_payment",
+   "awaiting_issue",
+   "books_out",
+   "closed"
+  ],
+  "social": [
+   "draft",
+   "on_review",
+   "awaiting_issue",
+   "books_out",
+   "closed"
+  ]
+ },
+ "stages": [
+  "draft",
+  "on_review",
+  "needs_rework",
+  "awaiting_invoice",
+  "awaiting_payment",
+  "awaiting_issue",
+  "books_out",
+  "closed",
+  "archived",
+  "closed_duplicate"
+ ]
+}

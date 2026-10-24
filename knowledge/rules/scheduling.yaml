@@ -1,0 +1,953 @@
+# Правила модуля scheduling: извлечены LLM (tools/knowledge/bootstrap_rules.sh) из кода и среза графа.
+# Статус verified ставит только человек. Хэши обновляет tools/knowledge/drift.py --write.
+rules:
+- id: R-SCHED-SITE-CHECKER-01
+  title: Проверяющий оператор работает только со своей площадкой
+  text: >
+    Создать окно, уменьшить в нём число мест, убрать окно и отметить неявку может только проверяющий оператор
+    площадки окна (venue.site_checker_id). Иначе — AccessDenied «проверяющий оператор работает только
+    со своей площадкой». Проверка общая, в _require_site_checker.
+  kind: permission
+  applies_to:
+  - table:scheduling.slots
+  trigger: symbol:services/scheduling/service.py::_require_site_checker
+  roles:
+  - site_checker
+  related:
+  - R-SCHED-SLOT-01
+  - R-SCHED-SLOT-04
+  - R-SCHED-SLOT-05
+  - R-SCHED-NO-SHOW-01
+  implemented_by:
+  - symbol: services/scheduling/service.py::_require_site_checker
+    lines: 17-20
+    hash: 627195aa6f4e
+  - symbol: services/scheduling/service.py::create_slot
+    lines: '32'
+    hash: 1f95c51ca4d1
+  - symbol: services/scheduling/service.py::reduce_capacity
+    lines: '56'
+    hash: b4f9930f0a3c
+  - symbol: services/scheduling/service.py::remove_slot
+    lines: '70'
+    hash: 4fd12aa7b697
+  - symbol: services/scheduling/service.py::mark_no_show
+    lines: '218'
+    hash: 7d0ed8f66900
+  schema_ref: §2 Проверяющий оператор; §12 Расписание площадок
+  status: draft
+- id: R-SCHED-SLOT-01
+  title: Нельзя создать окно на прошедшее время
+  text: >
+    При создании окна время начала должно быть строго позже текущего (clock.now()), иначе DomainError
+    «нельзя создать окно на прошедшее время».
+  kind: guard
+  applies_to:
+  - table:scheduling.slots
+  trigger: symbol:services/scheduling/service.py::create_slot
+  roles:
+  - site_checker
+  related:
+  - R-SCHED-SITE-CHECKER-01
+  implemented_by:
+  - symbol: services/scheduling/service.py::create_slot
+    lines: 33-34
+    hash: 1f95c51ca4d1
+  tested_by:
+  - tests/test_scheduling.py::test_slot_in_past_forbidden
+  schema_ref: §12 Расписание площадок
+  status: draft
+- id: R-SCHED-SLOT-02
+  title: По умолчанию в окне столько мест, сколько максимум площадки
+  text: >
+    Если при создании окна число мест не передано, берётся max_capacity площадки из реплики scheduling.venue_limits.
+    Если лимит для площадки не задан — DomainError «для площадки не задан максимум мест». Окна создаются
+    по паре площадка+сфера, без признака цели (выдача/сдача).
+  kind: calculation
+  applies_to:
+  - table:scheduling.slots
+  - table:scheduling.venue_limits
+  trigger: symbol:services/scheduling/service.py::create_slot
+  effects:
+  - 'writes: table:scheduling.slots'
+  roles:
+  - site_checker
+  related:
+  - R-SCHED-SLOT-03
+  - R-SCHED-VENUE-LIMIT-01
+  implemented_by:
+  - symbol: services/scheduling/service.py::create_slot
+    lines: 35-41
+    hash: 1f95c51ca4d1
+  enforced_by_db:
+  - constraint: trg_slot_capacity_limit
+    hash: 9474bb1e6464
+  tested_by:
+  - tests/test_scheduling.py::test_checker_can_only_reduce_capacity
+  schema_ref: §12 Расписание площадок
+  status: draft
+- id: R-SCHED-SLOT-03
+  title: Число мест в окне не больше максимума площадки (контроль в БД)
+  text: >
+    Триггер trg_slot_capacity_limit (функция check_slot_capacity) на INSERT и UPDATE OF capacity таблицы
+    scheduling.slots отклоняет запись, если для площадки нет строки в venue_limits («no capacity limit
+    for venue») или capacity больше max_capacity («slot capacity exceeds venue maximum»). В коде create_slot
+    явно переданное число мест с максимумом не сверяется, так что ограничение держит только БД. CHECK
+    slots_capacity_check требует capacity > 0.
+  kind: invariant
+  applies_to:
+  - table:scheduling.slots
+  trigger: table:scheduling.slots
+  roles:
+  - site_checker
+  related:
+  - R-SCHED-SLOT-02
+  - R-SCHED-VENUE-LIMIT-01
+  implemented_by:
+  - symbol: services/scheduling/service.py::create_slot
+    lines: 40-42
+    hash: 1f95c51ca4d1
+  enforced_by_db:
+  - constraint: trg_slot_capacity_limit
+    hash: 9474bb1e6464
+  - constraint: check_slot_capacity
+    hash: 5e5e1eec500d
+  - constraint: slots_capacity_check
+    hash: f197e4338295
+  tested_by:
+  - tests/test_scheduling.py::test_slot_capacity_cannot_exceed_venue_maximum
+  schema_ref: §12 Расписание площадок
+  status: draft
+- id: R-SCHED-SLOT-04
+  title: Проверяющий оператор может только уменьшить число мест в окне
+  text: >
+    reduce_capacity принимает только значение строго меньше текущего capacity окна («проверяющий оператор
+    может только уменьшить число мест») и не меньше числа действующих записей в окне («в окне уже записано
+    больше клиентов»). Действующие записи — bookings со статусом active.
+  kind: guard
+  applies_to:
+  - table:scheduling.slots
+  trigger: symbol:services/scheduling/service.py::reduce_capacity
+  effects:
+  - 'writes: table:scheduling.slots'
+  roles:
+  - site_checker
+  related:
+  - R-SCHED-SITE-CHECKER-01
+  - R-SCHED-SLOT-03
+  implemented_by:
+  - symbol: services/scheduling/service.py::reduce_capacity
+    lines: 57-61
+    hash: b4f9930f0a3c
+  - symbol: services/scheduling/service.py::_active_bookings
+    lines: 46-49
+    hash: aa8e00301e30
+  enforced_by_db:
+  - constraint: trg_slot_capacity_limit
+    hash: 9474bb1e6464
+  - constraint: slots_capacity_check
+    hash: f197e4338295
+  tested_by:
+  - tests/test_scheduling.py::test_checker_can_only_reduce_capacity
+  schema_ref: §12 Расписание площадок
+  status: draft
+- id: R-SCHED-SLOT-05
+  title: Удаление окна отменяет записи на него
+  text: >
+    Окно удаляется мягко (slots.removed = true). Сначала все действующие записи на окно отменяются с причиной
+    slot_removed, на каждую публикуется booking.cancelled. Из-за этого клиент и представитель получают
+    письмо об отмене, в чат заявки пишется событие. Закреплённые книги и ссылка на запись остаются.
+  kind: effect
+  applies_to:
+  - table:scheduling.slots
+  - table:scheduling.bookings
+  trigger: symbol:services/scheduling/service.py::remove_slot
+  effects:
+  - 'writes: table:scheduling.slots'
+  - event:booking.cancelled
+  roles:
+  - site_checker
+  related:
+  - R-SCHED-CANCEL-01
+  - R-SCHED-SITE-CHECKER-01
+  implemented_by:
+  - symbol: services/scheduling/service.py::remove_slot
+    lines: 71-76
+    hash: 4fd12aa7b697
+  - symbol: services/scheduling/service.py::_cancel
+    lines: 178-190
+    hash: 6120ee8baf20
+  schema_ref: §12 Расписание площадок
+  status: draft
+- id: R-SCHED-VENUE-LIMIT-01
+  title: Максимум мест площадки реплицируется из админки событием
+  text: >
+    Подписчик venue.settings_changed (публикует admin.set_venue_max_capacity) создаёт или обновляет строку
+    scheduling.venue_limits с новым max_capacity. Уже созданные окна не пересчитываются: триггер срабатывает
+    только на INSERT или изменение capacity, поэтому после снижения максимума окна со старым, большим
+    числом мест остаются. CHECK требует max_capacity > 0.
+  kind: effect
+  applies_to:
+  - table:scheduling.venue_limits
+  trigger: event:venue.settings_changed
+  effects:
+  - 'writes: table:scheduling.venue_limits'
+  roles:
+  - admin
+  related:
+  - R-SCHED-SLOT-02
+  - R-SCHED-SLOT-03
+  implemented_by:
+  - symbol: services/scheduling/consumers.py::on_venue_settings_changed
+    lines: 35-40
+    hash: 37def55ecd07
+  enforced_by_db:
+  - constraint: venue_limits_max_capacity_check
+    hash: 3a9484826b99
+  schema_ref: §2 Администратор; §12 Расписание площадок
+  status: draft
+- id: R-SCHED-LINK-01
+  title: Ссылка на запись за книгами выдаётся при готовности к записи
+  text: >
+    На событие application.ready_for_booking (публикует mark_ready_for_booking при переходе в «Ожидает
+    выдачи»: после проверки для debt/social, после полной оплаты для paid) модуль выпускает ссылку с purpose=issue.
+  kind: effect
+  applies_to:
+  - table:scheduling.booking_links
+  trigger: event:application.ready_for_booking
+  effects:
+  - 'writes: table:scheduling.booking_links'
+  roles:
+  - system
+  related:
+  - R-SCHED-LINK-02
+  - R-SCHED-ISSUE-03
+  implemented_by:
+  - symbol: services/scheduling/consumers.py::on_ready_for_booking
+    lines: 12-13
+    hash: 648936515cb6
+  - symbol: services/scheduling/service.py::issue_link
+    lines: 79-86
+    hash: f6a14a335442
+  tested_by:
+  - tests/test_paid_flow.py::test_paid_application_full_path
+  schema_ref: §13 Запись на визит и письма
+  status: draft
+- id: R-SCHED-LINK-02
+  title: У заявки только одна действующая ссылка
+  text: >
+    issue_link гасит все прежние ссылки заявки (active=false) и создаёт новую со случайным токеном (secrets.token_urlsafe(16)).
+    БД гарантирует уникальность токена и не больше одной активной ссылки на заявку. purpose ограничен
+    значениями issue/return.
+  kind: invariant
+  applies_to:
+  - table:scheduling.booking_links
+  trigger: symbol:services/scheduling/service.py::issue_link
+  effects:
+  - 'writes: table:scheduling.booking_links'
+  roles:
+  - system
+  related:
+  - R-SCHED-LINK-01
+  - R-SCHED-LINK-03
+  implemented_by:
+  - symbol: services/scheduling/service.py::issue_link
+    lines: 79-86
+    hash: f6a14a335442
+  enforced_by_db:
+  - constraint: uq_booking_links_one_active
+    hash: 0d868e7a0638
+  - constraint: booking_links_token_key
+    hash: a8420b878df4
+  - constraint: booking_links_purpose_check
+    hash: 9c2bb924dd5d
+  status: draft
+- id: R-SCHED-LINK-03
+  title: Неактивная ссылка не даёт ни смотреть окна, ни записываться
+  text: >
+    Просмотр свободных окон и запись по токену требуют существующую активную ссылку. Иначе — DomainError
+    «ссылка на запись не действует». Ссылка гаснет при архивации, закрытии дублем, смене площадки и выпуске
+    новой ссылки.
+  kind: guard
+  applies_to:
+  - table:scheduling.booking_links
+  trigger: symbol:services/scheduling/service.py::_link_by_token
+  roles:
+  - client
+  - representative
+  - operator
+  related:
+  - R-SCHED-RESET-01
+  - R-SCHED-LINK-02
+  implemented_by:
+  - symbol: services/scheduling/service.py::_link_by_token
+    lines: 95-99
+    hash: f72f2a1be4fe
+  schema_ref: §13 Запись на визит и письма
+  discrepancy: >
+    Схема: по закрытой заявке ссылка не работает. Код: на закрытие заявки (books_out->closed) модуль не
+    подписан, ссылка на сдачу (purpose=return) после закрытия остаётся активной.
+  status: draft
+- id: R-SCHED-FREE-SLOTS-01
+  title: По ссылке видны только будущие свободные окна площадки и сферы заявки
+  text: >
+    free_slots возвращает окна площадки и сферы заявки, кроме удалённых, только с началом позже текущего
+    момента и где действующих записей меньше capacity. Список отсортирован по времени.
+  kind: guard
+  applies_to:
+  - table:scheduling.slots
+  trigger: symbol:services/scheduling/api.py::slots
+  roles:
+  - client
+  - representative
+  related:
+  - R-SCHED-BOOK-01
+  implemented_by:
+  - symbol: services/scheduling/service.py::free_slots
+    lines: 102-123
+    hash: dce191255caf
+  - symbol: services/scheduling/api.py::slots
+    lines: 27-31
+    hash: bd5b1d3cdea7
+  tested_by:
+  - tests/test_scheduling.py::test_free_slots_hide_full_windows
+  schema_ref: §12 Расписание площадок
+  status: draft
+- id: R-SCHED-BOOK-01
+  title: Запись только в своё, будущее и не заполненное окно
+  text: >
+    book отклоняет удалённое окно (NotFound), окно другой площадки или сферы («окно не на площадке или
+    не в сфере заявки»), окно в прошлом («нельзя записаться на прошедшее время») и окно, где действующих
+    записей уже не меньше capacity («в окне нет свободных мест»).
+  kind: guard
+  applies_to:
+  - table:scheduling.bookings
+  trigger: symbol:services/scheduling/service.py::book
+  roles:
+  - client
+  - representative
+  - operator
+  related:
+  - R-SCHED-FREE-SLOTS-01
+  - R-SCHED-BOOK-02
+  implemented_by:
+  - symbol: services/scheduling/service.py::book
+    lines: 130-137
+    hash: e0cce5e125eb
+  tested_by:
+  - tests/test_scheduling.py::test_booking_only_on_own_venue_and_sphere
+  schema_ref: §2 Клиент; §12 Расписание площадок
+  discrepancy: >
+    Число свободных мест проверяется подсчётом в коде без блокировки. При параллельных записях окно можно
+    переполнить: в БД нет ограничения на число записей в окне.
+  status: draft
+- id: R-SCHED-BOOK-02
+  title: У заявки не больше одной действующей записи
+  text: >
+    Частичный уникальный индекс uq_bookings_one_active не даёт создать вторую запись со статусом active
+    на ту же заявку. В коде book такой проверки нет: повторная запись упадёт на ошибке целостности БД,
+    а не на DomainError. Перенос сначала отменяет старую запись.
+  kind: invariant
+  applies_to:
+  - table:scheduling.bookings
+  trigger: symbol:services/scheduling/service.py::book
+  roles:
+  - client
+  - representative
+  - operator
+  related:
+  - R-SCHED-RESCHEDULE-01
+  implemented_by:
+  - symbol: services/scheduling/service.py::book
+    lines: 139-151
+    hash: e0cce5e125eb
+  enforced_by_db:
+  - constraint: uq_bookings_one_active
+    hash: 2956cac5345f
+  - constraint: bookings_status_check
+    hash: 9e9bc99257e7
+  - constraint: bookings_purpose_check
+    hash: 9c2bb924dd5d
+  status: draft
+- id: R-SCHED-BOOK-03
+  title: Цель записи берётся из ссылки, кто записал — из запроса
+  text: >
+    У записи purpose берётся из ссылки (issue или return), booked_by — из тела запроса (по умолчанию client).
+    CHECK bookings_booked_by_check допускает только client, representative, operator.
+  kind: invariant
+  applies_to:
+  - table:scheduling.bookings
+  trigger: symbol:services/scheduling/api.py::book
+  effects:
+  - 'writes: table:scheduling.bookings'
+  roles:
+  - client
+  - representative
+  related:
+  - R-SCHED-CANCEL-02
+  implemented_by:
+  - symbol: services/scheduling/service.py::book
+    lines: 139-147
+    hash: e0cce5e125eb
+  - symbol: services/scheduling/api.py::book
+    lines: 35-37
+    hash: 462831f5d7ab
+  enforced_by_db:
+  - constraint: bookings_booked_by_check
+    hash: 0d38bf98b5fc
+  discrepancy: >
+    Схема: оператор записывает в системе, клиент и представитель — по ссылке. Код: публичный эндпоинт
+    POST /links/{token}/bookings принимает booked_by=operator от кого угодно с токеном.
+  status: draft
+- id: R-SCHED-HOLD-01
+  title: Книги закрепляются за заявкой при записи за книгами
+  text: >
+    При записи с purpose=issue каждая книга заявки (brief.book_ids) записывается в scheduling.holds через
+    merge, поэтому повторная запись не создаёт дублей (PK application_id+book_id). Запись на сдачу (return)
+    книги не закрепляет.
+  kind: effect
+  applies_to:
+  - table:scheduling.holds
+  trigger: symbol:services/scheduling/service.py::book
+  effects:
+  - 'writes: table:scheduling.holds'
+  roles:
+  - client
+  - representative
+  - operator
+  related:
+  - R-SCHED-HOLD-02
+  - R-SCHED-RESET-01
+  implemented_by:
+  - symbol: services/scheduling/service.py::book
+    lines: 148-150
+    hash: e0cce5e125eb
+  schema_ref: §8 Сферы и книги
+  status: draft
+- id: R-SCHED-HOLD-02
+  title: Отмена, перенос и неявка не освобождают книги
+  text: >
+    _cancel меняет только статус записи и публикует событие, scheduling.holds не трогает. Книги освобождаются
+    только в reset_bookings (смена площадки, архив, дубль) и при выдаче.
+  kind: invariant
+  applies_to:
+  - table:scheduling.holds
+  trigger: symbol:services/scheduling/service.py::_cancel
+  roles:
+  - client
+  - representative
+  - operator
+  - site_checker
+  related:
+  - R-SCHED-HOLD-01
+  - R-SCHED-ISSUE-03
+  implemented_by:
+  - symbol: services/scheduling/service.py::_cancel
+    lines: 178-190
+    hash: 6120ee8baf20
+  schema_ref: §8 Сферы и книги
+  status: draft
+- id: R-SCHED-BOOK-EVENT-01
+  title: Запись на визит — письмо клиенту и представителю, событие в чате
+  text: >
+    После записи публикуется booking.created (application_id, booking_id, venue_id, starts_at, purpose).
+    Подписчик notifications отправляет письмо типа booking получателям заявки по шаблону площадки и группы
+    вида заявки. Обработчик chat пишет в чат «Запись на {starts_at}».
+  kind: effect
+  applies_to:
+  - table:scheduling.bookings
+  trigger: symbol:services/scheduling/service.py::book
+  effects:
+  - event:booking.created
+  - symbol:services/notifications/consumers.py::on_booking_created
+  - symbol:services/chat/consumers.py::_handler
+  roles:
+  - client
+  - representative
+  - operator
+  related:
+  - R-SCHED-CANCEL-01
+  implemented_by:
+  - symbol: services/scheduling/service.py::book
+    lines: 152-162
+    hash: e0cce5e125eb
+  - symbol: services/notifications/consumers.py::on_booking_created
+    lines: 10-17
+    hash: b765a21d3fc7
+  - symbol: services/chat/consumers.py::_handler
+    lines: 23-27
+    hash: f46c9b143853
+  tested_by:
+  - tests/test_notifications.py::test_booking_email_goes_to_client_and_representative
+  - tests/test_notifications.py::test_social_uses_social_templates
+  schema_ref: §13 Запись на визит и письма
+  status: verified
+  verified_at: '2026-10-23'
+- id: R-SCHED-OPERATOR-BOOK-01
+  title: Оператор записывает клиента только по своей заявке и при активной ссылке
+  text: >
+    book_by_operator требует, чтобы заявка была закреплена за этим оператором («заявка закреплена за другим
+    оператором») и у неё была действующая ссылка («по заявке нет действующей ссылки на запись»). Дальше
+    выполняется обычная запись с booked_by=operator.
+  kind: permission
+  applies_to:
+  - table:scheduling.bookings
+  trigger: symbol:services/scheduling/service.py::book_by_operator
+  effects:
+  - symbol:services/scheduling/service.py::book
+  roles:
+  - operator
+  related:
+  - R-SCHED-BOOK-01
+  implemented_by:
+  - symbol: services/scheduling/service.py::book_by_operator
+    lines: 169-175
+    hash: 4543c4eb44c4
+  schema_ref: §13 Запись на визит и письма
+  status: draft
+- id: R-SCHED-CANCEL-01
+  title: Отмена записи — письмо об отмене и событие в чате
+  text: >
+    Любая отмена (клиентом, оператором, удалением окна, неявкой, сбросом) идёт через _cancel. Статус записи
+    становится no_show при причине no_show, иначе cancelled. Публикуется booking.cancelled с причиной:
+    notifications отправляет письмо типа cancel, chat пишет «Запись на … отменена (reason)».
+  kind: effect
+  applies_to:
+  - table:scheduling.bookings
+  trigger: symbol:services/scheduling/service.py::_cancel
+  effects:
+  - 'writes: table:scheduling.bookings'
+  - event:booking.cancelled
+  - symbol:services/notifications/consumers.py::on_booking_cancelled
+  - symbol:services/chat/consumers.py::_handler
+  roles:
+  - client
+  - representative
+  - operator
+  - site_checker
+  - system
+  related:
+  - R-SCHED-BOOK-EVENT-01
+  - R-SCHED-NO-SHOW-01
+  - R-SCHED-SLOT-05
+  implemented_by:
+  - symbol: services/scheduling/service.py::_cancel
+    lines: 178-190
+    hash: 6120ee8baf20
+  - symbol: services/notifications/consumers.py::on_booking_cancelled
+    lines: 21-28
+    hash: 9cb13a16e669
+  - symbol: services/chat/consumers.py::_handler
+    lines: 23-27
+    hash: f46c9b143853
+  enforced_by_db:
+  - constraint: bookings_status_check
+    hash: 9e9bc99257e7
+  tested_by:
+  - tests/test_notifications.py::test_reschedule_sends_cancel_and_booking
+  schema_ref: §13 Запись на визит и письма
+  status: draft
+- id: R-SCHED-CANCEL-02
+  title: Клиент и представитель не отменяют визит менее чем за два дня
+  text: >
+    Отменить можно только действующую запись («запись не действует»). Если отменяет сторона клиента (CLIENT_SIDE
+    = client, representative) и до начала окна меньше CLIENT_RESCHEDULE_MIN_DAYS суток (считается разница
+    во времени, а не календарные даты) — DomainError «менее чем за два дня перенести или отменить визит
+    может только оператор». Для остальных значений by ограничения нет.
+  kind: guard
+  applies_to:
+  - table:scheduling.bookings
+  trigger: symbol:services/scheduling/api.py::cancel
+  roles:
+  - client
+  - representative
+  - operator
+  related:
+  - R-SCHED-RESCHEDULE-01
+  - R-SCHED-BOOK-03
+  implemented_by:
+  - symbol: services/scheduling/service.py::cancel_booking
+    lines: 195-203
+    hash: 3cd89e5dcd70
+  - symbol: services/scheduling/api.py::cancel
+    lines: 41-42
+    hash: 46d6ab9688c5
+  config:
+  - libs/settings.py::CLIENT_RESCHEDULE_MIN_DAYS
+  - services/scheduling/service.py::CLIENT_SIDE
+  tested_by:
+  - tests/test_scheduling.py::test_client_cannot_cancel_less_than_two_days_before
+  schema_ref: §2 Клиент; §13 Запись на визит и письма
+  discrepancy: >
+    Схема: менее чем за два дня отменить или перенести визит может только оператор. Код: роль определяется
+    параметром by из запроса DELETE /bookings/{booking_id}?by=..., без проверки, кто вызывает. Любой,
+    передав by=operator, обходит ограничение, и личность оператора не сверяется. Текст ошибки «за два
+    дня» зашит в строку и не зависит от настройки.
+  status: draft
+- id: R-SCHED-RESCHEDULE-01
+  title: Перенос — это отмена и новая запись
+  text: >
+    reschedule отменяет текущую запись через cancel_booking (с проверкой двух дней для стороны клиента)
+    и записывает на новое окно по действующей ссылке заявки, с тем же booked_by. Уходят два письма: об
+    отмене и о новой записи. Отдельного события переноса нет.
+  kind: effect
+  applies_to:
+  - table:scheduling.bookings
+  trigger: symbol:services/scheduling/service.py::reschedule
+  effects:
+  - event:booking.cancelled
+  - event:booking.created
+  roles:
+  - client
+  - representative
+  - operator
+  related:
+  - R-SCHED-CANCEL-02
+  - R-SCHED-CANCEL-01
+  - R-SCHED-BOOK-EVENT-01
+  implemented_by:
+  - symbol: services/scheduling/service.py::reschedule
+    lines: 206-210
+    hash: 253da02d3a3c
+  enforced_by_db:
+  - constraint: uq_bookings_one_active
+    hash: 2956cac5345f
+  config:
+  - libs/settings.py::CLIENT_RESCHEDULE_MIN_DAYS
+  tested_by:
+  - tests/test_notifications.py::test_reschedule_sends_cancel_and_booking
+  schema_ref: §13 Запись на визит и письма
+  status: draft
+- id: R-SCHED-NO-SHOW-01
+  title: Неявка отменяет запись, клиент может записаться снова
+  text: >
+    Проверяющий оператор площадки окна отмечает неявку по действующей записи: статус no_show, публикуется
+    booking.cancelled с reason=no_show (письмо об отмене, событие в чате). Ссылка и закреплённые книги
+    остаются, этап заявки не меняется, клиент может записаться снова.
+  kind: effect
+  applies_to:
+  - table:scheduling.bookings
+  trigger: symbol:services/scheduling/service.py::mark_no_show
+  effects:
+  - 'writes: table:scheduling.bookings'
+  - event:booking.cancelled
+  roles:
+  - site_checker
+  related:
+  - R-SCHED-CANCEL-01
+  - R-SCHED-HOLD-02
+  implemented_by:
+  - symbol: services/scheduling/service.py::mark_no_show
+    lines: 213-220
+    hash: 7d0ed8f66900
+  enforced_by_db:
+  - constraint: bookings_status_check
+    hash: 9e9bc99257e7
+  tested_by:
+  - tests/test_scheduling.py::test_no_show_cancels_booking_and_allows_rebooking
+  schema_ref: §13 Запись на визит и письма; §5 Архив и попытки
+  status: draft
+- id: R-SCHED-ISSUE-01
+  title: Выдача книг — только по записи, на этапе «Ожидает выдачи», в выбранную дату
+  text: >
+    issue_books требует действующую запись с purpose=issue («нет действующей записи за книгами»). Выдаёт
+    проверяющий оператор площадки заявки («книги выдаёт проверяющий оператор площадки заявки»). Заявка
+    должна быть на этапе awaiting_issue («выдача возможна только на этапе «Ожидает выдачи»»), а дата окна
+    — совпадать с текущей датой («выдача только в выбранную дату»).
+  kind: guard
+  applies_to:
+  - table:scheduling.loans
+  trigger: symbol:services/scheduling/service.py::issue_books
+  roles:
+  - site_checker
+  related:
+  - R-SCHED-ISSUE-02
+  - R-SCHED-ISSUE-03
+  implemented_by:
+  - symbol: services/scheduling/service.py::issue_books
+    lines: 224-235
+    hash: 9edf671be6de
+  tested_by:
+  - tests/test_paid_flow.py::test_issue_only_on_booked_date
+  - tests/test_paid_flow.py::test_paid_application_full_path
+  schema_ref: §14 Выдача, возврат и штрафы
+  status: draft
+- id: R-SCHED-ISSUE-02
+  title: Срок возврата — LOAN_PERIOD_DAYS от момента выдачи
+  text: >
+    На каждую книгу заявки создаётся выдача (loan) со статусом out, issued_at = now и due_at = now + LOAN_PERIOD_DAYS
+    (30) дней.
+  kind: calculation
+  applies_to:
+  - table:scheduling.loans
+  trigger: symbol:services/scheduling/service.py::issue_books
+  effects:
+  - 'writes: table:scheduling.loans'
+  roles:
+  - site_checker
+  related:
+  - R-SCHED-OVERDUE-01
+  implemented_by:
+  - symbol: services/scheduling/service.py::issue_books
+    lines: 237-247
+    hash: 9edf671be6de
+  enforced_by_db:
+  - constraint: loans_status_check
+    hash: 93d592b55f0f
+  config:
+  - libs/settings.py::LOAN_PERIOD_DAYS
+  tested_by:
+  - tests/test_paid_flow.py::test_paid_application_full_path
+  schema_ref: §14 Выдача, возврат и штрафы
+  status: draft
+- id: R-SCHED-ISSUE-03
+  title: После выдачи — запись выполнена, книги откреплены, ссылка на сдачу, этап «Книги у клиента»
+  text: >
+    После выдачи запись получает статус done, все holds заявки удаляются и выпускается новая ссылка с
+    purpose=return (прежняя гаснет). Публикуется books.issued: подписчик applications переводит заявку
+    awaiting_issue->books_out от имени site_checker.
+  kind: effect
+  applies_to:
+  - table:scheduling.bookings
+  - table:scheduling.holds
+  - table:scheduling.booking_links
+  trigger: symbol:services/scheduling/service.py::issue_books
+  effects:
+  - 'writes: table:scheduling.bookings'
+  - 'invalidates: table:scheduling.holds'
+  - 'writes: table:scheduling.booking_links'
+  - event:books.issued
+  - transition:awaiting_issue->books_out
+  roles:
+  - site_checker
+  related:
+  - R-SCHED-ISSUE-01
+  - R-SCHED-HOLD-02
+  - R-SCHED-LINK-02
+  implemented_by:
+  - symbol: services/scheduling/service.py::issue_books
+    lines: 248-251
+    hash: 9edf671be6de
+  - symbol: services/applications/consumers.py::on_books_issued
+    lines: 67-69
+    hash: 8df2e69239a7
+  - transition: awaiting_issue->books_out
+    hash: 771af805e9ca
+  tested_by:
+  - tests/test_paid_flow.py::test_paid_application_full_path
+  - tests/test_kinds.py::test_social_application_skips_invoice
+  schema_ref: §4 Порядок прохождения заявки; §13 Запись на визит и письма
+  discrepancy: >
+    Схема (§8): книги освобождаются после отметки о возврате. Код: holds удаляются уже при выдаче. Открытые
+    выдачи учитываются только в scheduling.loans.
+  status: draft
+- id: R-SCHED-RETURN-01
+  title: Возврат и утерю отмечает проверяющий оператор площадки заявки по каждой книге
+  text: >
+    Возврат и утеря отмечаются по отдельной выдаче. Это может только проверяющий оператор площадки заявки
+    («книги принимает проверяющий оператор площадки заявки») и только для выдачи в статусе out («книга
+    уже возвращена или списана»). Возврат ставит status=returned, returned_at и флаг damaged; утеря ставит
+    status=lost.
+  kind: guard
+  applies_to:
+  - table:scheduling.loans
+  trigger: symbol:services/scheduling/service.py::return_book
+  effects:
+  - 'writes: table:scheduling.loans'
+  roles:
+  - site_checker
+  related:
+  - R-SCHED-FINE-01
+  - R-SCHED-CLOSE-01
+  implemented_by:
+  - symbol: services/scheduling/service.py::_loan_for_checker
+    lines: 255-264
+    hash: c1bffe16b4f5
+  - symbol: services/scheduling/service.py::return_book
+    lines: 270-276
+    hash: 904dd3175115
+  - symbol: services/scheduling/service.py::mark_lost
+    lines: 279-283
+    hash: 9d4e9c2e5eb9
+  enforced_by_db:
+  - constraint: loans_status_check
+    hash: 93d592b55f0f
+  tested_by:
+  - tests/test_paid_flow.py::test_paid_application_full_path
+  schema_ref: §14 Выдача, возврат и штрафы
+  discrepancy: >
+    Возврат не связан с записью на сдачу: return_book не требует записи и не закрывает её, поэтому запись
+    с purpose=return остаётся в статусе active после приёма книг.
+  status: draft
+- id: R-SCHED-FINE-01
+  title: Порча и утеря книги порождают штраф в billing
+  text: >
+    При возврате с damaged=true публикуется loan.damaged, при отметке утери — loan.lost. Подписчики billing
+    создают штраф заявки с видом damaged или lost (create_fine). Эти события в чат не пишутся.
+  kind: effect
+  applies_to:
+  - table:scheduling.loans
+  trigger: symbol:services/scheduling/service.py::return_book
+  effects:
+  - event:loan.damaged
+  - event:loan.lost
+  - symbol:services/billing/consumers.py::on_loan_damaged
+  - symbol:services/billing/consumers.py::on_loan_lost
+  roles:
+  - site_checker
+  related:
+  - R-SCHED-RETURN-01
+  - R-SCHED-OVERDUE-01
+  implemented_by:
+  - symbol: services/scheduling/service.py::return_book
+    lines: 274-275
+    hash: 904dd3175115
+  - symbol: services/scheduling/service.py::mark_lost
+    lines: '282'
+    hash: 9d4e9c2e5eb9
+  - symbol: services/billing/consumers.py::on_loan_damaged
+    lines: 48-50
+    hash: aac4a4eba199
+  - symbol: services/billing/consumers.py::on_loan_lost
+    lines: 43-45
+    hash: 62a29a02319a
+  schema_ref: §14 Выдача, возврат и штрафы
+  discrepancy: >
+    Схема (§15): в чат попадают все события заявки. Код: loan.damaged и loan.lost в EVENT_TEXT чата нет,
+    в чат они не попадают.
+  status: verified
+  verified_at: '2026-10-23'
+- id: R-SCHED-OVERDUE-01
+  title: Фоновая задача отмечает просрочку через 30 дней с выдачи и создаёт штраф
+  text: >
+    flag_overdue выбирает выдачи со статусом out без флага overdue_flagged, у которых issued_at < now
+    - 30 дней. Каждой ставится overdue_flagged=true (один раз) и публикуется loan.overdue: billing создаёт
+    штраф overdue, chat пишет «Срыв срока возврата книги {book_id}». Срок задан литералом 30, а не настройкой
+    LOAN_PERIOD_DAYS, и считается от issued_at, а не от due_at.
+  kind: timer
+  applies_to:
+  - table:scheduling.loans
+  trigger: symbol:services/scheduling/jobs.py::flag_overdue
+  effects:
+  - 'writes: table:scheduling.loans'
+  - event:loan.overdue
+  - symbol:services/billing/consumers.py::on_loan_overdue
+  - symbol:services/chat/consumers.py::_handler
+  roles:
+  - system
+  related:
+  - R-SCHED-ISSUE-02
+  - R-SCHED-FINE-01
+  implemented_by:
+  - symbol: services/scheduling/jobs.py::flag_overdue
+    lines: 10-27
+    hash: 60a1ef28c116
+  - symbol: services/billing/consumers.py::on_loan_overdue
+    lines: 38-40
+    hash: 602403bac5f9
+  config:
+  - libs/settings.py::LOAN_PERIOD_DAYS
+  schema_ref: §14 Выдача, возврат и штрафы
+  discrepancy: >
+    Срок просрочки зашит литералом timedelta(days=30), а не берётся из LOAN_PERIOD_DAYS или loans.due_at.
+    Если настройку изменить, due_at и момент начисления штрафа разойдутся. Схема: «месяц с выдачи», а
+    не фиксированные 30 дней. Книга, возвращённая с опозданием до запуска задачи, штраф не получает.
+  status: draft
+- id: R-SCHED-RESET-01
+  title: Архив и закрытие дублем сбрасывают записи, книги и ссылку
+  text: >
+    На application.archived и application.closed_duplicate вызывается reset_bookings: действующие записи
+    отменяются с причиной archived или duplicate (booking.cancelled, письма об отмене, чат), holds заявки
+    удаляются, все ссылки гаснут.
+  kind: effect
+  applies_to:
+  - table:scheduling.bookings
+  - table:scheduling.holds
+  - table:scheduling.booking_links
+  trigger: event:application.archived
+  effects:
+  - event:booking.cancelled
+  - 'invalidates: table:scheduling.holds'
+  - 'invalidates: table:scheduling.booking_links'
+  roles:
+  - system
+  related:
+  - R-SCHED-LINK-03
+  - R-SCHED-VENUE-CHANGE-01
+  implemented_by:
+  - symbol: services/scheduling/consumers.py::on_archived
+    lines: 25-26
+    hash: eea4dc718507
+  - symbol: services/scheduling/consumers.py::on_closed_duplicate
+    lines: 30-31
+    hash: 1230ea8d19ae
+  - symbol: services/scheduling/service.py::reset_bookings
+    lines: 286-299
+    hash: c39779723a67
+  schema_ref: §5 Архив и попытки; §6 Клиент и проверка данных
+  status: draft
+- id: R-SCHED-VENUE-CHANGE-01
+  title: Смена площадки отменяет запись и выдаёт новую ссылку
+  text: >
+    На application.venue_changed модуль сбрасывает записи (reason=venue_changed: письмо об отмене, освобождение
+    книг, гашение ссылок). Если заявка на этапе awaiting_issue, выпускается новая ссылка purpose=issue.
+    Проверяющий оператор новой площадки назначается в applications.change_venue.
+  kind: effect
+  applies_to:
+  - table:scheduling.bookings
+  - table:scheduling.booking_links
+  trigger: event:application.venue_changed
+  effects:
+  - event:booking.cancelled
+  - 'invalidates: table:scheduling.holds'
+  - 'writes: table:scheduling.booking_links'
+  roles:
+  - operator
+  related:
+  - R-SCHED-RESET-01
+  - R-SCHED-LINK-01
+  implemented_by:
+  - symbol: services/scheduling/consumers.py::on_venue_changed
+    lines: 17-21
+    hash: d4bfde5996e1
+  - symbol: services/scheduling/service.py::reset_bookings
+    lines: 286-299
+    hash: c39779723a67
+  schema_ref: §7 Площадки и цены
+  discrepancy: >
+    Схема: у социальных заявок и заявок в долг площадку меняют только до формирования ссылки, после выдачи
+    — никогда. Код change_venue блокирует смену только для paid на awaiting_issue и books_out. У debt/social
+    на этапе books_out смена проходит: записи на сдачу отменяются, ссылка на сдачу гаснет, а новая не
+    выпускается (выпуск только при awaiting_issue) — клиент не может записаться на сдачу. Письмо об отмене
+    уходит по шаблону старой площадки (venue_id окна).
+  status: draft
+- id: R-SCHED-CLOSE-01
+  title: Заявку нельзя закрыть, пока есть книги на руках
+  text: >
+    Guard settled перехода books_out->closed берёт число выдач со статусом out через scheduling.public.open_loans_count.
+    Закрытие возможно только при нуле открытых выдач и нуле непогашенных штрафов. Возвращённые (returned)
+    и утерянные (lost) книги не мешают закрытию.
+  kind: guard
+  applies_to:
+  - table:scheduling.loans
+  trigger: transition:books_out->closed
+  roles:
+  - site_checker
+  related:
+  - R-SCHED-RETURN-01
+  - R-SCHED-FINE-01
+  implemented_by:
+  - symbol: services/scheduling/public.py::open_loans_count
+    lines: 7-10
+    hash: 58fea86cbfd3
+  - symbol: services/applications/guards.py::settled
+    lines: 10-14
+    hash: b19e821eeb6b
+  - transition: books_out->closed
+    hash: 39283bcffd77
+  - guard: guard:settled
+  tested_by:
+  - tests/test_paid_flow.py::test_cannot_close_with_books_out
+  - tests/test_paid_flow.py::test_paid_application_full_path
+  schema_ref: §4 Порядок прохождения заявки; §14 Выдача, возврат и штрафы
+  status: draft

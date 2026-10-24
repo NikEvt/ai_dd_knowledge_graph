@@ -1,0 +1,97 @@
+# Словарь предметной области: связывает русские формулировки задач с идентификаторами кода и БД.
+# Используется find_entry (поиск точки входа), entity и рендером документации. Правится руками.
+
+terms:
+  - {ru: [заявка, заявки], en: [application, applications, app]}
+  - {ru: [площадка, библиотека, город], en: [venue, venues, city]}
+  - {ru: [сфера, раздел], en: [sphere, spheres]}
+  - {ru: [книга, книги], en: [book, books, book_ids]}
+  - {ru: [цена, прайс, стоимость, сумма], en: [price, prices, amount, books_price]}
+  - {ru: [клиент], en: [client, clients]}
+  - {ru: [представитель], en: [representative, representatives, rep]}
+  - {ru: [надбавка], en: [markup, markup_pct]}
+  - {ru: [долг, "в долг"], en: [debt, debt_allowed]}
+  - {ru: [платная, оплата, оплачена, оплатить], en: [paid, payment, fully_paid]}
+  - {ru: [социальная, бесплатная], en: [social]}
+  - {ru: [вид, тип], en: [kind]}
+  - {ru: [этап, статус], en: [stage, status]}
+  - {ru: [черновик], en: [draft]}
+  - {ru: [проверка, проверить, проверяющий], en: [review, reviewer, on_review, approve]}
+  - {ru: [доработка], en: [rework, needs_rework]}
+  - {ru: [счёт, счет, счета, счёта], en: [invoice, invoices]}
+  - {ru: [аннулировать, аннулирование, отмена, отменить, отменяется], en: [cancel, cancelled, cancel_invoice]}
+  - {ru: [платёж, платеж, платежи], en: [payment, payments, link_payment]}
+  - {ru: [привязать, привязка], en: [link, linked]}
+  - {ru: [отвязать, отвязка], en: [unlink, unlinked]}
+  - {ru: [возврат, вернуть], en: [refund, refunded, return, returned]}
+  - {ru: [переплата], en: [overpayment]}
+  - {ru: [реквизиты, организация], en: [requisites]}
+  - {ru: [бухгалтер], en: [accountant]}
+  - {ru: [главный бухгалтер], en: [chief, chief_accountant]}
+  - {ru: [оператор], en: [operator]}
+  - {ru: [проверяющий оператор, сотрудник площадки], en: [site_checker]}
+  - {ru: [администратор, админка], en: [admin]}
+  - {ru: [руководитель проверяющих], en: [reviewer_lead, assign_reviewer]}
+  - {ru: [расписание, окно, окна, мест, места], en: [slot, slots, capacity, schedule]}
+  - {ru: [максимум, лимит], en: [max_capacity, max_slot_capacity, limit, venue_limits]}
+  - {ru: [запись, записаться, визит], en: [booking, bookings, book, booked]}
+  - {ru: [ссылка, ссылку], en: [link, booking_link, token]}
+  - {ru: [перенос, перенести], en: [reschedule]}
+  - {ru: [неявка], en: [no_show]}
+  - {ru: [выдача, выдать, выдачи], en: [issue, issued, issue_books, awaiting_issue, loan]}
+  - {ru: [пользование, срок пользования], en: [loan, loans, loan_period, due_at]}
+  - {ru: [срок, сроки, месяц, дней], en: [days, period, due]}
+  - {ru: [просрочка, срыв срока, просрочен], en: [overdue, flag_overdue]}
+  - {ru: [закреплены, закрепление, освобождение, освобождаются], en: [hold, holds, reset_bookings]}
+  - {ru: [штраф, штрафы], en: [fine, fines, fine_rates]}
+  - {ru: [утеря, утерянная], en: [lost, mark_lost]}
+  - {ru: [порча], en: [damaged]}
+  - {ru: [архив], en: [archive, archived, unarchive, archive_stale]}
+  - {ru: [попытка, попытки], en: [attempt, attempts]}
+  - {ru: [дубль, дублирующая, дедупликация], en: [duplicate, closed_duplicate, dedup]}
+  - {ru: [закрыть, закрыта, закрытие], en: [close, closed, settled]}
+  - {ru: [письмо, письма, уведомление, шаблон], en: [email, emails, notification, notifications, template, templates]}
+  - {ru: [чат, сообщение, лента], en: [chat, message, messages, log_event]}
+  - {ru: [событие, события], en: [event, events, publish, subscribe, outbox]}
+  - {ru: [смена, сменить, изменить, изменение], en: [change, changed, update, updated]}
+  - {ru: [данные клиента, паспорт], en: [client_updated, update_client, passport, full_name, birth_date]}
+  - {ru: [назначить, назначение, переназначить], en: [assign, assignment, take_application]}
+  - {ru: [фоновая задача, таймер, планировщик], en: [job, jobs]}
+  - {ru: [настройка, настройки], en: [settings, config]}
+
+stages:
+  draft: Черновик
+  on_review: На проверке
+  needs_rework: На доработке
+  awaiting_invoice: Ожидает счёта
+  awaiting_payment: Ожидает оплаты
+  awaiting_issue: Ожидает выдачи
+  books_out: Книги у клиента
+  closed: Закрыта
+  archived: Архив
+  closed_duplicate: Закрыта как дубль
+
+kinds:
+  paid: платная
+  debt: в долг
+  social: социальная
+
+# Роли: русское название и имена параметров, по которым код определяет исполнителя.
+roles:
+  operator: {ru: Оператор, params: [operator_id]}
+  reviewer_lead: {ru: Руководитель проверяющих, params: []}
+  reviewer: {ru: Проверяющий, params: [reviewer_id]}
+  accountant: {ru: Бухгалтер, params: [accountant_id]}
+  chief_accountant: {ru: Главный бухгалтер, params: [chief_id]}
+  site_checker: {ru: Проверяющий оператор, params: [site_checker_id]}
+  admin: {ru: Администратор, params: []}
+  client: {ru: Клиент, params: [token]}
+  representative: {ru: Представитель клиента, params: []}
+  system: {ru: Система (события и фоновые задачи), params: []}
+
+services:
+  applications: Заявки, клиенты, площадки (админка), процесс заявки, архив, дедупликация
+  billing: Счета, платежи, штрафы, закрепление бухгалтера
+  scheduling: Расписание площадок, ссылки и запись на визит, выдача и возврат книг
+  notifications: Письма клиенту и представителю по шаблонам
+  chat: Чат заявки и лента событий

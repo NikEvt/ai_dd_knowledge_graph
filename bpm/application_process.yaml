@@ -1,0 +1,43 @@
+process: application
+stages:
+  - draft
+  - on_review
+  - needs_rework
+  - awaiting_invoice
+  - awaiting_payment
+  - awaiting_issue
+  - books_out
+  - closed
+  - archived
+  - closed_duplicate
+
+paths:
+  paid: [draft, on_review, awaiting_invoice, awaiting_payment, awaiting_issue, books_out, closed]
+  debt: [draft, on_review, awaiting_issue, books_out, closed]
+  social: [draft, on_review, awaiting_issue, books_out, closed]
+
+transitions:
+  - {from: [draft, needs_rework], to: on_review, actor: operator}
+  - {from: on_review, to: needs_rework, actor: reviewer}
+
+  - {from: on_review, to: awaiting_invoice, actor: reviewer, kinds: [paid]}
+  - {from: on_review, to: awaiting_payment, actor: reviewer, kinds: [paid], guard: has_active_invoice}
+  - {from: on_review, to: awaiting_issue, actor: reviewer, kinds: [debt, social]}
+
+  - {from: awaiting_invoice, to: awaiting_payment, actor: accountant, kinds: [paid]}
+  - {from: awaiting_payment, to: awaiting_invoice, actor: system, kinds: [paid]}
+  - {from: awaiting_payment, to: awaiting_issue, actor: system, kinds: [paid], guard: fully_paid}
+
+  # Обновление данных клиента возвращает на проверку заявки, не дошедшие до записи.
+  - {from: [awaiting_invoice, awaiting_payment], to: on_review, actor: system}
+
+  - {from: awaiting_issue, to: books_out, actor: site_checker}
+  - {from: books_out, to: closed, actor: site_checker, guard: settled}
+
+  - {from: [on_review, needs_rework], to: archived, actor: system}
+  - {from: awaiting_payment, to: archived, actor: system, kinds: [paid]}
+  - {from: [draft, on_review, needs_rework, awaiting_invoice, awaiting_payment], to: archived, actor: operator}
+  - {from: awaiting_issue, to: archived, actor: chief_accountant, kinds: [paid]}
+  - {from: archived, to: on_review, actor: operator}
+
+  - {from: [draft, on_review, needs_rework, awaiting_invoice, awaiting_payment, awaiting_issue, archived], to: closed_duplicate, actor: system}

@@ -1,0 +1,1087 @@
+# Правила модуля marketing: извлечены LLM (tools/knowledge/bootstrap_rules.sh) из кода и среза графа.
+# Статус verified ставит только человек. Хэши обновляет tools/knowledge/drift.py --write.
+rules:
+- id: R-MARKETING-ACCESS-01
+  title: Рассылками площадки управляет только её менеджер или менеджер сети
+  text: >
+    Любое действие с аудиториями, шаблонами, кампаниями и письмами (создание, архив, добавление адресов,
+    планирование, отмена, запуск, отчёт, просмотр писем, тестовое письмо) требует записи в marketing.managers:
+    менеджер этой площадки (venue_id = площадка) или менеджер сети (venue_id IS NULL), который допущен
+    ко всем площадкам. Иначе AccessDenied «менеджер не ведёт рассылки этой площадки» (HTTP 403). Менеджера
+    рассылок нет в общей модели ролей: права задаются только таблицей marketing.managers.
+  kind: permission
+  trigger: symbol:services/marketing/service.py::_require_manager
+  effects:
+  - 'reads: table:marketing.managers'
+  related:
+  - R-MARKETING-ACCESS-02
+  implemented_by:
+  - symbol: services/marketing/service.py::_require_manager
+    lines: 50-58
+    hash: f17d73b29679
+  - symbol: services/marketing/service.py::_campaign_for
+    lines: 261-266
+    hash: d7087f582580
+  tested_by:
+  - tests/test_marketing_audiences.py::test_audience_is_created_by_venue_manager
+  - tests/test_marketing_audiences.py::test_manager_of_other_venue_is_denied
+  - tests/test_marketing_api.py::test_access_and_missing_campaign
+  status: draft
+- id: R-MARKETING-ACCESS-02
+  title: Шаблоны сети задаёт только менеджер сети
+  text: >
+    Шаблон без площадки (venue_id = NULL, шаблон сети по умолчанию) может создать или изменить только
+    менеджер сети (строка marketing.managers без venue_id); менеджер площадки получает AccessDenied «шаблоны
+    сети задаёт только менеджер сети». Проверка в _require_manager при вызове из set_template.
+  kind: permission
+  trigger: symbol:services/marketing/service.py::set_template
+  effects:
+  - 'writes: table:marketing.campaign_templates'
+  related:
+  - R-MARKETING-ACCESS-01
+  - R-MARKETING-TEMPLATE-04
+  implemented_by:
+  - symbol: services/marketing/service.py::_require_manager
+    lines: 55-57
+    hash: f17d73b29679
+  - symbol: services/marketing/service.py::set_template
+    lines: 165-165
+    hash: 0a68c3b0da86
+  tested_by:
+  - tests/test_marketing_templates.py::test_network_templates_only_by_network_manager
+  status: draft
+- id: R-MARKETING-ACCESS-03
+  title: Отписка и регистрация возврата письма доступны без проверки менеджера
+  text: >
+    Эндпоинты POST /marketing/unsubscribe и POST /marketing/messages/{id}/bounce не принимают manager_id
+    и не проверяют права. Отписка через API всегда записывается с причиной reader (причину передать нельзя),
+    venue_id необязателен — без него адрес отписывается от всей сети.
+  kind: permission
+  trigger: symbol:services/marketing/api.py::unsubscribe
+  effects:
+  - symbol:services/marketing/service.py::unsubscribe
+  - symbol:services/marketing/service.py::register_bounce
+  roles:
+  - client
+  related:
+  - R-MARKETING-UNSUBSCRIBE-01
+  - R-MARKETING-BOUNCE-01
+  implemented_by:
+  - symbol: services/marketing/api.py::unsubscribe
+    lines: 190-191
+    hash: 5714f7841c40
+  - symbol: services/marketing/api.py::bounce
+    lines: 185-186
+    hash: 3daa88fb5784
+  tested_by:
+  - tests/test_marketing_api.py::test_unsubscribe_and_bounce_endpoints
+  status: draft
+- id: R-MARKETING-ACCESS-04
+  title: Менеджер закрепляется за площадкой или сетью не более одного раза
+  text: >
+    Один manager_id может быть только одной строкой менеджера сети (managers_network_uq, venue_id IS NULL)
+    и только одной строкой на каждую площадку (managers_venue_uq). add_manager сам ничего не проверяет
+    и в API не выставлен; дубль отсекает только БД.
+  kind: invariant
+  trigger: symbol:services/marketing/service.py::add_manager
+  effects:
+  - 'writes: table:marketing.managers'
+  related:
+  - R-MARKETING-ACCESS-01
+  implemented_by:
+  - symbol: services/marketing/service.py::add_manager
+    lines: 41-47
+    hash: 0edbfa2dd52a
+  enforced_by_db:
+  - constraint: managers_network_uq
+    hash: f053e7fae553
+  - constraint: managers_venue_uq
+    hash: dde915c0a26c
+  status: draft
+- id: R-MARKETING-AUDIENCE-01
+  title: Название аудитории непустое и уникально в пределах площадки
+  text: >
+    При создании аудитории название обрезается по краям пробелов; пустое — DomainError «у аудитории должно
+    быть название», уже занятое на этой площадке (точное совпадение с учётом регистра) — DomainError «на
+    площадке уже есть аудитория …». БД дублирует обе проверки (CHECK на trim(name) и UNIQUE (venue_id,
+    name)).
+  kind: guard
+  trigger: symbol:services/marketing/service.py::create_audience
+  effects:
+  - 'writes: table:marketing.audiences'
+  implemented_by:
+  - symbol: services/marketing/service.py::create_audience
+    lines: 66-73
+    hash: f9d687635ca6
+  enforced_by_db:
+  - constraint: audiences_name_check
+    hash: 1e9c14ebb67a
+  - constraint: audiences_venue_name_uq
+    hash: e402efb2ce5d
+  tested_by:
+  - tests/test_marketing_audiences.py::test_audience_name_is_unique_within_venue
+  - tests/test_marketing_audiences.py::test_audience_is_created_by_venue_manager
+  status: draft
+- id: R-MARKETING-AUDIENCE-02
+  title: Нельзя архивировать аудиторию с запланированной или идущей кампанией
+  text: >
+    archive_audience запрещает архив, если по аудитории есть кампании в статусах scheduled, preparing
+    или sending (DomainError «по аудитории есть незавершённые кампании»). Черновики (draft) архиву не
+    мешают и остаются, но запустить их после архива нельзя. После отмены запланированной кампании архив
+    разрешён.
+  kind: guard
+  trigger: symbol:services/marketing/service.py::archive_audience
+  effects:
+  - 'writes: table:marketing.audiences'
+  related:
+  - R-MARKETING-AUDIENCE-03
+  - R-MARKETING-CAMPAIGN-03
+  implemented_by:
+  - symbol: services/marketing/service.py::archive_audience
+    lines: 90-97
+    hash: 67bb0bdf8333
+  config:
+  - services/marketing/service.py::RUNNING
+  tested_by:
+  - tests/test_marketing_audiences.py::test_archived_audience_cannot_have_pending_campaigns
+  - tests/test_marketing_api.py::test_schedule_cancel_and_report
+  status: draft
+- id: R-MARKETING-AUDIENCE-03
+  title: Архивная аудитория закрыта для новых адресов, кампаний и запусков
+  text: >
+    Если аудитория в архиве, add_member, create_campaign и start (ручной запуск и запуск по расписанию)
+    отклоняют действие с DomainError «аудитория в архиве». Ограничение только в коде, в БД его нет.
+  kind: guard
+  trigger: symbol:services/marketing/service.py::archive_audience
+  effects:
+  - symbol:services/marketing/service.py::add_member
+  - symbol:services/marketing/service.py::create_campaign
+  - symbol:services/marketing/service.py::start
+  related:
+  - R-MARKETING-AUDIENCE-02
+  implemented_by:
+  - symbol: services/marketing/service.py::add_member
+    lines: 124-125
+    hash: ebfa07459ae9
+  - symbol: services/marketing/service.py::create_campaign
+    lines: 237-238
+    hash: 94f68b3e8911
+  - symbol: services/marketing/service.py::start
+    lines: 299-300
+    hash: 71783b1f3770
+  tested_by:
+  - tests/test_marketing_audiences.py::test_archived_audience_cannot_have_pending_campaigns
+  status: draft
+- id: R-MARKETING-MEMBER-01
+  title: Сегмент читателя ограничен списком из настройки AUDIENCE_GROUP
+  text: >
+    При добавлении адреса сегмент должен быть ключом AUDIENCE_GROUP (paid, debt, social, vip, corporate),
+    иначе DomainError «неизвестный сегмент читателя». Тот же список захардкожен в CHECK audience_members_segment_check:
+    при добавлении сегмента в настройку нужна миграция.
+  kind: guard
+  trigger: symbol:services/marketing/service.py::add_member
+  effects:
+  - 'writes: table:marketing.audience_members'
+  related:
+  - R-MARKETING-TEMPLATE-01
+  implemented_by:
+  - symbol: services/marketing/service.py::add_member
+    lines: 126-127
+    hash: ebfa07459ae9
+  enforced_by_db:
+  - constraint: audience_members_segment_check
+    hash: 8e12c7ec84fd
+  config:
+  - services/marketing/settings.py::AUDIENCE_GROUP
+  tested_by:
+  - tests/test_marketing_audiences.py::test_unknown_segment_and_bad_email_rejected
+  status: draft
+- id: R-MARKETING-MEMBER-02
+  title: В аудитории не больше MAX_AUDIENCE_SIZE адресов
+  text: >
+    add_member отклоняет новый адрес, если в аудитории уже MAX_AUDIENCE_SIZE (5000) записей. В счёт входят
+    и отписавшиеся (opted_out) участники, которые писем уже не получают. В БД лимита нет.
+  kind: config
+  trigger: symbol:services/marketing/service.py::add_member
+  effects:
+  - table:marketing.audience_members
+  implemented_by:
+  - symbol: services/marketing/service.py::add_member
+    lines: 129-131
+    hash: ebfa07459ae9
+  config:
+  - services/marketing/settings.py::MAX_AUDIENCE_SIZE
+  status: draft
+- id: R-MARKETING-MEMBER-03
+  title: Адрес встречается в аудитории один раз
+  text: >
+    После нормализации адрес не может повторяться внутри аудитории: код отвечает DomainError «адрес уже
+    есть в аудитории», БД держит уникальный индекс (audience_id, email). Один адрес может быть в разных
+    аудиториях.
+  kind: invariant
+  trigger: symbol:services/marketing/service.py::add_member
+  effects:
+  - 'writes: table:marketing.audience_members'
+  related:
+  - R-MARKETING-EMAIL-01
+  implemented_by:
+  - symbol: services/marketing/service.py::add_member
+    lines: 132-138
+    hash: ebfa07459ae9
+  enforced_by_db:
+  - constraint: audience_members_email_uq
+    hash: 8d8f75f18bec
+  tested_by:
+  - tests/test_marketing_audiences.py::test_member_email_is_normalized_and_unique
+  status: draft
+- id: R-MARKETING-MEMBER-04
+  title: Отписанный адрес нельзя добавить в аудиторию
+  text: >
+    add_member отклоняет адрес, если для него есть отписка от всей сети или от площадки аудитории (DomainError
+    «адрес отписан от рассылок площадки»). Отписка от другой площадки добавлению не мешает.
+  kind: guard
+  trigger: symbol:services/marketing/service.py::add_member
+  effects:
+  - 'reads: table:marketing.unsubscriptions'
+  related:
+  - R-MARKETING-UNSUBSCRIBE-01
+  - R-MARKETING-UNSUBSCRIBE-03
+  implemented_by:
+  - symbol: services/marketing/service.py::add_member
+    lines: 139-140
+    hash: ebfa07459ae9
+  - symbol: services/marketing/service.py::is_unsubscribed
+    lines: 101-110
+    hash: b5c9e99fcaac
+  tested_by:
+  - tests/test_marketing_audiences.py::test_unsubscribed_address_cannot_be_added
+  status: draft
+- id: R-MARKETING-EMAIL-01
+  title: Адреса хранятся в нижнем регистре без пробелов и с «@» не в начале
+  text: >
+    normalize_email обрезает пробелы, переводит адрес в нижний регистр и отклоняет адрес без «@» после
+    первого символа. БД дублирует нормализацию триггерами audience_members_normalize_email и unsubscriptions_normalize_email
+    (функция normalize_email), формат — CHECK audience_members_email_check. У marketing.sent_messages
+    триггера нормализации нет.
+  kind: invariant
+  trigger: symbol:services/marketing/service.py::normalize_email
+  effects:
+  - table:marketing.audience_members
+  - table:marketing.unsubscriptions
+  related:
+  - R-MARKETING-MEMBER-03
+  implemented_by:
+  - symbol: services/marketing/service.py::normalize_email
+    lines: 27-31
+    hash: 10df570b6af7
+  - symbol: services/marketing/service.py::add_member
+    lines: 128-128
+    hash: ebfa07459ae9
+  - symbol: services/marketing/service.py::unsubscribe
+    lines: 532-532
+    hash: 64fc88110942
+  enforced_by_db:
+  - constraint: audience_members_normalize_email
+    hash: e4dea3286e00
+  - constraint: unsubscriptions_normalize_email
+    hash: 10ff9b67fbeb
+  - constraint: normalize_email
+    hash: 38c4644677ce
+  - constraint: audience_members_email_check
+    hash: 30d3c9a90b84
+  tested_by:
+  - tests/test_marketing_audiences.py::test_member_email_is_normalized_and_unique
+  - tests/test_marketing_audiences.py::test_member_email_normalized_by_database_too
+  - tests/test_marketing_audiences.py::test_unknown_segment_and_bad_email_rejected
+  status: draft
+- id: R-MARKETING-TEMPLATE-01
+  title: Платные сегменты (paid, debt, corporate) получают общий шаблон группы paid
+  text: >
+    Шаблоны заводятся на группу аудитории, а не на сегмент: AUDIENCE_GROUP отображает corporate, debt
+    и paid в группу paid, social — в social, vip — в vip. Поэтому шаблон группы paid получают все платные
+    сегменты.
+  kind: config
+  trigger: symbol:services/marketing/service.py::find_template
+  effects:
+  - 'reads: table:marketing.campaign_templates'
+  related:
+  - R-MARKETING-TEMPLATE-02
+  - R-MARKETING-MEMBER-01
+  implemented_by:
+  - symbol: services/marketing/service.py::find_template
+    lines: 194-195
+    hash: 50ad69afbed3
+  config:
+  - services/marketing/settings.py::AUDIENCE_GROUP
+  tested_by:
+  - tests/test_marketing_templates.py::test_paying_segments_share_template
+  status: draft
+- id: R-MARKETING-TEMPLATE-02
+  title: 'Порядок поиска шаблона: площадка, сеть, затем запасная группа paid'
+  text: >
+    Для сегмента читателя и типа кампании find_template ищет шаблон в таком порядке: шаблон площадки для
+    группы читателя, шаблон сети для этой группы, затем шаблон площадки и шаблон сети для FALLBACK_GROUP
+    (paid). Если сегмент неизвестен, берётся сразу группа paid. Если ничего не нашлось, возвращается None:
+    при подготовке рассылки письмо пропускается, для тестового письма возникает ошибка.
+  kind: calculation
+  trigger: symbol:services/marketing/service.py::find_template
+  effects:
+  - 'reads: table:marketing.campaign_templates'
+  roles:
+  - system
+  related:
+  - R-MARKETING-TEMPLATE-01
+  - R-MARKETING-PREPARE-02
+  - R-MARKETING-TEST-01
+  implemented_by:
+  - symbol: services/marketing/service.py::find_template
+    lines: 194-210
+    hash: 50ad69afbed3
+  config:
+  - services/marketing/settings.py::FALLBACK_GROUP
+  - services/marketing/settings.py::AUDIENCE_GROUP
+  tested_by:
+  - tests/test_marketing_templates.py::test_find_template_falls_back_to_network_then_paid_group
+  - tests/test_marketing_templates.py::test_paying_segments_share_template
+  status: draft
+- id: R-MARKETING-TEMPLATE-03
+  title: 'Проверки шаблона: группа, тип кампании, непустой текст, длина'
+  text: >
+    set_template принимает только группу из значений AUDIENCE_GROUP (paid, social, vip; сегмент, например
+    debt, отклоняется), тип из CAMPAIGN_TYPES (newsletter, event, promo), текст не из одних пробелов и
+    не длиннее MAX_TEMPLATE_LENGTH (10000). В БД есть CHECK на группу (список захардкожен) и на length(body)
+    > 0 (пробельный текст БД пропустит). Тип кампании и длину шаблона БД не проверяет.
+  kind: guard
+  trigger: symbol:services/marketing/service.py::set_template
+  effects:
+  - 'writes: table:marketing.campaign_templates'
+  related:
+  - R-MARKETING-TEMPLATE-04
+  implemented_by:
+  - symbol: services/marketing/service.py::set_template
+    lines: 166-173
+    hash: 0a68c3b0da86
+  enforced_by_db:
+  - constraint: campaign_templates_audience_group_check
+    hash: 55b515d0e98a
+  - constraint: campaign_templates_body_check
+    hash: 121c249d50f3
+  config:
+  - services/marketing/settings.py::AUDIENCE_GROUP
+  - services/marketing/settings.py::CAMPAIGN_TYPES
+  - services/marketing/settings.py::MAX_TEMPLATE_LENGTH
+  tested_by:
+  - tests/test_marketing_templates.py::test_template_validation
+  - tests/test_marketing_api.py::test_access_and_missing_campaign
+  status: draft
+- id: R-MARKETING-TEMPLATE-04
+  title: Один шаблон на площадку (или сеть), группу и тип; повторная запись обновляет его
+  text: >
+    set_template работает как upsert: если шаблон для (площадка или сеть, группа, тип) уже есть, меняются
+    его body и updated_at, иначе создаётся новый. В БД уникальность держат UNIQUE (venue_id, audience_group,
+    type) и частичный индекс campaign_templates_default_uq для шаблонов сети, потому что NULL в UNIQUE
+    не сравниваются.
+  kind: invariant
+  trigger: symbol:services/marketing/service.py::set_template
+  effects:
+  - 'writes: table:marketing.campaign_templates'
+  related:
+  - R-MARKETING-TEMPLATE-03
+  implemented_by:
+  - symbol: services/marketing/service.py::set_template
+    lines: 175-186
+    hash: 0a68c3b0da86
+  enforced_by_db:
+  - constraint: campaign_templates_venue_group_type_uq
+    hash: e00b4745da71
+  - constraint: campaign_templates_default_uq
+    hash: 1719ee09f3fc
+  tested_by:
+  - tests/test_marketing_templates.py::test_set_template_updates_existing
+  status: draft
+- id: R-MARKETING-TEMPLATE-05
+  title: Текст письма подставляет $full_name, $email и $subject
+  text: >
+    Текст письма получается из шаблона через string.Template.safe_substitute с переменными full_name,
+    email и subject (тема кампании). Неизвестные плейсхолдеры остаются в тексте как есть, ошибки нет.
+    Так готовятся и письма кампании, и тестовые письма.
+  kind: calculation
+  trigger: symbol:services/marketing/service.py::prepare_messages
+  effects:
+  - 'writes: table:marketing.sent_messages'
+  roles:
+  - system
+  related:
+  - R-MARKETING-PREPARE-02
+  - R-MARKETING-TEST-01
+  implemented_by:
+  - symbol: services/marketing/service.py::render
+    lines: 34-35
+    hash: 09172c49c5c7
+  - symbol: services/marketing/service.py::prepare_messages
+    lines: 369-372
+    hash: aa480556f473
+  - symbol: services/marketing/service.py::send_test_message
+    lines: 481-481
+    hash: 1ea055166b98
+  tested_by:
+  - tests/test_marketing_campaigns.py::test_launch_prepares_sends_and_summarizes
+  - tests/test_marketing_api.py::test_test_message_then_campaign_messages
+  status: draft
+- id: R-MARKETING-CAMPAIGN-01
+  title: Кампания создаётся с известным типом и темой, в статусе draft или scheduled
+  text: >
+    create_campaign требует тип из CAMPAIGN_TYPES и непустую тему (после обрезки пробелов). Если задано
+    scheduled_at, оно проверяется по окну планирования и кампания получает статус scheduled, иначе draft.
+    Площадка кампании берётся из аудитории. Наличие шаблона при создании не проверяется, а тип кампании
+    в БД не ограничен.
+  kind: guard
+  trigger: symbol:services/marketing/service.py::create_campaign
+  effects:
+  - 'writes: table:marketing.campaigns'
+  related:
+  - R-MARKETING-CAMPAIGN-02
+  - R-MARKETING-AUDIENCE-03
+  implemented_by:
+  - symbol: services/marketing/service.py::create_campaign
+    lines: 239-256
+    hash: 94f68b3e8911
+  enforced_by_db:
+  - constraint: campaigns_check
+    hash: cdfee1cbdb46
+  config:
+  - services/marketing/settings.py::CAMPAIGN_TYPES
+  tested_by:
+  - tests/test_marketing_campaigns.py::test_launch_prepares_sends_and_summarizes
+  status: draft
+- id: R-MARKETING-CAMPAIGN-02
+  title: Кампанию планируют только в будущее и не дальше MAX_SCHEDULE_AHEAD_DAYS
+  text: >
+    При создании с датой и при переносе время запуска должно быть позже текущего («нельзя запланировать
+    кампанию на прошедшее время») и не дальше MAX_SCHEDULE_AHEAD_DAYS (90) дней от текущего момента. В
+    БД CHECK campaigns_check требует scheduled_at у кампании в статусе scheduled; само окно планирования
+    БД не проверяет.
+  kind: guard
+  trigger: symbol:services/marketing/service.py::schedule_campaign
+  effects:
+  - 'writes: table:marketing.campaigns'
+  related:
+  - R-MARKETING-CAMPAIGN-01
+  - R-MARKETING-CAMPAIGN-03
+  implemented_by:
+  - symbol: services/marketing/service.py::_check_schedule
+    lines: 216-223
+    hash: 176ec1ecc315
+  - symbol: services/marketing/service.py::create_campaign
+    lines: 244-245
+    hash: 94f68b3e8911
+  - symbol: services/marketing/service.py::schedule_campaign
+    lines: 275-277
+    hash: 7ea46d9375e5
+  enforced_by_db:
+  - constraint: campaigns_check
+    hash: cdfee1cbdb46
+  config:
+  - services/marketing/settings.py::MAX_SCHEDULE_AHEAD_DAYS
+  tested_by:
+  - tests/test_marketing_api.py::test_schedule_cancel_and_report
+  status: draft
+- id: R-MARKETING-CAMPAIGN-03
+  title: Перенести или отменить можно только не запущенную кампанию
+  text: >
+    schedule_campaign и cancel_campaign разрешены только в статусах draft и scheduled (NOT_STARTED). Перенос
+    переводит кампанию в scheduled с новой датой, в том числе из draft; отмена — в cancelled. Для запущенной
+    или завершённой кампании — DomainError «…только кампанию, которая ещё не запущена».
+  kind: guard
+  trigger: symbol:services/marketing/service.py::cancel_campaign
+  effects:
+  - 'writes: table:marketing.campaigns'
+  related:
+  - R-MARKETING-CAMPAIGN-04
+  - R-MARKETING-AUDIENCE-02
+  implemented_by:
+  - symbol: services/marketing/service.py::schedule_campaign
+    lines: 273-277
+    hash: 7ea46d9375e5
+  - symbol: services/marketing/service.py::cancel_campaign
+    lines: 283-285
+    hash: 59a8d27dd8c1
+  config:
+  - services/marketing/service.py::NOT_STARTED
+  tested_by:
+  - tests/test_marketing_campaigns.py::test_finished_campaign_and_sent_letters_are_frozen
+  - tests/test_marketing_api.py::test_schedule_cancel_and_report
+  status: draft
+- id: R-MARKETING-CAMPAIGN-04
+  title: Отправленная или отменённая кампания больше не меняет статус
+  text: >
+    Жизненный цикл кампании: draft/scheduled → preparing → sending → sent, или draft/scheduled → cancelled.
+    Допустимые статусы задаёт CHECK campaigns_status_check. Триггер campaigns_guard_status запрещает менять
+    статус из sent и cancelled («кампания % уже в статусе %») даже прямым SQL.
+  kind: invariant
+  trigger: table:marketing.campaigns
+  effects:
+  - table:marketing.campaigns
+  related:
+  - R-MARKETING-CAMPAIGN-03
+  - R-MARKETING-LAUNCH-01
+  implemented_by:
+  - symbol: services/marketing/service.py::start
+    lines: 296-297
+    hash: 71783b1f3770
+  enforced_by_db:
+  - constraint: campaigns_status_check
+    hash: 8ea03524a97b
+  config:
+  - services/marketing/service.py::NOT_STARTED
+  - services/marketing/service.py::RUNNING
+  tested_by:
+  - tests/test_marketing_campaigns.py::test_finished_campaign_and_sent_letters_are_frozen
+  - tests/test_marketing_campaigns.py::test_audience_rests_between_campaigns
+  status: draft
+  unresolved_refs:
+  - campaigns_guard_status
+- id: R-MARKETING-LAUNCH-01
+  title: Условия запуска кампании и публикация marketing.campaign_launched
+  text: >
+    start запускает кампанию только при выполнении всех условий: статус draft или scheduled, аудитория
+    не в архиве, по аудитории не идёт другая кампания, выдержана пауза MIN_DAYS_BETWEEN_CAMPAIGNS и есть
+    хотя бы один не отписавшийся участник. Тогда кампания переходит в preparing, получает launched_at
+    и публикует marketing.campaign_launched. Через start идут и ручной запуск (launch_campaign), и запуск
+    по расписанию.
+  kind: guard
+  trigger: symbol:services/marketing/service.py::start
+  effects:
+  - 'writes: table:marketing.campaigns'
+  - event:marketing.campaign_launched
+  related:
+  - R-MARKETING-LAUNCH-02
+  - R-MARKETING-LAUNCH-03
+  - R-MARKETING-LAUNCH-05
+  - R-MARKETING-PREPARE-01
+  implemented_by:
+  - symbol: services/marketing/service.py::start
+    lines: 295-327
+    hash: 71783b1f3770
+  - symbol: services/marketing/service.py::launch_campaign
+    lines: 289-292
+    hash: 4b52bd0e3859
+  config:
+  - services/marketing/service.py::NOT_STARTED
+  tested_by:
+  - tests/test_marketing_campaigns.py::test_launch_prepares_sends_and_summarizes
+  - tests/test_marketing_campaigns.py::test_audience_rests_between_campaigns
+  status: draft
+- id: R-MARKETING-LAUNCH-02
+  title: По аудитории одновременно идёт не больше одной кампании
+  text: >
+    start отклоняет запуск, если у аудитории уже есть другая кампания в статусе preparing или sending
+    (DomainError «по аудитории уже идёт другая кампания»). БД дублирует проверку частичным уникальным
+    индексом campaigns_audience_active_uq по audience_id для статусов preparing и sending.
+  kind: invariant
+  trigger: symbol:services/marketing/service.py::start
+  effects:
+  - table:marketing.campaigns
+  related:
+  - R-MARKETING-LAUNCH-01
+  implemented_by:
+  - symbol: services/marketing/service.py::start
+    lines: 301-307
+    hash: 71783b1f3770
+  enforced_by_db:
+  - constraint: campaigns_audience_active_uq
+    hash: 6c19e254860c
+  config:
+  - services/marketing/service.py::RUNNING
+  tested_by:
+  - tests/test_marketing_campaigns.py::test_one_running_campaign_per_audience
+  status: draft
+- id: R-MARKETING-LAUNCH-03
+  title: Пауза между кампаниями одной аудитории отсчитывается от завершения предыдущей
+  text: >
+    Кампанию нельзя запустить, если с last_campaign_at аудитории прошло меньше MIN_DAYS_BETWEEN_CAMPAIGNS
+    (3) дней. last_campaign_at выставляет summarize_campaign (подписчик marketing.campaign_finished) равным
+    finished_at завершённой кампании, а не времени запуска. Отменённые кампании паузу не сдвигают.
+  kind: timer
+  trigger: event:marketing.campaign_finished
+  effects:
+  - 'writes: table:marketing.audiences'
+  roles:
+  - system
+  related:
+  - R-MARKETING-LAUNCH-01
+  - R-MARKETING-REPORT-01
+  implemented_by:
+  - symbol: services/marketing/service.py::start
+    lines: 308-312
+    hash: 71783b1f3770
+  - symbol: services/marketing/service.py::summarize_campaign
+    lines: 416-418
+    hash: 78314e4dedf8
+  config:
+  - services/marketing/settings.py::MIN_DAYS_BETWEEN_CAMPAIGNS
+  tested_by:
+  - tests/test_marketing_campaigns.py::test_audience_rests_between_campaigns
+  - tests/test_marketing_campaigns.py::test_job_launches_due_campaigns
+  status: draft
+- id: R-MARKETING-LAUNCH-04
+  title: Запланированную кампанию можно запустить вручную раньше срока
+  text: >
+    launch_campaign вызывает start без сравнения с scheduled_at: кампания в статусе scheduled запускается
+    вручную сразу. Срок планирования соблюдает только фоновая задача launch_due.
+  kind: guard
+  trigger: symbol:services/marketing/api.py::launch
+  effects:
+  - symbol:services/marketing/service.py::start
+  related:
+  - R-MARKETING-LAUNCH-05
+  implemented_by:
+  - symbol: services/marketing/service.py::launch_campaign
+    lines: 289-292
+    hash: 4b52bd0e3859
+  - symbol: services/marketing/service.py::start
+    lines: 296-297
+    hash: 71783b1f3770
+  config:
+  - services/marketing/service.py::NOT_STARTED
+  status: draft
+- id: R-MARKETING-LAUNCH-05
+  title: Фоновая задача запускает наступившие запланированные кампании, неудачные ждут следующего прогона
+  text: >
+    launch_due выбирает кампании в статусе scheduled с scheduled_at <= now (по возрастанию времени, со
+    SKIP LOCKED) и запускает каждую через start во вложенной транзакции. Если запуск не прошёл (DomainError:
+    пауза, идёт другая кампания, нет адресов), кампания остаётся scheduled и повторяется при каждом следующем
+    прогоне без ограничения числа попыток и без уведомления менеджера.
+  kind: timer
+  trigger: symbol:services/marketing/jobs.py::launch_due
+  effects:
+  - symbol:services/marketing/service.py::start
+  - event:marketing.campaign_launched
+  roles:
+  - system
+  related:
+  - R-MARKETING-LAUNCH-01
+  - R-MARKETING-LAUNCH-03
+  implemented_by:
+  - symbol: services/marketing/jobs.py::launch_due
+    lines: 17-33
+    hash: 2187e32bd6f3
+  enforced_by_db:
+  - constraint: campaigns_scheduled_idx
+    hash: dbc196ab2734
+  tested_by:
+  - tests/test_marketing_campaigns.py::test_job_launches_due_campaigns
+  status: draft
+- id: R-MARKETING-PREPARE-01
+  title: Запуск кампании по цепочке событий готовит, отправляет письма и подводит итог
+  text: >
+    Кампания проходит три асинхронных шага внутри модуля: marketing.campaign_launched → prepare_messages
+    (preparing → sending, публикует marketing.campaign_prepared) → deliver_messages (sending → sent, публикует
+    marketing.campaign_finished) → summarize_campaign. Каждый шаг берёт кампанию с блокировкой FOR UPDATE
+    и молча завершается, если статус уже не тот. Других подписчиков в других сервисах у событий нет.
+  kind: effect
+  trigger: event:marketing.campaign_launched
+  effects:
+  - event:marketing.campaign_prepared
+  - event:marketing.campaign_finished
+  - 'writes: table:marketing.campaigns'
+  roles:
+  - system
+  related:
+  - R-MARKETING-PREPARE-02
+  - R-MARKETING-DELIVERY-01
+  - R-MARKETING-REPORT-01
+  implemented_by:
+  - symbol: services/marketing/consumers.py::on_campaign_launched
+    lines: 10-11
+    hash: 937960a051db
+  - symbol: services/marketing/consumers.py::on_campaign_prepared
+    lines: 15-16
+    hash: add6e7afeeaf
+  - symbol: services/marketing/consumers.py::on_campaign_finished
+    lines: 20-21
+    hash: c8a0dee739c5
+  - symbol: services/marketing/service.py::prepare_messages
+    lines: 332-334
+    hash: aa480556f473
+  tested_by:
+  - tests/test_marketing_campaigns.py::test_launch_prepares_sends_and_summarizes
+  status: draft
+- id: R-MARKETING-PREPARE-02
+  title: 'Письма при подготовке: отписавшиеся не входят, отписанные и без шаблона пропускаются'
+  text: >
+    prepare_messages создаёт письмо на каждого участника аудитории с opted_out = false; участники с opted_out
+    не попадают ни в письма, ни в recipients_count. Если адрес отписан от сети или от площадки кампании,
+    письмо получает статус skipped с причиной unsubscribed. Если для сегмента нет шаблона — skipped с
+    причиной no_template. Остальные письма ставятся в queued с текстом по шаблону. recipients_count равен
+    числу неотписавшихся участников.
+  kind: effect
+  trigger: event:marketing.campaign_launched
+  effects:
+  - 'writes: table:marketing.sent_messages'
+  - 'writes: table:marketing.campaigns'
+  roles:
+  - system
+  related:
+  - R-MARKETING-TEMPLATE-02
+  - R-MARKETING-UNSUBSCRIBE-03
+  - R-MARKETING-PREPARE-01
+  implemented_by:
+  - symbol: services/marketing/service.py::prepare_messages
+    lines: 335-377
+    hash: aa480556f473
+  enforced_by_db:
+  - constraint: sent_messages_campaign_email_uq
+    hash: f0a7f7149cf7
+  tested_by:
+  - tests/test_marketing_campaigns.py::test_reader_without_template_is_skipped
+  - tests/test_marketing_campaigns.py::test_unsubscribed_reader_excluded_from_future_campaigns
+  - tests/test_marketing_campaigns.py::test_venue_unsubscribe_keeps_other_venues
+  status: draft
+- id: R-MARKETING-DELIVERY-01
+  title: Все письма из очереди отмечаются отправленными одним обновлением
+  text: >
+    deliver_messages (подписчик marketing.campaign_prepared) одним UPDATE переводит все письма кампании
+    из queued в sent с одним sent_at, ставит кампании статус sent и finished_at и публикует marketing.campaign_finished.
+    Реальной отправки и поштучной обработки ошибок доставки нет. О проблемах доставки система узнаёт только
+    из возвратов (bounce), зарегистрированных позже.
+  kind: effect
+  trigger: event:marketing.campaign_prepared
+  effects:
+  - 'writes: table:marketing.sent_messages'
+  - 'writes: table:marketing.campaigns'
+  - event:marketing.campaign_finished
+  roles:
+  - system
+  related:
+  - R-MARKETING-PREPARE-01
+  - R-MARKETING-BOUNCE-01
+  implemented_by:
+  - symbol: services/marketing/consumers.py::on_campaign_prepared
+    lines: 15-16
+    hash: add6e7afeeaf
+  - symbol: services/marketing/service.py::deliver_messages
+    lines: 384-398
+    hash: 91d70d8b2545
+  enforced_by_db:
+  - constraint: sent_messages_check
+    hash: 455d173402a5
+  tested_by:
+  - tests/test_marketing_campaigns.py::test_launch_prepares_sends_and_summarizes
+  status: draft
+- id: R-MARKETING-REPORT-01
+  title: 'Итоги кампании: sent_count — отправленные вместе с возвратами, skipped_count — пропущенные'
+  text: >
+    summarize_campaign (подписчик marketing.campaign_finished) считает письма кампании без тестовых: sent_count
+    = sent + bounced, skipped_count = skipped. Счётчики считаются один раз при завершении, поэтому возвраты,
+    зарегистрированные позже, их не меняют. Заодно обновляется last_campaign_at аудитории. Неотрицательность
+    счётчиков обеспечивают CHECK в БД.
+  kind: calculation
+  trigger: event:marketing.campaign_finished
+  effects:
+  - 'writes: table:marketing.campaigns'
+  - 'writes: table:marketing.audiences'
+  roles:
+  - system
+  related:
+  - R-MARKETING-LAUNCH-03
+  - R-MARKETING-REPORT-02
+  implemented_by:
+  - symbol: services/marketing/consumers.py::on_campaign_finished
+    lines: 20-21
+    hash: c8a0dee739c5
+  - symbol: services/marketing/service.py::summarize_campaign
+    lines: 405-418
+    hash: 78314e4dedf8
+  enforced_by_db:
+  - constraint: campaigns_sent_count_check
+    hash: 829dfc53cc35
+  - constraint: campaigns_skipped_count_check
+    hash: b32c81fea47e
+  - constraint: campaigns_recipients_count_check
+    hash: ff602f085788
+  tested_by:
+  - tests/test_marketing_campaigns.py::test_launch_prepares_sends_and_summarizes
+  - tests/test_marketing_campaigns.py::test_reader_without_template_is_skipped
+  - tests/test_marketing_campaigns.py::test_repeated_bounces_unsubscribe_address
+  status: draft
+- id: R-MARKETING-REPORT-02
+  title: Отчёт по кампании разбивает пропущенные письма по причинам
+  text: >
+    campaign_report возвращает кампанию и число пропущенных писем по причинам skip_reason (unsubscribed,
+    no_template) без тестовых писем. Доступен менеджеру площадки кампании или менеджеру сети.
+  kind: calculation
+  trigger: symbol:services/marketing/api.py::campaign
+  effects:
+  - 'reads: table:marketing.sent_messages'
+  related:
+  - R-MARKETING-REPORT-01
+  implemented_by:
+  - symbol: services/marketing/service.py::campaign_report
+    lines: 426-438
+    hash: 4162514ab1c0
+  tested_by:
+  - tests/test_marketing_api.py::test_schedule_cancel_and_report
+  status: draft
+- id: R-MARKETING-MESSAGE-01
+  title: Текст отправленного письма неизменен
+  text: >
+    Триггер sent_messages_freeze_body запрещает менять body письма, у которого заполнен sent_at («письмо
+    % уже отправлено, текст менять нельзя»). CHECK sent_messages_check требует sent_at у писем в статусах
+    sent и bounced, CHECK sent_messages_status_check ограничивает статусы значениями queued, sent, skipped,
+    bounced. В коде этих проверок нет: защищает только БД.
+  kind: invariant
+  trigger: table:marketing.sent_messages
+  effects:
+  - table:marketing.sent_messages
+  related:
+  - R-MARKETING-DELIVERY-01
+  enforced_by_db:
+  - constraint: sent_messages_check
+    hash: 455d173402a5
+  - constraint: sent_messages_status_check
+    hash: 06651f518123
+  tested_by:
+  - tests/test_marketing_campaigns.py::test_finished_campaign_and_sent_letters_are_frozen
+  status: draft
+  unresolved_refs:
+  - sent_messages_freeze_body
+- id: R-MARKETING-TEST-01
+  title: Тестовые письма — только до запуска, не больше MAX_TEST_MESSAGES и только при наличии шаблона
+  text: >
+    send_test_message разрешён для кампании в статусе draft или scheduled, с известным сегментом (по умолчанию
+    paid), не больше MAX_TEST_MESSAGES (5) на кампанию. Если шаблон не найден, возникает DomainError «для
+    этого сегмента нет шаблона письма». Письмо сразу сохраняется со статусом sent и is_test = true. Тестовые
+    письма выводятся в списке писем кампании вместе с настоящими.
+  kind: guard
+  trigger: symbol:services/marketing/api.py::send_test
+  effects:
+  - 'writes: table:marketing.sent_messages'
+  related:
+  - R-MARKETING-TEST-02
+  - R-MARKETING-TEST-03
+  - R-MARKETING-TEMPLATE-02
+  implemented_by:
+  - symbol: services/marketing/service.py::send_test_message
+    lines: 461-489
+    hash: 1ea055166b98
+  - symbol: services/marketing/service.py::campaign_messages
+    lines: 444-449
+    hash: abe3c1412c10
+  config:
+  - services/marketing/settings.py::MAX_TEST_MESSAGES
+  - services/marketing/settings.py::AUDIENCE_GROUP
+  - services/marketing/service.py::NOT_STARTED
+  tested_by:
+  - tests/test_marketing_api.py::test_test_messages_are_limited_and_purged
+  - tests/test_marketing_api.py::test_test_message_then_campaign_messages
+  status: draft
+- id: R-MARKETING-TEST-02
+  title: Тестовые письма не входят в статистику, возвраты и уникальность адресатов
+  text: >
+    Письма с is_test = true не учитываются в sent_count и skipped_count, в отчёте о пропусках и в подсчёте
+    возвратов. Регистрация возврата по ним запрещена. Уникальный индекс (campaign_id, email) действует
+    только для нетестовых писем, поэтому тестовое письмо можно отправить на адрес из аудитории.
+  kind: invariant
+  trigger: table:marketing.sent_messages
+  effects:
+  - table:marketing.sent_messages
+  related:
+  - R-MARKETING-TEST-01
+  - R-MARKETING-REPORT-01
+  - R-MARKETING-BOUNCE-01
+  implemented_by:
+  - symbol: services/marketing/service.py::summarize_campaign
+    lines: 407-410
+    hash: 78314e4dedf8
+  - symbol: services/marketing/service.py::campaign_report
+    lines: 429-435
+    hash: 4162514ab1c0
+  - symbol: services/marketing/service.py::register_bounce
+    lines: 496-497
+    hash: ab5388c4adce
+  - symbol: services/marketing/service.py::handle_bounce
+    lines: 508-512
+    hash: d69548630254
+  enforced_by_db:
+  - constraint: sent_messages_campaign_email_uq
+    hash: f0a7f7149cf7
+  status: draft
+- id: R-MARKETING-TEST-03
+  title: Тестовые письма удаляются через TEST_MESSAGE_TTL_DAYS после отправки
+  text: >
+    Фоновая задача purge_test_messages физически удаляет тестовые письма, у которых sent_at раньше now
+    − TEST_MESSAGE_TTL_DAYS (14 дней). Письма кампании не удаляются.
+  kind: timer
+  trigger: symbol:services/marketing/jobs.py::purge_test_messages
+  effects:
+  - 'deletes: table:marketing.sent_messages'
+  roles:
+  - system
+  related:
+  - R-MARKETING-TEST-01
+  implemented_by:
+  - symbol: services/marketing/jobs.py::purge_test_messages
+    lines: 36-39
+    hash: 3518ab310444
+  - symbol: services/marketing/service.py::purge_test_messages
+    lines: 517-521
+    hash: fab65ae983c5
+  config:
+  - services/marketing/settings.py::TEST_MESSAGE_TTL_DAYS
+  tested_by:
+  - tests/test_marketing_api.py::test_test_messages_are_limited_and_purged
+  status: draft
+- id: R-MARKETING-BOUNCE-01
+  title: Возврат регистрируется только по отправленному письму кампании
+  text: >
+    register_bounce принимает только нетестовое письмо в статусе sent. Повторный возврат по тому же письму
+    и возврат по тестовому, пропущенному или ещё не отправленному письму отклоняются с DomainError «возврат
+    возможен только по отправленному письму кампании». Письмо переходит в bounced, публикуется marketing.message_bounced.
+  kind: guard
+  trigger: symbol:services/marketing/api.py::bounce
+  effects:
+  - 'writes: table:marketing.sent_messages'
+  - event:marketing.message_bounced
+  related:
+  - R-MARKETING-BOUNCE-02
+  - R-MARKETING-ACCESS-03
+  implemented_by:
+  - symbol: services/marketing/service.py::register_bounce
+    lines: 496-503
+    hash: ab5388c4adce
+  enforced_by_db:
+  - constraint: sent_messages_check
+    hash: 455d173402a5
+  - constraint: sent_messages_bounced_idx
+    hash: 3ea39e2e2c4e
+  tested_by:
+  - tests/test_marketing_campaigns.py::test_repeated_bounces_unsubscribe_address
+  - tests/test_marketing_api.py::test_unsubscribe_and_bounce_endpoints
+  status: draft
+- id: R-MARKETING-BOUNCE-02
+  title: После BOUNCE_LIMIT возвратов адрес отписывается от всех рассылок сети
+  text: >
+    handle_bounce (подписчик marketing.message_bounced) считает все нетестовые письма адреса в статусе
+    bounced по всем кампаниям и площадкам без ограничения по времени. Когда их становится BOUNCE_LIMIT
+    (3) или больше, адрес отписывается от всей сети (venue_id = NULL) с причиной bounce. Это публикует
+    marketing.unsubscribed и исключает адрес из аудиторий.
+  kind: effect
+  trigger: event:marketing.message_bounced
+  effects:
+  - 'writes: table:marketing.unsubscriptions'
+  - event:marketing.unsubscribed
+  roles:
+  - system
+  related:
+  - R-MARKETING-BOUNCE-01
+  - R-MARKETING-UNSUBSCRIBE-02
+  implemented_by:
+  - symbol: services/marketing/consumers.py::on_message_bounced
+    lines: 30-31
+    hash: a24b032fe04e
+  - symbol: services/marketing/service.py::handle_bounce
+    lines: 508-514
+    hash: d69548630254
+  config:
+  - services/marketing/settings.py::BOUNCE_LIMIT
+  tested_by:
+  - tests/test_marketing_campaigns.py::test_repeated_bounces_unsubscribe_address
+  status: draft
+- id: R-MARKETING-UNSUBSCRIBE-01
+  title: Отписка от площадки или сети идемпотентна и требует известной причины
+  text: >
+    unsubscribe принимает причину из UNSUBSCRIBE_REASONS (reader, bounce, complaint, operator) и нормализует
+    адрес. Если адрес уже отписан от всей сети или от этой площадки, возвращается существующая отписка
+    без нового события. Иначе создаётся запись (venue_id = NULL — от всей сети) и публикуется marketing.unsubscribed.
+    Отписка от площадки не мешает последующей отписке от сети. Список причин продублирован в CHECK БД,
+    уникальность держат частичные индексы для сети и для площадки.
+  kind: guard
+  trigger: symbol:services/marketing/service.py::unsubscribe
+  effects:
+  - 'writes: table:marketing.unsubscriptions'
+  - event:marketing.unsubscribed
+  roles:
+  - system
+  related:
+  - R-MARKETING-UNSUBSCRIBE-02
+  - R-MARKETING-ACCESS-03
+  - R-MARKETING-BOUNCE-02
+  implemented_by:
+  - symbol: services/marketing/service.py::unsubscribe
+    lines: 530-549
+    hash: 64fc88110942
+  enforced_by_db:
+  - constraint: unsubscriptions_reason_check
+    hash: c691809c53cc
+  - constraint: unsubscriptions_network_uq
+    hash: 45fb0a4ecb4c
+  - constraint: unsubscriptions_venue_uq
+    hash: 36addc184ba1
+  config:
+  - services/marketing/service.py::UNSUBSCRIBE_REASONS
+  tested_by:
+  - tests/test_marketing_campaigns.py::test_unsubscribed_reader_excluded_from_future_campaigns
+  - tests/test_marketing_audiences.py::test_unsubscribed_address_cannot_be_added
+  status: draft
+- id: R-MARKETING-UNSUBSCRIBE-02
+  title: Отписка исключает адрес из аудиторий и снимает ещё не ушедшие письма
+  text: >
+    exclude_address (подписчик marketing.unsubscribed) ставит opted_out = true во всех аудиториях площадки
+    отписки, а при отписке от сети — во всех аудиториях. Письма адреса в статусе queued в кампаниях, которые
+    сейчас идут (preparing, sending), переводятся в skipped с причиной unsubscribed. Уже отправленные
+    письма не меняются. Способа вернуть opted_out = false в коде нет.
+  kind: effect
+  trigger: event:marketing.unsubscribed
+  effects:
+  - 'writes: table:marketing.audience_members'
+  - 'writes: table:marketing.sent_messages'
+  roles:
+  - system
+  related:
+  - R-MARKETING-UNSUBSCRIBE-01
+  - R-MARKETING-PREPARE-02
+  implemented_by:
+  - symbol: services/marketing/consumers.py::on_unsubscribed
+    lines: 25-26
+    hash: 352a90c0f0d8
+  - symbol: services/marketing/service.py::exclude_address
+    lines: 554-572
+    hash: d33371b53e3b
+  enforced_by_db:
+  - constraint: audience_members_email_idx
+    hash: 9b4678838096
+  config:
+  - services/marketing/service.py::RUNNING
+  tested_by:
+  - tests/test_marketing_campaigns.py::test_unsubscribe_skips_messages_not_yet_sent
+  - tests/test_marketing_api.py::test_unsubscribe_and_bounce_endpoints
+  status: draft
+- id: R-MARKETING-UNSUBSCRIBE-03
+  title: Отписка от площадки не влияет на рассылки других площадок
+  text: >
+    Отписка с venue_id действует только на кампании и аудитории этой площадки: при подготовке писем и
+    при добавлении в аудиторию учитываются отписки от сети и от площадки кампании или аудитории. Отписка
+    от сети (venue_id = NULL) действует везде.
+  kind: invariant
+  trigger: table:marketing.unsubscriptions
+  effects:
+  - symbol:services/marketing/service.py::prepare_messages
+  - symbol:services/marketing/service.py::is_unsubscribed
+  related:
+  - R-MARKETING-UNSUBSCRIBE-01
+  - R-MARKETING-MEMBER-04
+  - R-MARKETING-PREPARE-02
+  implemented_by:
+  - symbol: services/marketing/service.py::prepare_messages
+    lines: 342-351
+    hash: aa480556f473
+  - symbol: services/marketing/service.py::is_unsubscribed
+    lines: 101-110
+    hash: b5c9e99fcaac
+  - symbol: services/marketing/service.py::exclude_address
+    lines: 556-558
+    hash: d33371b53e3b
+  tested_by:
+  - tests/test_marketing_campaigns.py::test_venue_unsubscribe_keeps_other_venues
+  status: draft
