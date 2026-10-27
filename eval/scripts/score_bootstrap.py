@@ -31,7 +31,9 @@ score = {"full": 1.0, "partial": 0.5, "none": 0.0}
 
 result: dict = {"rev": REV, "gt_rules": len(gt), "matched_gt_rules": len(matches)}
 result["rule_recall"] = round(sum(score[matches[g]["match"]] for g in gt if g in matches) / len(gt), 3)
-result["rule_recall_full_only"] = round(sum(matches.get(g, {}).get("match") == "full" for g in gt) / len(gt), 3)
+result["rule_recall_full_only"] = round(
+    sum(matches.get(g, {}).get("match") == "full" for g in gt) / len(gt), 3
+)
 by_cat: dict[str, list[float]] = defaultdict(list)
 for gid, rule in gt.items():
     for cat in rule.get("hidden", []):

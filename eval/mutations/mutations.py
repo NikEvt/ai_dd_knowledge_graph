@@ -29,7 +29,8 @@ def m2_helper_logic() -> None:
         'REQUIRED_CLIENT_FIELDS = ("full_name", "passport", "birth_date")\nOPTIONAL_FIELDS = ("birth_date",)')
     sub("services/applications/review.py",
         "    return [f for f in REQUIRED_CLIENT_FIELDS if not getattr(client, f)]",
-        "    return [f for f in REQUIRED_CLIENT_FIELDS if f not in OPTIONAL_FIELDS and not getattr(client, f)]")
+        "    return [f for f in REQUIRED_CLIENT_FIELDS"
+        " if f not in OPTIONAL_FIELDS and not getattr(client, f)]")
 
 
 def m3_new_check() -> None:
@@ -69,13 +70,15 @@ def m5_format_only() -> None:
     p = Path("services/billing/service.py")
     s = p.read_text()
     s = s.replace("    after = before + amount\n", "    after = paid_before + amount\n")
-    s = s.replace("    if before < invoice.amount <= after:\n", "    if paid_before < invoice.amount <= after:\n")
+    s = s.replace("    if before < invoice.amount <= after:\n",
+                  "    if paid_before < invoice.amount <= after:\n")
     p.write_text(s)
 
 
 def m6_comments_only() -> None:
     """Только комментарии и docstring."""
-    sub("services/scheduling/jobs.py", "async def flag_overdue(session: AsyncSession, now: datetime) -> list[int]:\n",
+    sub("services/scheduling/jobs.py",
+        "async def flag_overdue(session: AsyncSession, now: datetime) -> list[int]:\n",
         "async def flag_overdue(session: AsyncSession, now: datetime) -> list[int]:\n"
         '    """Отмечает просроченные выдачи и публикует loan.overdue."""\n'
         "    # Срок считается от даты выдачи.\n")

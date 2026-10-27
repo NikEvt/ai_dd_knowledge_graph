@@ -46,7 +46,9 @@ def emit(metric: str, value, phase: str, **extra) -> None:
 
 
 # --- транскрипт --------------------------------------------------------------------------
-events = [json.loads(line) for line in (RUN_DIR / "transcript.jsonl").read_text().splitlines() if line.strip()]
+events = [
+    json.loads(line) for line in (RUN_DIR / "transcript.jsonl").read_text().splitlines() if line.strip()
+]
 result = next((e for e in reversed(events) if e.get("type") == "result"), {})
 
 seen_message_ids: set[str] = set()
@@ -142,7 +144,8 @@ for kind, block in order:
             reads.append((rel, text))
         else:
             search_text.append(text)
-            if use.get("name", "").startswith("mcp__") and any(use["name"].endswith(t) for t in MCP_CONTEXT_TOOLS):
+            name = use.get("name", "")
+            if name.startswith("mcp__") and any(name.endswith(t) for t in MCP_CONTEXT_TOOLS):
                 mcp_text.append(text)
 
 emit("files_read_whole", files_read_whole, "context")
@@ -271,7 +274,8 @@ if meta.get("series"):
     # В серии изменения копятся: тесты, заменённые предыдущими задачами серии, тоже не регрессия
     for prev in (EVAL / "logs" / "runs").glob(f"*-{meta['series']}"):
         prev_meta = json.loads((prev / "meta.json").read_text())
-        prev_task = yaml.safe_load((EVAL / "ground_truth" / "tasks" / f"{prev_meta['task_id']}.yaml").read_text())
+        prev_task_path = EVAL / "ground_truth" / "tasks" / f"{prev_meta['task_id']}.yaml"
+        prev_task = yaml.safe_load(prev_task_path.read_text())
         superseded |= {s.split("::")[1] for s in prev_task["supersedes"]}
 regressions = [
     n for n, ok in hidden_results

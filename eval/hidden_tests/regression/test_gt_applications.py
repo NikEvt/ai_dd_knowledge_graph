@@ -6,12 +6,12 @@ import pytest
 from sqlalchemy import select, update
 from support import (
     BOOK_H2,
+    BOOK_L1,
     CHECKER,
     CLIENT_A,
     CLIENT_INCOMPLETE,
     KZN,
     LAW,
-    BOOK_L1,
     OPERATOR,
     REP_DEBT,
     REP_PLAIN,
@@ -119,7 +119,8 @@ async def test_gt_client_update_does_not_touch_booking_stage() -> None:
     booked, _ = await paid_application()
     current = await new_application(rep=REP_PLAIN, sphere=LAW, books=(BOOK_L1,))
     await submit(current)
-    await act(apps.update_client, CLIENT_A, REVIEWER, source_application_id=current, birth_date=date(1990, 5, 2))
+    await act(apps.update_client, CLIENT_A, REVIEWER, source_application_id=current,
+              birth_date=date(1990, 5, 2))
     assert await stage(booked) == "awaiting_issue"
 
 
@@ -129,7 +130,8 @@ async def test_gt_client_email_change_does_not_resend_to_review() -> None:
     await invoice(waiting)
     current = await new_application(rep=REP_PLAIN)
     await submit(current)
-    await act(apps.update_client, CLIENT_A, REVIEWER, source_application_id=current, email="anna2@example.org")
+    await act(apps.update_client, CLIENT_A, REVIEWER, source_application_id=current,
+              email="anna2@example.org")
     assert await stage(waiting) == "awaiting_payment"
 
 

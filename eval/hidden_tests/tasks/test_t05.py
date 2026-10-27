@@ -56,4 +56,5 @@ async def test_t05_operator_cannot_set_snils_after_review() -> None:
     app_id = await new_application()
     await submit(app_id)
     with pytest.raises(DomainError):
-        await act(apps.update_client, CLIENT_A, OPERATOR, source_application_id=app_id, snils="111-111-111 11")
+        await act(apps.update_client, CLIENT_A, OPERATOR, source_application_id=app_id,
+                  snils="111-111-111 11")

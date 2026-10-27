@@ -83,12 +83,16 @@ def main(tasks: list[str]) -> None:
             f"стоимость ${usage['cost_usd']:.2f}, входных токенов {usage['input_tokens']:,}",
             "",
             "**Пропущено аудитором (проверить: связь действительно скрытая или эталон ошибочен):**",
-            *[f"- `{r}` ({expected[r]['kind']}, {expected[r]['role']}, {expected[r].get('hidden', '-')})" for r in missed],
+            *[
+                f"- `{r}` ({expected[r]['kind']}, {expected[r]['role']}, {expected[r].get('hidden', '-')})"
+                for r in missed
+            ],
             "" if missed else "- нет",
             "",
             "**Найдено аудитором, нет в эталоне (решить: добавить в эталон или отклонить):**",
             *[
-                f"- `{r}` ({found_nodes[r]['kind']}, {found_nodes[r]['role']}): {found_nodes[r].get('why', '')}"
+                f"- `{r}` ({found_nodes[r]['kind']}, {found_nodes[r]['role']}): "
+                f"{found_nodes[r].get('why', '')}"
                 for r in extra
             ],
             "",
@@ -96,7 +100,8 @@ def main(tasks: list[str]) -> None:
     if totals["expected"]:
         lines.insert(
             2,
-            f"Итого recall {totals['found']}/{totals['expected']} = {totals['found'] / totals['expected']:.2f}; "
+            f"Итого recall {totals['found']}/{totals['expected']} = "
+            f"{totals['found'] / totals['expected']:.2f}; "
             f"hidden {totals['hidden_found']}/{totals['hidden']} = "
             f"{totals['hidden_found'] / max(totals['hidden'], 1):.2f}\n",
         )

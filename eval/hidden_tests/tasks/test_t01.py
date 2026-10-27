@@ -32,7 +32,8 @@ from services.scheduling.models import Booking, Hold
 async def _rows(model, app_id):
     order = model.id if hasattr(model, "id") else model.book_id
     async with db.sessionmaker()() as s:
-        return list((await s.scalars(select(model).where(model.application_id == app_id).order_by(order))).all())
+        query = select(model).where(model.application_id == app_id).order_by(order)
+        return list((await s.scalars(query)).all())
 
 
 async def test_t01_social_venue_change_after_link() -> None:

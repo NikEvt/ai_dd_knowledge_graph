@@ -2,13 +2,13 @@ import asyncio
 from pathlib import Path
 
 import pytest
+import support as factories
 from alembic import command
 from alembic.config import Config
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from libs import clock, db, settings
 from services import wiring
-import support as factories
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMAS = ("applications", "billing", "scheduling", "notifications", "chat", "events")

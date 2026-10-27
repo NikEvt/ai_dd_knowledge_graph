@@ -3,7 +3,18 @@
 from datetime import timedelta
 
 from sqlalchemy import select
-from support import HISTORY, MSK, REP_DEBT, T0, act, book, new_application, paid_application, pass_review, slot
+from support import (
+    HISTORY,
+    MSK,
+    REP_DEBT,
+    T0,
+    act,
+    book,
+    new_application,
+    paid_application,
+    pass_review,
+    slot,
+)
 
 from libs import db
 from services.notifications import service as notifications
@@ -12,7 +23,8 @@ from services.notifications.models import Email
 
 async def _emails(app_id):
     async with db.sessionmaker()() as s:
-        return list((await s.scalars(select(Email).where(Email.application_id == app_id).order_by(Email.id))).all())
+        query = select(Email).where(Email.application_id == app_id).order_by(Email.id)
+        return list((await s.scalars(query)).all())
 
 
 async def _set_debt_templates() -> None:

@@ -1,6 +1,17 @@
 """T04: правило «одна заявка клиента на сферу» действует и между социальной и платной заявками."""
 
-from support import LAW, BOOK_L1, REP_PLAIN, invoice, new_application, paid_application, pass_review, read, stage, submit
+from support import (
+    BOOK_L1,
+    LAW,
+    REP_PLAIN,
+    invoice,
+    new_application,
+    paid_application,
+    pass_review,
+    read,
+    stage,
+    submit,
+)
 
 from services.billing.public import active_books_invoice
 

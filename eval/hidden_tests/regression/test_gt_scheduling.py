@@ -31,7 +31,8 @@ from services.scheduling import service as scheduling
 
 async def _emails(app_id):
     async with db.sessionmaker()() as s:
-        return list((await s.scalars(select(Email).where(Email.application_id == app_id).order_by(Email.id))).all())
+        query = select(Email).where(Email.application_id == app_id).order_by(Email.id)
+        return list((await s.scalars(query)).all())
 
 
 async def test_gt_slot_capacity_limited_by_venue_max() -> None:

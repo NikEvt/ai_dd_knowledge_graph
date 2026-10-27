@@ -18,7 +18,8 @@ async def test_t08_post_and_list_use_text(client: httpx.AsyncClient) -> None:
     r = await client.post(f"/applications/{app_id}/messages", json={"author_id": OPERATOR, "text": "Привет"})
     assert r.status_code == 201
     assert r.json()["text"] == "Привет"
-    r = await client.get(f"/applications/{app_id}/messages", params={"viewer_id": OPERATOR, "role": "operator"})
+    r = await client.get(f"/applications/{app_id}/messages",
+                         params={"viewer_id": OPERATOR, "role": "operator"})
     last = r.json()[-1]
     assert last["text"] == "Привет"
     assert "body" not in last
