@@ -4,8 +4,7 @@
    (слой БД CI пересобирает отдельно, extract_db.py, и сравнивает через git diff).
 2. Хэши правил: у каждой ссылки implemented_by / enforced_by_db хранится хэш реализации
    (нормализованный AST символа и транзитивно вызываемых функций проекта; описание перехода BPM;
-   определение объекта БД), у ссылки satisfies — хэш текста бизнес-требования. Хэш изменился, а правило
-   в этом PR не тронуто -> правило suspect с причиной code_changed или requirement_changed.
+   определение объекта БД). Хэш изменился, а правило в этом PR не тронуто -> правило suspect.
 3. Новое ограничение БД (по сравнению с --base) без правила с enforced_by_db -> ошибка.
 4. Отчёт о покрытии: правила без implemented_by / tested_by, suspect старше 14 дней.
 
@@ -38,7 +37,6 @@ from tools.knowledge.common import (
     rule_files,
     warn,
 )
-from tools.knowledge.requirements import load_requirements
 
 DB_KINDS = {"check", "unique", "unique_index", "partial_unique_index", "trigger", "function", "exclusion"}
 STALE_SUSPECT_DAYS = 14
@@ -50,8 +48,6 @@ def current_hashes() -> dict[str, str]:
         for n in load_model(name)["nodes"]:
             if n.get("hash"):
                 hashes[n["id"]] = n["hash"]
-    for r in load_requirements():
-        hashes[r["id"]] = r["hash"]
     return hashes
 
 
@@ -60,10 +56,7 @@ ref_target = trust.anchor
 
 def _entries(rule: dict[str, Any]) -> list[dict[str, Any]]:
     return [
-        e
-        for key in ("implemented_by", "enforced_by_db", "satisfies")
-        for e in rule.get(key) or []
-        if isinstance(e, dict)
+        e for key in ("implemented_by", "enforced_by_db") for e in rule.get(key) or [] if isinstance(e, dict)
     ]
 
 
@@ -184,14 +177,12 @@ def main() -> int:
                         e["hash"] = hashes[target]
                         dirty = True
                     continue
-                reason = "requirement_changed" if e.get("requirement") else "code_changed"
-                drifted.append(f"{rid} ({target}, {reason})")
+                drifted.append(f"{rid} ({target})")
                 if args.write:
                     e["hash"] = hashes[target]
                     if r.get("status") != "suspect":
                         r["status"] = "suspect"
                         r["suspect_since"] = today.isoformat()
-                    r["suspect_reason"] = reason
                     dirty = True
             if r.get("status") == "suspect" and r.get("suspect_since"):
                 since = dt.date.fromisoformat(str(r["suspect_since"]))
@@ -201,7 +192,7 @@ def main() -> int:
             path.write_text(dump_rules_yaml(header, rules), encoding="utf-8")
 
     for item in drifted:
-        warn(f"drift: код или бизнес-требование изменились, правило не обновлено -> suspect: {item}")
+        warn(f"drift: код правила изменился, текст правила не обновлён -> suspect: {item}")
     if unstamped and not args.write:
         error(
             f"нет хэшей у ссылок правил ({len(unstamped)}): запусти drift.py --write; пример: {unstamped[0]}"

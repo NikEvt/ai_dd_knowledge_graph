@@ -3,11 +3,12 @@
 Статус правила (draft/verified/suspect) — этап ревью. Достоверность — отдельный профиль, который считается
 при сборке индекса и руками не пишется:
 
-- происхождение: откуда факт (код, каталог БД, BPM, ИИ, человек) — `provenance` правила, слой модели;
+- происхождение: кто сформулировал факт — `provenance` правила (по умолчанию llm), слой модели для графа;
 - способ получения: ast, pg_catalog, yaml (извлечено), heuristic (предположение), llm, human — у рёбер;
-- актуальность: код и бизнес-требования не менялись после фиксации правила и после проверки человеком;
-- неоднозначность: открытые расхождения D-xx, `deviates_from`, оговорки, открытые вопросы, битые ссылки;
-- соответствие требованию: реализует бизнес-требование, расходится с ним или требования нет.
+- актуальность: код не менялся после фиксации правила, правило не меняли после проверки человеком;
+- неоднозначность: открытые расхождения D-xx, расхождение со схемой, открытые вопросы, битые ссылки, оговорки;
+- соответствие бизнес-схеме: правило описано в схеме (`schema_ref`), расходится с ней (`discrepancy`)
+  или в схеме его нет.
 
 Итог — уровень (худший побеждает): contested > stale > unanchored > weak > supported > confirmed.
 Коды уровней — для машин (фильтры, CI, docs). В контекст ИИ уходят фразы из describe(): что это за правило,
@@ -16,11 +17,12 @@
 
 import hashlib
 import json
+import re
 from typing import Any
 
 LEVELS = ("contested", "stale", "unanchored", "weak", "supported", "confirmed")
 LEVEL_RU = {
-    "contested": "расхождение с требованием или открытый вопрос",
+    "contested": "расхождение со схемой или открытый вопрос",
     "stale": "устарело",
     "unanchored": "без ссылок на код",
     "weak": "без тестов",
@@ -30,15 +32,9 @@ LEVEL_RU = {
 METHOD_BY_LAYER = {"db": "pg_catalog", "code": "ast", "events": "ast", "bpm": "yaml"}
 ANCHOR_KEYS = ("symbol", "transition", "guard", "constraint", "trigger", "index", "function")
 # Служебные поля: не входят в смысл правила (сравнение с базовой веткой, отпечаток проверки).
-SERVICE_FIELDS = {
-    "hash",
-    "status",
-    "suspect_since",
-    "suspect_reason",
-    "verified_by",
-    "verified_at",
-    "verified_fingerprint",
-}
+SERVICE_FIELDS = {"hash", "status", "suspect_since", "verified_by", "verified_at", "verified_fingerprint"}
+# Поля, которые сборка индекса добавляет узлу правила; в YAML их нет.
+NODE_FIELDS = {"type", "name", "path", "trust"}
 
 
 def edge_method(layer: str, e: dict[str, Any]) -> str:
@@ -49,21 +45,17 @@ def edge_method(layer: str, e: dict[str, Any]) -> str:
 
 def anchor(entry: Any) -> str | None:
     if isinstance(entry, dict):
-        for key in (*ANCHOR_KEYS, "requirement"):
+        for key in ANCHOR_KEYS:
             if entry.get(key):
                 return entry[key]
     return None
-
-
-# Поля, которые сборка индекса добавляет узлу правила; в YAML их нет.
-NODE_FIELDS = {"type", "name", "path", "trust"}
 
 
 def semantic(rule: dict[str, Any]) -> dict[str, Any]:
     """Содержимое правила без служебных полей и хэшей."""
     skip = SERVICE_FIELDS | NODE_FIELDS
     clean = {k: v for k, v in rule.items() if k not in skip and not k.startswith("_")}
-    for key in ("implemented_by", "enforced_by_db", "satisfies"):
+    for key in ("implemented_by", "enforced_by_db"):
         if clean.get(key):
             clean[key] = [
                 {k: v for k, v in e.items() if k != "hash"} if isinstance(e, dict) else e for e in clean[key]
@@ -72,15 +64,19 @@ def semantic(rule: dict[str, Any]) -> dict[str, Any]:
 
 
 def fingerprint(rule: dict[str, Any]) -> str:
-    """Отпечаток проверенной версии: смысл правила + хэши кода, БД и требований, на которые оно ссылается."""
+    """Отпечаток проверенной версии: смысл правила + хэши кода и БД, на которые оно ссылается."""
     hashes = sorted(
         f"{anchor(e)}={e.get('hash')}"
-        for key in ("implemented_by", "enforced_by_db", "satisfies")
+        for key in ("implemented_by", "enforced_by_db")
         for e in rule.get(key) or []
         if isinstance(e, dict)
     )
     data = json.dumps({"rule": semantic(rule), "anchors": hashes}, ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(data.encode("utf-8")).hexdigest()[:12]
+
+
+def schema_sections(rule: dict[str, Any]) -> list[str]:
+    return list(dict.fromkeys(re.findall(r"§\d+", str(rule.get("schema_ref") or ""))))
 
 
 def _open_discrepancies(rid: str, discrepancies: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -90,11 +86,9 @@ def _open_discrepancies(rid: str, discrepancies: list[dict[str, Any]]) -> list[d
 def profile(
     rule: dict[str, Any], nodes: dict[str, dict[str, Any]], discrepancies: list[dict[str, Any]]
 ) -> dict[str, Any]:
-    """Профиль достоверности правила по данным графа (nodes — узлы с текущими хэшами кода, БД, требований)."""
+    """Профиль достоверности правила по данным графа (nodes — узлы с текущими хэшами кода и БД)."""
     code = [e for e in rule.get("implemented_by") or [] if isinstance(e, dict)]
     db = [e for e in rule.get("enforced_by_db") or [] if isinstance(e, dict)]
-    satisfies = [e for e in rule.get("satisfies") or [] if isinstance(e, dict)]
-    deviates = [e for e in rule.get("deviates_from") or [] if isinstance(e, dict)]
     tests = rule.get("tested_by") or []
 
     drifted, missing = [], []
@@ -105,22 +99,9 @@ def profile(
             missing.append(target)
         elif e.get("hash") and cur.get("hash") and e["hash"] != cur["hash"]:
             drifted.append(target)
-    req_changed = []
-    for e in satisfies:
-        cur = nodes.get(e["requirement"])
-        if cur is None:
-            missing.append(e["requirement"])
-        elif e.get("hash") and e["hash"] != cur.get("hash"):
-            req_changed.append(e["requirement"])
-
     status = rule.get("status", "draft")
-    reason = rule.get("suspect_reason")
-    if status == "suspect" and not reason:
-        reason = "code_changed"
-    if status == "suspect" and reason == "code_changed" and not drifted:
+    if status == "suspect" and not drifted:
         drifted = ["код"]
-    if status == "suspect" and reason == "requirement_changed" and not req_changed:
-        req_changed = [e["requirement"] for e in satisfies] or ["требование"]
 
     verification = None
     if status == "verified":
@@ -130,29 +111,34 @@ def profile(
 
     if drifted:
         freshness = "code_changed"
-    elif req_changed:
-        freshness = "requirement_changed"
     elif verification and verification["state"] == "outdated":
         freshness = "verified_outdated"
     else:
         freshness = "current"
 
+    sections = schema_sections(rule)
+    note = " ".join(str(rule.get("discrepancy") or "").split())
+    # discrepancy у правила со ссылкой на схему — расхождение со схемой; без ссылки — оговорка о коде
+    if sections and note:
+        schema = "deviates"
+    elif sections:
+        schema = "described"
+    else:
+        schema = "undescribed"
+    caveats = list(rule.get("caveats") or []) + ([note] if note and not sections else [])
+
     opened = _open_discrepancies(rule["id"], discrepancies)
-    cancelled = [
-        e["requirement"] for e in satisfies if nodes.get(e["requirement"], {}).get("status") == "cancelled"
-    ]
     ambiguity = {
         "discrepancies": [
             {"id": d["id"], "severity": d.get("severity"), "question": d.get("question")} for d in opened
         ],
-        "deviates": [{"requirement": e["requirement"], "note": e.get("note", "")} for e in deviates],
-        "caveats": list(rule.get("caveats") or []),
+        "deviation": note if schema == "deviates" else "",
+        "caveats": caveats,
         "open_questions": list(rule.get("open_questions") or []),
         "missing": [m for m in missing if m],
-        "cancelled_requirements": cancelled,
     }
 
-    if deviates or opened or ambiguity["open_questions"] or cancelled:
+    if schema == "deviates" or opened or ambiguity["open_questions"]:
         level = "contested"
     elif freshness != "current":
         level = "stale"
@@ -173,9 +159,9 @@ def profile(
         "verification": verification,
         "freshness": freshness,
         "drifted": drifted,
-        "requirement_changed": req_changed,
         "anchors": {"code": len(code), "db": len(db), "tests": len(tests)},
-        "requirements": [e["requirement"] for e in satisfies],
+        "schema": schema,
+        "schema_sections": sections,
         "ambiguity": ambiguity,
     }
 
@@ -213,34 +199,23 @@ def verdict(t: dict[str, Any]) -> str:
     """Насколько верить и что делать — одна фраза без кодов."""
     level, amb = t["level"], t["ambiguity"]
     if level == "contested":
-        if amb["deviates"]:
-            d = amb["deviates"][0]
-            ds = ", ".join(x["id"] for x in amb["discrepancies"])
+        ds = ", ".join(x["id"] for x in amb["discrepancies"])
+        if amb["deviation"]:
             return (
-                f"⚠ код расходится с требованием {d['requirement']}"
+                f"⚠ код расходится со схемой {', '.join(t['schema_sections'])}"
                 + (f" ({ds})" if ds else "")
-                + f": {_clip(d['note'], 140)} — уточни у пользователя"
+                + f": {_clip(amb['deviation'], 140)} — уточни у пользователя"
             )
         if amb["discrepancies"]:
             d = amb["discrepancies"][0]
             return (
                 f"⚠ открытый вопрос {d['id']}: {_clip(d.get('question') or '', 140)} — уточни у пользователя"
             )
-        if amb["cancelled_requirements"]:
-            return (
-                f"⚠ реализует отменённое требование {', '.join(amb['cancelled_requirements'])}"
-                " — уточни у пользователя, нужно ли поведение"
-            )
         return f"⚠ открытый вопрос: {_clip(amb['open_questions'][0], 140)} — уточни у пользователя"
     if level == "stale":
         if t["freshness"] == "code_changed":
             where = ", ".join(str(x) for x in t["drifted"][:2])
             return f"⚠ код изменился после фиксации правила ({where}) — сверь с кодом"
-        if t["freshness"] == "requirement_changed":
-            return (
-                f"⚠ бизнес-требование {', '.join(t['requirement_changed'])} изменилось после фиксации правила"
-                " — проверь реализацию"
-            )
         return "⚠ правило правили после проверки человеком — сверь с кодом"
     if level == "unanchored":
         return f"{origin_text(t)}, ссылок на код нет — не опирайся без проверки"
@@ -253,30 +228,25 @@ def verdict(t: dict[str, Any]) -> str:
 
 
 def kind_text(t: dict[str, Any]) -> str:
-    """Что это за правило относительно бизнес-требований."""
-    if t["requirements"]:
-        return "реализует требование " + ", ".join(t["requirements"])
-    if t["ambiguity"]["deviates"]:
-        return "по требованию " + ", ".join(d["requirement"] for d in t["ambiguity"]["deviates"])
-    return "поведение кода без бизнес-требования"
+    """Что это за правило относительно бизнес-схемы."""
+    if t["schema"] == "undescribed":
+        return "поведение кода, в бизнес-схеме не описано"
+    return f"описано в бизнес-схеме {', '.join(t['schema_sections'])}"
 
 
 def reason_short(t: dict[str, Any]) -> str:
     """Короткая причина риска: для компактной пометки и сводки пакета."""
     amb = t["ambiguity"]
     if t["level"] == "contested":
-        if amb["deviates"]:
-            ds = ", ".join(x["id"] for x in amb["discrepancies"])
-            return f"расходится с {amb['deviates'][0]['requirement']}" + (f" ({ds})" if ds else "")
+        ds = ", ".join(x["id"] for x in amb["discrepancies"])
+        if amb["deviation"]:
+            return f"расходится со схемой {', '.join(t['schema_sections'])}" + (f" ({ds})" if ds else "")
         if amb["discrepancies"]:
             return f"открыт вопрос {amb['discrepancies'][0]['id']}"
-        if amb["cancelled_requirements"]:
-            return "реализует отменённое требование"
         return "открыт вопрос"
     if t["level"] == "stale":
         return {
             "code_changed": "код изменился после фиксации правила",
-            "requirement_changed": "требование изменилось после фиксации правила",
             "verified_outdated": "правило меняли после проверки человеком",
         }[t["freshness"]]
     return LEVEL_RU[t["level"]]
@@ -293,8 +263,8 @@ COMPACT = {
 def describe(n: dict[str, Any], form: str = "full") -> str:
     """Пометка правила для контекста ИИ.
 
-    full — карточки и find_entry: тип правила, вердикт, оговорка;
-    compact — пакет impact: требования и вердикт в несколько слов (полный текст — в rule(id));
+    full — карточки и find_entry: место в бизнес-схеме, вердикт, оговорка;
+    compact — пакет impact: раздел схемы и вердикт в несколько слов (полный текст — в rule(id));
     short — списки: только вердикт.
     """
     t = n.get("trust")
@@ -304,15 +274,15 @@ def describe(n: dict[str, Any], form: str = "full") -> str:
         level = LEVEL_RU[t["level"]]
         return level if t["level"] in ("confirmed", "supported") else f"⚠ {level}"
     if form == "compact":
-        reqs = f"требование {', '.join(t['requirements'])}" if t["requirements"] else ""
         if t["level"] in ("contested", "stale"):
             act = "уточни у пользователя" if t["level"] == "contested" else "сверь с кодом"
             verdict_ = f"⚠ {reason_short(t)} — {act}"
         else:
             verdict_ = COMPACT[t["level"]]
-        if not t["requirements"] and not t["ambiguity"]["deviates"]:
-            reqs = "без бизнес-требования"
-        return " · ".join(x for x in (reqs, verdict_) if x)
+        if t["schema"] == "deviates":
+            return verdict_
+        where = f"схема {', '.join(t['schema_sections'])}" if t["schema"] == "described" else "нет в схеме"
+        return f"{where} · {verdict_}"
     out = f"{kind_text(t)} · {verdict(t)}"
     caveats = t["ambiguity"]["caveats"]
     if caveats and t["level"] != "contested":

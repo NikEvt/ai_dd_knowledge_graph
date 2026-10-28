@@ -3,14 +3,13 @@
 Ошибки (exit 1):
 - YAML правил некорректен: нет id/title/text, неверный формат ID или статус, повторный ID;
 - ссылка правила на несуществующий узел модели: implemented_by (символ, переход, условие),
-  enforced_by_db, tested_by, config, related; на несуществующее требование: satisfies, deviates_from;
-- требования (knowledge/requirements/*.md): неверный ID или строка метаданных, повторный ID, пустой текст;
-- verified-правило без отпечатка проверки (ставит tools/knowledge/verify_rule.py); неверный suspect_reason;
+  enforced_by_db, tested_by, config, related;
+- verified-правило без отпечатка проверки (ставит tools/knowledge/verify_rule.py);
 - аннотация ``# @rule R-…`` ссылается на несуществующее правило или символ не указан в implemented_by.
 
 Предупреждения:
 - строки implemented_by вне тела символа; неразрешённые ссылки в trigger/effects; неизвестные роли;
-- verified-правило без verified_by; расхождение D-xx ссылается на неизвестное правило или требование;
+- verified-правило без verified_by; расхождение D-xx ссылается на неизвестное правило;
 - с --base: новый или изменённый код в services/ без правила и без аннотации @rule.
 
   uv run python tools/knowledge/check_rules.py [--base origin/main]
@@ -29,12 +28,10 @@ import yaml
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from tools.knowledge import requirements as reqs_mod
 from tools.knowledge.common import (
     ROOT,
     RULE_ID,
     RULE_STATUSES,
-    SUSPECT_REASONS,
     error,
     git,
     load_discrepancies,
@@ -115,16 +112,6 @@ def main() -> int:
         errors += 1
         error(msg)
 
-    requirements: dict[str, dict[str, Any]] = {}
-    for path in reqs_mod.requirement_files():
-        found, problems = reqs_mod.parse(path)
-        for msg in problems:
-            fail(msg)
-        for req in found:
-            if req["id"] in requirements:
-                fail(f"{req['path']}:{req['line']}: повторный ID требования {req['id']}")
-            requirements[req["id"]] = req
-
     for path in rule_files():
         try:
             doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -151,16 +138,6 @@ def main() -> int:
                     fail(f"{where}: verified без отпечатка проверки — ставь через verify_rule.py")
                 if not r.get("verified_by"):
                     warn(f"{where}: verified без verified_by — неизвестно, кто проверял")
-            if r.get("suspect_reason") and r["suspect_reason"] not in SUSPECT_REASONS:
-                fail(f"{where}: suspect_reason {r['suspect_reason']!r} не из {SUSPECT_REASONS}")
-            for key in ("satisfies", "deviates_from"):
-                for e in r.get(key) or []:
-                    target = e.get("requirement") if isinstance(e, dict) else None
-                    if target not in requirements:
-                        fail(f"{where}: {key} -> неизвестное требование {target!r}")
-            for key in ("schema_ref", "discrepancy"):
-                if key in r:
-                    fail(f"{where}: поле {key} заменено на satisfies / deviates_from / caveats")
             for e in r.get("implemented_by") or []:
                 target = ref_target(e)
                 if target not in nodes:
@@ -203,9 +180,6 @@ def main() -> int:
         for x in d.get("rules") or []:
             if x not in rules:
                 warn(f"knowledge/reconciliation.yaml: {d.get('id')}: неизвестное правило {x}")
-        for x in d.get("requirements") or []:
-            if x not in requirements:
-                warn(f"knowledge/reconciliation.yaml: {d.get('id')}: неизвестное требование {x}")
 
     implemented: dict[str, set[str]] = {}
     for rid, r in rules.items():

@@ -1,5 +1,4 @@
-# Решения людей по расхождениям требований, кода и БД. Правится руками.
-# status: open — решения нет; resolved — решение принято (resolution).
+# Расхождения схемы, кода и БД. Фиксируются, код не исправляется. Правится руками.
 discrepancies:
 - id: D-01
   title: Дедупликация закрывает заявку, которая уже дошла до записи
@@ -16,11 +15,6 @@ discrepancies:
   severity: high
   question: Если у клиента уже есть оплаченная заявка на «Ожидает выдачи», должна ли более поздняя заявка
     в долг закрыться сама как дубль, а не закрывать оплаченную?
-  requirements:
-  - REQ-DEDUP-01
-  - REQ-DEDUP-02
-  - REQ-KIND-02
-  status: open
 - id: D-02
   title: Ссылка на запись нигде не отправляется клиенту
   schema: '§13: ссылка формируется и уходит на «Ожидает выдачи» и когда книги у клиента; §1: клиент работает
@@ -29,19 +23,14 @@ discrepancies:
     создают ссылку; notifications подписан только на booking.created и booking.cancelled (notifications/consumers.py:9,20)
   db: emails_type_check, templates_type_check — только booking и cancel
   rules:
+  - R-SCHEMA-NOTIF-01
+  - R-SCHEMA-NOTIF-02
   - R-SCHED-LINK-01
   - R-NOTIF-TYPES-01
   - R-NOTIF-RENDER-02
   severity: high
   question: Как клиент получает токен ссылки — нужен ли тип письма «ссылка на запись» (за книгами и на
     сдачу), в том числе после смены площадки?
-  requirements:
-  - REQ-BOOK-01
-  - REQ-MAIL-02
-  - REQ-MAIL-03
-  - REQ-MAIL-04
-  - REQ-VENUE-05
-  status: open
 - id: D-03
   title: Роли и закрепление сотрудников в большинстве действий не проверяются
   schema: '§2, §3, §17: проверяющего назначает только руководитель проверяющих; привязку, отвязку и возврат
@@ -59,19 +48,10 @@ discrepancies:
   - R-BILL-UNLINK-01
   - R-BILL-CANCEL-02
   - R-CHAT-AUTH-01
+  - R-SCHEMA-ROLE-01
   severity: high
   question: Где должна проверяться роль — в сервисах (тогда нужен справочник сотрудников) или во внешнем
     шлюзе аутентификации, которому сервисы доверяют?
-  requirements:
-  - REQ-CHAT-03
-  - REQ-CLIENT-02
-  - REQ-PAY-01
-  - REQ-PAY-02
-  - REQ-PAY-03
-  - REQ-ROLE-01
-  - REQ-ROLE-02
-  - REQ-ROLE-05
-  status: open
 - id: D-04
   title: Ограничение «за два дня» и признак оператора обходятся параметром запроса
   schema: '§2 Клиент, §13: менее чем за два дня переносит или отменяет только оператор; оператор записывает
@@ -86,10 +66,6 @@ discrepancies:
   severity: high
   question: Нужно ли закрыть публичным эндпоинтам значения by и booked_by, отличные от client и representative,
     и пускать оператора только через book_by_operator с проверкой закрепления?
-  requirements:
-  - REQ-BOOK-02
-  - REQ-BOOK-04
-  status: open
 - id: D-05
   title: После проверки заявка с частичной оплатой меняет площадку, а счёт остаётся старым
   schema: '§7: до оплаты счёт аннулируется и выставляется по прайсу и реквизитам новой площадки; после
@@ -104,11 +80,6 @@ discrepancies:
   severity: high
   question: Запрещать ли смену площадки при любой привязанной оплате (paid_amount > 0) до её возврата
     или отвязки?
-  requirements:
-  - REQ-INV-07
-  - REQ-ROLE-08
-  - REQ-VENUE-03
-  status: open
 - id: D-06
   title: Возвращённая на проверку из-за обновления клиента заявка сразу уходит в архив по старому сроку
   schema: '§6: другие заявки клиента, не дошедшие до записи, снова уходят на проверку; §5: архив — если
@@ -123,10 +94,6 @@ discrepancies:
   severity: high
   question: С какого момента считать месяц для повторной проверки после обновления данных клиента — с
     первой проверки или с возврата на проверку?
-  requirements:
-  - REQ-ARCH-01
-  - REQ-CLIENT-04
-  status: open
 - id: D-07
   title: Без настроенной ставки штраф не создаётся, и заявку можно закрыть
   schema: '§14: штраф начисляется за утерю, порчу и просрочку; пока штрафы не погашены, заявку закрыть
@@ -137,14 +104,10 @@ discrepancies:
   rules:
   - R-BILL-FINE-02
   - R-BILL-FINE-SETTLED-01
+  - R-SCHEMA-ADMIN-01
   severity: high
   question: Что делать при отсутствии ставки — блокировать выдачу книг, пока ставки не настроены, или
     создавать штраф без суммы, который ждёт настройки? Как гасить штраф с нулевой ставкой?
-  requirements:
-  - REQ-ADMIN-03
-  - REQ-FINE-02
-  - REQ-PROC-09
-  status: open
 - id: D-08
   title: Ставки штрафов, шаблоны и прочие настройки админки не связаны с ролью администратора
   schema: '§2 Администратор, §17: надбавки, работу в долг, штрафы, шаблоны, реквизиты и максимум мест
@@ -159,18 +122,10 @@ discrepancies:
   - R-APP-ADMIN-03
   - R-APP-ADMIN-04
   - R-NOTIF-TEMPLATE-07
+  - R-SCHEMA-ADMIN-01
   severity: medium
   question: Будет ли в проекте админка с проверкой роли admin, или настройки сознательно ведутся вне системы
     (миграциями или скриптами)?
-  requirements:
-  - REQ-ADMIN-01
-  - REQ-ADMIN-02
-  - REQ-ADMIN-03
-  - REQ-INV-03
-  - REQ-MAIL-05
-  - REQ-SLOT-03
-  - REQ-SPHERE-04
-  status: open
 - id: D-09
   title: Запрет смены площадки для social и debt после ссылки есть только в триггере; текст R-SCHED-VENUE-CHANGE-01
     неточен
@@ -186,10 +141,6 @@ discrepancies:
   severity: medium
   question: Перенести ли запрет в сервис (с доменным сообщением) и поправить формулировку расхождения
     в R-SCHED-VENUE-CHANGE-01?
-  requirements:
-  - REQ-VENUE-03
-  - REQ-VENUE-05
-  status: open
 - id: D-10
   title: Платную заявку без выставленного счёта автоархив не берёт
   schema: '§9 Платная: в архив, если за месяц с начала проверки не получены данные для счёта; §5: «месяц»'
@@ -201,9 +152,6 @@ discrepancies:
   severity: medium
   question: Должна ли заявка, которая месяц висит в «Ожидает счёта», уходить в архив, и от какой даты
     считать этот месяц? Месяц — это календарный месяц или 30 дней?
-  requirements:
-  - REQ-ARCH-01
-  status: open
 - id: D-11
   title: Ручной архив оператором возможен при частичной оплате; отметка «клиент передумал» не ставится
   schema: '§5: оператор отправляет в архив неоплаченную заявку, если клиент передумал; оплаченную — через
@@ -219,11 +167,6 @@ discrepancies:
   severity: medium
   question: Запрещать ли оператору архив при paid_amount > 0 и фиксировать ли outcome=client_declined
     при ручном архиве вместо произвольного значения?
-  requirements:
-  - REQ-ARCH-02
-  - REQ-ARCH-04
-  - REQ-ARCH-06
-  status: open
 - id: D-12
   title: Возврат платежа «для смены площадки» всегда уводит заявку в архив
   schema: '§2 Главный бухгалтер, §7: возврат оформляется при смене площадки после оплаты или если клиент
@@ -238,10 +181,6 @@ discrepancies:
   - R-APP-UNARCHIVE-02
   severity: medium
   question: Нужен ли отдельный сценарий «возврат ради смены площадки» без архива и закрытия попытки?
-  requirements:
-  - REQ-ARCH-05
-  - REQ-ARCH-09
-  status: open
 - id: D-13
   title: Отвязка или возврат платежа после полной оплаты не откатывают выдачу и штраф
   schema: '§9, §11: выдачу по платной заявке открывает только полная оплата; штраф гасится оплатой'
@@ -257,10 +196,6 @@ discrepancies:
   severity: medium
   question: Должна ли отвязка или возврат оплаты возвращать заявку в «Ожидает оплаты», а штраф — в open?
     Можно ли выставлять второй счёт на тот же штраф?
-  requirements:
-  - REQ-FINE-05
-  - REQ-PAY-03
-  status: open
 - id: D-14
   title: Возврат из архива аннулирует счёт до проверки и по цене без надбавки
   schema: '§5: если до архива был неоплаченный счёт, новый выставляется после проверки, только если сумма
@@ -274,9 +209,6 @@ discrepancies:
   severity: medium
   question: Сравнивать полную сумму счёта (с надбавкой) и аннулировать после проверки, а не при возврате?
     Что делать с частично оплаченным счётом?
-  requirements:
-  - REQ-ARCH-10
-  status: open
 - id: D-15
   title: Частично оплаченный счёт заявки-дубля остаётся действующим
   schema: '§6: выставленный по второй заявке счёт аннулируется'
@@ -288,9 +220,6 @@ discrepancies:
   - R-APP-DEDUP-02
   severity: medium
   question: Должен ли главный бухгалтер получать задачу на возврат частичной оплаты по дублю?
-  requirements:
-  - REQ-DEDUP-02
-  status: open
 - id: D-16
   title: Срок просрочки задан литералом и отсчитывается от issued_at, а не от due_at
   schema: '§14: срок пользования — месяц с даты выдачи; срыв система отмечает автоматически'
@@ -303,11 +232,6 @@ discrepancies:
   - R-CHAT-EVENTS-08
   severity: medium
   question: Считать ли просрочку по loans.due_at и начислять ли штраф при позднем возврате в return_book?
-  requirements:
-  - REQ-CHAT-04
-  - REQ-FINE-04
-  - REQ-RETURN-01
-  status: open
 - id: D-17
   title: Фоновые задачи не запускаются из репозитория
   schema: '§5, §14: автоархив и отметка срыва срока выполняются автоматически'
@@ -321,12 +245,6 @@ discrepancies:
   - R-SCHED-OVERDUE-01
   severity: medium
   question: Где и с какой периодичностью запускаются задачи (в docstring — раз в час), и кто за этим следит?
-  requirements:
-  - REQ-ARCH-01
-  - REQ-ARCH-02
-  - REQ-ARCH-10
-  - REQ-FINE-04
-  status: open
 - id: D-18
   title: Окно можно переполнить параллельными записями
   schema: '§12: максимум мест на окно задаёт администратор; §2 Клиент: нельзя записаться на занятое время'
@@ -338,10 +256,6 @@ discrepancies:
   - R-SCHED-SLOT-03
   severity: medium
   question: Нужна ли блокировка окна (SELECT … FOR UPDATE) или триггер на bookings?
-  requirements:
-  - REQ-BOOK-03
-  - REQ-SLOT-03
-  status: open
 - id: D-19
   title: После закрытия заявки ссылка на сдачу и запись на сдачу остаются активными
   schema: '§13: по закрытой заявке ссылка не работает'
@@ -353,10 +267,6 @@ discrepancies:
   - R-SCHED-RETURN-01
   severity: medium
   question: Гасить ли ссылку и записи на сдачу при закрытии заявки (или при возврате последней книги)?
-  requirements:
-  - REQ-BOOK-07
-  - REQ-RETURN-02
-  status: open
 - id: D-20
   title: Бухгалтер может взять заявку любого этапа и вида, кроме debt
   schema: '§2 Бухгалтер: берёт в работу платные заявки, прошедшие проверку; §3: у социальной заявки бухгалтера
@@ -368,9 +278,6 @@ discrepancies:
   - R-BILL-ASSIGN-02
   severity: low
   question: Ограничить ли закрепление этапами от awaiting_invoice (для paid) и наличием штрафа (для social)?
-  requirements:
-  - REQ-ROLE-07
-  status: open
 - id: D-21
   title: Социальные заявки между собой не дедуплицируются
   schema: '§6: две заявки клиента по одной сфере — остаётся одна; исключение только между социальными
@@ -382,9 +289,6 @@ discrepancies:
   - R-APP-DEDUP-01
   severity: medium
   question: Должна ли вторая социальная заявка клиента по той же сфере закрываться как дубль?
-  requirements:
-  - REQ-DEDUP-01
-  status: open
 - id: D-22
   title: Нет истории действий «кто и когда»
   schema: '§16: все значимые действия сохраняются в истории заявки, удалить её нельзя'
@@ -392,15 +296,12 @@ discrepancies:
     пишет stage_changed без исполнителя
   db: неизменяем только chat.messages (trg_chat_messages_immutable)
   rules:
+  - R-SCHEMA-HIST-01
   - R-CHAT-EVENTS-02
   - R-CHAT-EVENTS-07
   severity: medium
   question: Считать ли ленту чата историей заявки (тогда в событиях нужен исполнитель) или нужен отдельный
     журнал аудита?
-  requirements:
-  - REQ-CHAT-04
-  - REQ-ROLE-14
-  status: open
 - id: D-23
   title: Заявку и данные клиента видит кто угодно; клиент заводится повторно
   schema: '§16: проверяющий оператор видит только свою площадку; §2 Клиент: заявку не видит; §6: клиент
@@ -409,14 +310,11 @@ discrepancies:
     без проверки дублей и роли
   db: у applications.clients нет уникальных ключей
   rules:
+  - R-SCHEMA-ACCESS-01
   - R-SCHEMA-CLIENT-01
   severity: medium
   question: По какому признаку считать клиента тем же (паспорт, ФИО и дата рождения), и нужен ли уникальный
     индекс?
-  requirements:
-  - REQ-CLIENT-01
-  - REQ-ROLE-10
-  status: open
 - id: D-24
   title: Письма об отмене уходят по архивной заявке и не содержат новой ссылки
   schema: '§5: пока заявка в архиве, письма не отправляются; §7: при смене площадки — письмо об отмене
@@ -430,10 +328,6 @@ discrepancies:
   severity: low
   question: Отправлять ли письмо об отмене в момент архивации и добавлять ли в письмо после смены площадки
     новую ссылку?
-  requirements:
-  - REQ-ARCH-07
-  - REQ-VENUE-05
-  status: open
 - id: D-25
   title: Книги и заявка — упрощения в смене книг и освобождении книг
   schema: '§4: смена книг после счёта до оплаты — аннулировать и выставить счёт заново; §8: книги освобождаются
@@ -447,13 +341,6 @@ discrepancies:
   severity: low
   question: Достаточно ли менять книги после проверки только через архив, и подтверждаете ли, что после
     выдачи книги учитываются в scheduling.loans, а не в holds?
-  requirements:
-  - REQ-BOOK-01
-  - REQ-INV-07
-  - REQ-PROC-01
-  - REQ-PROC-07
-  - REQ-SPHERE-03
-  status: open
 - id: D-26
   title: Чат неполон относительно схемы
   schema: '§15: в чат попадают все события (назначения, платежи, перенос, неявка); к сообщениям прикрепляют
@@ -468,11 +355,6 @@ discrepancies:
   - R-SCHED-FINE-01
   severity: low
   question: Какие события обязательны в чате для первой версии и нужны ли вложения?
-  requirements:
-  - REQ-CHAT-04
-  - REQ-CHAT-05
-  - REQ-FINE-03
-  status: open
 - id: D-27
   title: Ограничение БД без правила — уникальное имя сферы
   schema: '§1: сфера — тематический раздел; об уникальности названия не сказано'
@@ -482,21 +364,16 @@ discrepancies:
   - R-SCHEMA-SPHERE-01
   severity: low
   question: Подтверждаете ли, что название сферы глобально уникально (а не в пределах площадки)?
-  requirements: []
-  status: open
 - id: D-28
   title: Удаление заявки не запрещено в БД
   schema: '§4: удалить заявку нельзя'
   code: операции удаления нет
   db: application_books и attempts — ON DELETE CASCADE; триггера, запрещающего DELETE, нет
   rules:
+  - R-SCHEMA-APP-02
   - R-SCHEMA-APP-01
   severity: low
   question: Добавить ли триггер, запрещающий DELETE заявок и UPDATE operator_id?
-  requirements:
-  - REQ-PROC-06
-  - REQ-ROLE-03
-  status: open
 - id: D-29
   title: Снижение максимума площадки не трогает уже созданные окна
   schema: '§12: в окне не больше мест, чем максимум площадки'
@@ -507,6 +384,3 @@ discrepancies:
   - R-SCHED-SLOT-03
   severity: low
   question: Уменьшать ли capacity существующих будущих окон, если администратор снизил максимум?
-  requirements:
-  - REQ-SLOT-03
-  status: open

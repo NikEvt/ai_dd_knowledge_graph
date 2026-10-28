@@ -2,13 +2,13 @@
 
   uv run python mcp/knowledge_server.py
 
-Инструменты: find_entry, impact, rule, requirement, entity, who_can. Индекс knowledge/index.sqlite
-пересобирается автоматически, если модель, правила, требования или сверка новее индекса.
+Инструменты: find_entry, impact, rule, entity, who_can. Индекс knowledge/index.sqlite пересобирается
+автоматически, если модель, правила или сверка новее индекса.
 
 Если задана переменная окружения EVAL_MCP_LOG, каждый вызов инструмента дописывается в этот файл
 строкой JSON: {"ts", "run_id", "tool", "args", "response_tokens", "nodes_returned", "ms"}.
 """
-    
+
 import datetime as dt
 import json
 import os
@@ -28,13 +28,12 @@ from tools.knowledge import graph
 from tools.knowledge.common import INDEX, estimate_tokens
 
 INSTRUCTIONS = """\
-Модель знаний ERP библиотеки: бизнес-требования (REQ-…, как должно быть, правят люди), правила (R-…, как
-устроено сейчас, извлечены из кода), код, БД (таблицы, CHECK, триггеры, функции), события outbox, процесс
-заявки (BPM), настройки, фоновые задачи, тесты. У каждого правила — пометка словами: какое требование оно
-реализует, насколько ему верить и что делать (опереться, сверить с кодом, уточнить у пользователя).
-Порядок работы: find_entry(текст задачи) -> impact(ID найденного узла) -> rule/requirement/entity по
-необходимости. impact возвращает context pack: связи через события, триггеры, условия процесса и настройки,
-которых не видно по импортам. Код читай точечно по указанным символам."""
+Модель знаний ERP библиотеки: правила (R-…), код, БД (таблицы, CHECK, триггеры, функции), события outbox,
+процесс заявки (BPM), настройки, фоновые задачи, тесты. У каждого правила — пометка словами: где оно в
+бизнес-схеме, насколько ему верить и что делать (опереться, сверить с кодом, уточнить у пользователя).
+Порядок работы: find_entry(текст задачи) -> impact(ID найденного узла) -> rule/entity по необходимости.
+impact возвращает context pack: связи через события, триггеры, условия процесса и настройки, которых
+не видно по импортам. Код читай точечно по указанным символам."""
 
 server = MCPServer("knowledge", instructions=INSTRUCTIONS)
 _lock = threading.Lock()
@@ -79,8 +78,8 @@ def _call(tool: str, args: dict[str, Any], fn: Callable[[graph.Graph], graph.Ans
 
 @server.tool(structured_output=False)
 def find_entry(task_text: str, limit: int = 8) -> str:
-    """Превращает формулировку задачи в узлы графа знаний (бизнес-требования, правила, настройки, код,
-    таблицы, события, переходы процесса). Вызывай первым; ID из ответа передай в impact."""
+    """Превращает формулировку задачи в узлы графа знаний (правила, настройки, код, таблицы, события,
+    переходы процесса). Вызывай первым; ID из ответа передай в impact."""
     return _call(
         "find_entry",
         {"task_text": task_text, "limit": limit},
@@ -93,25 +92,17 @@ def impact(node: str, budget_tokens: int = 4000, max_depth: int = 4) -> str:
     """Context pack от узла: затронутые правила, переходы и условия процесса, события и их подписчики
     в других сервисах, ограничения и триггеры БД, точки входа в код, настройки, эффекты (письма, чат),
     тесты. Обход по приоритету типов связей, ответ ограничен budget_tokens; max_depth — верхний предел.
-    node — ID из find_entry (требование REQ-…, правило R-…, path::symbol, schema.table, имя триггера,
-    топик, from->to)."""
+    node — ID из find_entry (правило R-…, path::symbol, schema.table, имя триггера, топик, from->to)."""
     args = {"node": node, "budget_tokens": budget_tokens, "max_depth": max_depth}
     return _call("impact", args, lambda g: graph.impact(g, node, budget_tokens, max_depth))
 
 
 @server.tool(structured_output=False)
 def rule(id: str) -> str:  # noqa: A002 - имя параметра — часть контракта инструмента
-    """Полная карточка правила по ID (R-…): почему (бизнес-требования и расхождения с ними), как (текст),
+    """Полная карточка правила по ID (R-…): почему (раздел бизнес-схемы и расхождение с ней), как (текст),
     достоверность (происхождение, проверка человеком, актуальность, опоры, открытые вопросы, оговорки),
     где (символы и строки, ограничения БД, настройки, тесты, связанные правила)."""
     return _call("rule", {"id": id}, lambda g: graph.rule_card(g, id))
-
-
-@server.tool(structured_output=False)
-def requirement(id: str) -> str:  # noqa: A002 - имя параметра — часть контракта инструмента
-    """Карточка бизнес-требования (REQ-…): текст, статус и владелец, правила, которые его реализуют или
-    расходятся с ним, открытые расхождения D-xx. Если правил нет — требование в коде не реализовано."""
-    return _call("requirement", {"id": id}, lambda g: graph.requirement_card(g, id))
 
 
 @server.tool(structured_output=False)

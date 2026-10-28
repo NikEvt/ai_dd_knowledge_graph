@@ -28,9 +28,7 @@ rules:
   tested_by:
   - tests/test_kinds.py::test_debt_kind_comes_from_representative
   - tests/test_kinds.py::test_social_application_skips_invoice
-  satisfies:
-  - requirement: REQ-KIND-01
-    hash: 78d949df9291
+  schema_ref: §9 Виды заявок
   status: draft
 - id: R-APP-CREATE-02
   title: Сфера заявки должна быть активна на площадке
@@ -57,13 +55,7 @@ rules:
     hash: 37162b401c18
   tested_by:
   - tests/test_venue_change.py::test_new_venue_must_have_sphere
-  satisfies:
-  - requirement: REQ-SPHERE-01
-    hash: 6e42e75b81fa
-  - requirement: REQ-VENUE-04
-    hash: 70a5508c09d4
-  - requirement: REQ-SPHERE-04
-    hash: 8d815af2b86c
+  schema_ref: §8 Сферы и книги
   status: draft
 - id: R-APP-CREATE-03
   title: В заявке есть книги, и все они из сферы заявки и прайса площадки
@@ -87,9 +79,7 @@ rules:
   enforced_by_db:
   - constraint: prices_price_check
     hash: 3e5c255b548b
-  satisfies:
-  - requirement: REQ-SPHERE-02
-    hash: b0a3da9cfdb6
+  schema_ref: §8 Сферы и книги
   status: draft
 - id: R-APP-CREATE-04
   title: При создании заявки закрепляется проверяющий оператор площадки и открывается первая попытка
@@ -120,11 +110,7 @@ rules:
     hash: 115a188cf4f9
   tested_by:
   - tests/test_paid_flow.py::test_paid_application_full_path
-  satisfies:
-  - requirement: REQ-ROLE-08
-    hash: 6df9b9765365
-  - requirement: REQ-ARCH-11
-    hash: 6bbf175bb2d2
+  schema_ref: §3 Кто закреплён за заявкой
   status: draft
 - id: R-APP-ACCESS-01
   title: Оператор работает только со своими заявками
@@ -159,9 +145,7 @@ rules:
     hash: 976b593881f0
   tested_by:
   - tests/test_review.py::test_operator_works_only_with_own_applications
-  satisfies:
-  - requirement: REQ-ROLE-04
-    hash: 6ba1a1adbdce
+  schema_ref: §2 Оператор
   status: draft
 - id: R-APP-CORE-01
   title: Сферу и представителя заявки сменить нельзя
@@ -179,12 +163,10 @@ rules:
     hash: d4952c57c5df
   - constraint: forbid_core_change
     hash: f1c2bcdb1048
-  satisfies:
-  - requirement: REQ-PROC-04
-    hash: dedf488450c9
+  schema_ref: §4 Порядок прохождения заявки
   status: verified
   verified_at: '2026-10-23'
-  verified_fingerprint: 86a7cfa70cf3
+  verified_fingerprint: 1c95c89a5a54
 - id: R-APP-BOOKS-01
   title: Книги меняют только в черновике или на доработке
   text: >
@@ -205,15 +187,11 @@ rules:
   - symbol: services/applications/service.py::change_books
     lines: 239-242
     hash: cc5f2da3f7bc
-  satisfies:
-  - requirement: REQ-PROC-07
-    hash: 99863a5e95eb
-  deviates_from:
-  - requirement: REQ-INV-07
-    note: >
-      Схема (§4): если после выставления счёта до оплаты меняются книги, счёт аннулируется и выставляется
-      заново. Код: после проверки книги меняются только через архив и возврат из него (R-APP-UNARCHIVE-02);
-      других путей смены книг нет.
+  schema_ref: §2 Оператор
+  discrepancy: >
+    Схема (§4): если после выставления счёта до оплаты меняются книги, счёт аннулируется и выставляется
+    заново. Код: после проверки книги меняются только через архив и возврат из него (R-APP-UNARCHIVE-02);
+    других путей смены книг нет.
   status: draft
 - id: R-APP-REVIEW-01
   title: Отправка на проверку фиксирует начало проверки один раз
@@ -245,9 +223,7 @@ rules:
   tested_by:
   - tests/test_review.py::test_incomplete_client_goes_to_rework
   - tests/test_archive.py::test_stuck_review_goes_to_archive_after_month
-  satisfies:
-  - requirement: REQ-ARCH-01
-    hash: e9be12f01b67
+  schema_ref: §5 Архив и попытки
   status: draft
 - id: R-APP-REVIEW-02
   title: Проверяющего назначают только до прохождения проверки
@@ -271,11 +247,10 @@ rules:
     hash: f36f8475dc43
   tested_by:
   - tests/test_review.py::test_only_assigned_reviewer_approves
-  deviates_from:
-  - requirement: REQ-ROLE-05
-    note: >
-      Схема: назначает и переназначает только руководитель проверяющих. Код: роль вызывающего не проверяется,
-      назначить может любой вызывающий.
+  schema_ref: §3 Кто закреплён за заявкой
+  discrepancy: >
+    Схема: назначает и переназначает только руководитель проверяющих. Код: роль вызывающего не проверяется,
+    назначить может любой вызывающий.
   status: draft
 - id: R-APP-REVIEW-03
   title: Подтверждает или возвращает заявку только назначенный проверяющий
@@ -307,11 +282,7 @@ rules:
   - tests/test_review.py::test_approve_requires_assigned_reviewer
   - tests/test_review.py::test_only_assigned_reviewer_approves
   - tests/test_review.py::test_incomplete_client_goes_to_rework
-  satisfies:
-  - requirement: REQ-ROLE-06
-    hash: e9280f2a21d8
-  - requirement: REQ-PROC-03
-    hash: 38f934ed3773
+  schema_ref: §2 Проверяющий
   status: draft
 - id: R-APP-REVIEW-04
   title: Заявку нельзя подтвердить без ФИО, паспорта и даты рождения клиента
@@ -338,9 +309,7 @@ rules:
   - services/applications/review.py::REQUIRED_CLIENT_FIELDS
   tested_by:
   - tests/test_review.py::test_incomplete_client_goes_to_rework
-  satisfies:
-  - requirement: REQ-CLIENT-03
-    hash: 1c499946b7d8
+  schema_ref: §6 Клиент и проверка данных
   status: draft
 - id: R-APP-REVIEW-05
   title: Этап после проверки зависит от вида заявки и наличия действующего счёта
@@ -377,12 +346,10 @@ rules:
   - tests/test_paid_flow.py::test_paid_application_full_path
   - tests/test_kinds.py::test_debt_application_skips_invoice
   - tests/test_kinds.py::test_social_application_skips_invoice
-  satisfies:
-  - requirement: REQ-PROC-01
-    hash: 4b84ad405815
+  schema_ref: §4 Порядок прохождения заявки
   status: verified
   verified_at: '2026-10-23'
-  verified_fingerprint: 826da9f4dcc9
+  verified_fingerprint: f49f13b97efc
 - id: R-APP-BOOKING-01
   title: Готовность к записи фиксируется и запускает выдачу ссылки на запись
   text: >
@@ -413,11 +380,7 @@ rules:
   tested_by:
   - tests/test_kinds.py::test_debt_application_skips_invoice
   - tests/test_paid_flow.py::test_paid_application_full_path
-  satisfies:
-  - requirement: REQ-PROC-08
-    hash: cfc9688cc2cd
-  - requirement: REQ-BOOK-01
-    hash: 036fc6e3e9dd
+  schema_ref: §4 Порядок прохождения заявки
   status: draft
 - id: R-APP-CLIENT-01
   title: Данные клиента обновляет проверяющий заявки-источника
@@ -443,11 +406,10 @@ rules:
   - services/applications/service.py::CLIENT_EDITABLE_FIELDS
   tested_by:
   - tests/test_review.py::test_incomplete_client_goes_to_rework
-  deviates_from:
-  - requirement: REQ-CLIENT-02
-    note: >
-      Схема: данные клиента обновляет только проверяющий. Код: при вызове без source_application_id роль
-      и закрепление не проверяются — обновить данные может кто угодно.
+  schema_ref: §6 Клиент и проверка данных
+  discrepancy: >
+    Схема: данные клиента обновляет только проверяющий. Код: при вызове без source_application_id роль
+    и закрепление не проверяются — обновить данные может кто угодно.
   status: draft
 - id: R-APP-CLIENT-02
   title: Изменение ФИО, паспорта или даты рождения клиента публикует client.updated (слушатель ORM)
@@ -473,9 +435,7 @@ rules:
     hash: ae1acbff72cf
   config:
   - services/applications/listeners.py::TRACKED_FIELDS
-  satisfies:
-  - requirement: REQ-CLIENT-04
-    hash: 5e0238e14c61
+  schema_ref: §6 Клиент и проверка данных
   status: draft
 - id: R-APP-CLIENT-03
   title: Обновление клиента возвращает его заявки из ожидания счёта или оплаты на проверку
@@ -503,11 +463,8 @@ rules:
     hash: bb5857d29271
   - transition: awaiting_payment->on_review
     hash: bb5857d29271
-  satisfies:
-  - requirement: REQ-CLIENT-04
-    hash: 5e0238e14c61
-  caveats:
-  - >
+  schema_ref: §6 Клиент и проверка данных
+  discrepancy: >
     Схема: перепроверка не должна приводить к потере заявки. Код: review_started_at остаётся от первой
     проверки, поэтому возвращённая на проверку заявка, у которой проверка началась больше REVIEW_ARCHIVE_DAYS
     назад, при ближайшем запуске archive_stale уходит в архив с outcome=no_data.
@@ -535,9 +492,7 @@ rules:
     hash: eed6b5e042e5
   tested_by:
   - tests/test_paid_flow.py::test_paid_application_full_path
-  satisfies:
-  - requirement: REQ-PROC-01
-    hash: 4b84ad405815
+  schema_ref: §4 Порядок прохождения заявки
   status: draft
 - id: R-APP-PAY-02
   title: Аннулирование счёта за книги возвращает заявку в ожидание счёта
@@ -563,9 +518,7 @@ rules:
     hash: 91fd7d7e8505
   tested_by:
   - tests/test_venue_change.py::test_venue_change_before_payment_reissues_invoice
-  satisfies:
-  - requirement: REQ-PROC-01
-    hash: 4b84ad405815
+  schema_ref: §11 Счета и платежи
   status: draft
 - id: R-APP-PAY-03
   title: Только полная оплата счёта за книги открывает выдачу
@@ -596,9 +549,7 @@ rules:
   tested_by:
   - tests/test_paid_flow.py::test_partial_payment_does_not_open_issue
   - tests/test_paid_flow.py::test_paid_application_full_path
-  satisfies:
-  - requirement: REQ-KIND-02
-    hash: 00b143dfd19c
+  schema_ref: §9 Виды заявок — Платная
   status: draft
 - id: R-APP-PAY-04
   title: Возврат платежа по оплаченной заявке отправляет её в архив с отметкой «возврат»
@@ -626,12 +577,10 @@ rules:
   enforced_by_db:
   - constraint: attempts_outcome_check
     hash: 668dded20200
-  satisfies:
-  - requirement: REQ-ARCH-05
-    hash: a26b5fbff2bc
+  schema_ref: §5 Архив и попытки
   status: verified
   verified_at: '2026-10-23'
-  verified_fingerprint: 2bbcc5c17f3e
+  verified_fingerprint: a940bacc4274
 - id: R-APP-ISSUE-01
   title: Выдача книг переводит заявку в «Книги у клиента»
   text: >
@@ -656,9 +605,7 @@ rules:
   tested_by:
   - tests/test_kinds.py::test_social_application_skips_invoice
   - tests/test_paid_flow.py::test_paid_application_full_path
-  satisfies:
-  - requirement: REQ-PROC-01
-    hash: 4b84ad405815
+  schema_ref: §4 Порядок прохождения заявки
   status: draft
 - id: R-APP-CLOSE-01
   title: Закрывает заявку проверяющий оператор её площадки после возврата книг и погашения штрафов
@@ -688,9 +635,7 @@ rules:
   tested_by:
   - tests/test_paid_flow.py::test_cannot_close_with_books_out
   - tests/test_paid_flow.py::test_paid_application_full_path
-  satisfies:
-  - requirement: REQ-PROC-09
-    hash: e7d66e1cb076
+  schema_ref: §2 Проверяющий оператор
   status: draft
 - id: R-APP-VENUE-CHANGE-01
   title: Смену площадки выполняет оператор заявки; закрытую заявку не меняют
@@ -720,11 +665,7 @@ rules:
   - services/applications/service.py::TERMINAL_STAGES
   tested_by:
   - tests/test_venue_change.py::test_new_venue_must_have_sphere
-  satisfies:
-  - requirement: REQ-VENUE-03
-    hash: 110e2c6ae0b4
-  - requirement: REQ-PROC-05
-    hash: 2b1b90a72726
+  schema_ref: §7 Площадки и цены
   status: draft
 - id: R-APP-VENUE-CHANGE-02
   title: Платной заявке после оплаты площадку не меняют; после выдачи книг — никому
@@ -756,11 +697,8 @@ rules:
   - services/applications/service.py::PAID_VENUE_LOCKED_STAGES
   tested_by:
   - tests/test_venue_change.py::test_paid_venue_change_after_payment_forbidden
-  satisfies:
-  - requirement: REQ-VENUE-03
-    hash: 110e2c6ae0b4
-  caveats:
-  - >
+  schema_ref: §7 Площадки и цены
+  discrepancy: >
     Схема: social/debt меняют площадку только до формирования ссылки на запись. Код сервиса этого не проверяет
     — запрет срабатывает только в триггере БД на flush, без доменного сообщения.
   status: draft
@@ -804,15 +742,11 @@ rules:
   tested_by:
   - tests/test_venue_change.py::test_venue_change_reassigns_site_checker
   - tests/test_venue_change.py::test_venue_change_before_payment_reissues_invoice
-  satisfies:
-  - requirement: REQ-ROLE-08
-    hash: 6df9b9765365
-  deviates_from:
-  - requirement: REQ-INV-07
-    note: >
-      Схема: до оплаты счёт аннулируется и выставляется заново по прайсу и реквизитам новой площадки.
-      Код: при частичной оплате (paid_amount > 0) счёт не аннулируется, а заявка остаётся в awaiting_payment
-      со счётом на реквизиты и цены старой площадки.
+  schema_ref: §7 Площадки и цены
+  discrepancy: >
+    Схема: до оплаты счёт аннулируется и выставляется заново по прайсу и реквизитам новой площадки. Код:
+    при частичной оплате (paid_amount > 0) счёт не аннулируется, а заявка остаётся в awaiting_payment
+    со счётом на реквизиты и цены старой площадки.
   status: draft
 - id: R-APP-ARCHIVE-01
   title: Заявка, застрявшая на проверке или доработке дольше REVIEW_ARCHIVE_DAYS, уходит в архив
@@ -849,12 +783,11 @@ rules:
   - libs/settings.py::REVIEW_ARCHIVE_DAYS
   tested_by:
   - tests/test_archive.py::test_stuck_review_goes_to_archive_after_month
-  deviates_from:
-  - requirement: REQ-ARCH-01
-    note: >
-      Схема: месяц. Код: фиксированные 30 дней из настройки. Схема §9 (платная): уходит в архив, если
-      за месяц не получены данные для счёта — заявки на awaiting_invoice (без выставленного счёта) задача
-      не архивирует никогда.
+  schema_ref: §5 Архив и попытки
+  discrepancy: >
+    Схема: месяц. Код: фиксированные 30 дней из настройки. Схема §9 (платная): уходит в архив, если за
+    месяц не получены данные для счёта — заявки на awaiting_invoice (без выставленного счёта) задача не
+    архивирует никогда.
   status: draft
 - id: R-APP-ARCHIVE-02
   title: Платная заявка без полной оплаты дольше PAYMENT_ARCHIVE_DAYS уходит в архив
@@ -887,11 +820,8 @@ rules:
   - libs/settings.py::PAYMENT_ARCHIVE_DAYS
   tested_by:
   - tests/test_archive.py::test_unpaid_invoice_goes_to_archive_after_month
-  satisfies:
-  - requirement: REQ-ARCH-02
-    hash: 86450a78fb4e
-  caveats:
-  - >
+  schema_ref: §5 Архив и попытки
+  discrepancy: >
     Код архивирует и частично оплаченные заявки (paid_amount < amount) как unpaid; возврат поступившей
     части платежа при этом не инициируется — схема этот случай не описывает.
   status: draft
@@ -945,11 +875,7 @@ rules:
   tested_by:
   - tests/test_archive.py::test_paid_application_cannot_be_archived_by_operator_after_payment
   - tests/test_archive.py::test_unarchive_starts_new_attempt_and_review
-  satisfies:
-  - requirement: REQ-ARCH-04
-    hash: 450c14846efc
-  - requirement: REQ-ARCH-06
-    hash: ab9214007285
+  schema_ref: §5 Архив и попытки
   status: draft
 - id: R-APP-UNARCHIVE-01
   title: Возврат из архива начинает новую попытку и новую проверку
@@ -982,9 +908,7 @@ rules:
     hash: 908adf94d66d
   tested_by:
   - tests/test_archive.py::test_unarchive_starts_new_attempt_and_review
-  satisfies:
-  - requirement: REQ-ARCH-08
-    hash: c910b1754bef
+  schema_ref: §5 Архив и попытки
   status: draft
 - id: R-APP-UNARCHIVE-02
   title: При возврате из архива площадку и книги меняют, только если заявка не доходила до записи
@@ -1012,9 +936,7 @@ rules:
   enforced_by_db:
   - constraint: trg_applications_venue_lock
     hash: 76edd93dbab6
-  satisfies:
-  - requirement: REQ-ARCH-09
-    hash: 8de1241e03af
+  schema_ref: §5 Архив и попытки
   status: draft
 - id: R-APP-UNARCHIVE-03
   title: >
@@ -1043,11 +965,10 @@ rules:
   - symbol: services/billing/consumers.py::on_unarchived
     lines: 28-35
     hash: c7b68d994acf
-  deviates_from:
-  - requirement: REQ-ARCH-10
-    note: >
-      Схема: новый счёт выставляется после проверки, если сумма изменилась. Код: счёт аннулируется сразу
-      при возврате из архива, до проверки; сравнивается только цена по прайсу без надбавки.
+  schema_ref: §5 Архив и попытки
+  discrepancy: >
+    Схема: новый счёт выставляется после проверки, если сумма изменилась. Код: счёт аннулируется сразу
+    при возврате из архива, до проверки; сравнивается только цена по прайсу без надбавки.
   status: draft
 - id: R-APP-DEDUP-01
   title: Заявка, первой дошедшая до записи, закрывает остальные заявки клиента по той же сфере
@@ -1097,13 +1018,11 @@ rules:
     hash: 668dded20200
   config:
   - services/applications/dedup.py::OPEN_STAGES
-  deviates_from:
-  - requirement: REQ-DEDUP-01
-    note: >
-      Схема: остаётся та заявка, что первой дошла до записи. Код: OPEN_STAGES включает awaiting_issue,
-      поэтому более поздний «победитель» (например, заявка в долг, прошедшая проверку после оплаты платной)
-      закрывает уже дошедшую до записи и оплаченную заявку. Для социальных заявок дедупликация не запускается
-      вообще.
+  schema_ref: §6 Клиент и проверка данных
+  discrepancy: >
+    Схема: остаётся та заявка, что первой дошла до записи. Код: OPEN_STAGES включает awaiting_issue, поэтому
+    более поздний «победитель» (например, заявка в долг, прошедшая проверку после оплаты платной) закрывает
+    уже дошедшую до записи и оплаченную заявку. Для социальных заявок дедупликация не запускается вообще.
   status: draft
 - id: R-APP-DEDUP-02
   title: Закрытие дубля аннулирует его неоплаченные счета и сбрасывает записи
@@ -1131,9 +1050,7 @@ rules:
   - symbol: services/chat/consumers.py::_handler
     lines: 24-25
     hash: f46c9b143853
-  satisfies:
-  - requirement: REQ-DEDUP-02
-    hash: b8176aceb354
+  schema_ref: §6 Клиент и проверка данных
   status: draft
 - id: R-APP-CHAT-01
   title: Каждая смена этапа заявки пишется в чат (слушатель ORM)
@@ -1161,9 +1078,7 @@ rules:
     hash: 115a188cf4f9
   tested_by:
   - tests/test_chat_api.py::test_stage_changes_appear_in_chat
-  satisfies:
-  - requirement: REQ-CHAT-04
-    hash: f2a67fe36b6b
+  schema_ref: §15 Чат заявки
   status: draft
 - id: R-APP-CALC-01
   title: Стоимость книг заявки — сумма цен прайса текущей площадки, надбавку берёт billing у представителя
@@ -1194,11 +1109,7 @@ rules:
     hash: 51afc1c12616
   tested_by:
   - tests/test_paid_flow.py::test_paid_application_full_path
-  satisfies:
-  - requirement: REQ-PRICE-01
-    hash: 8ca3dda19ade
-  - requirement: REQ-VENUE-02
-    hash: 0807f69e9114
+  schema_ref: §10 Надбавка представителя
   status: draft
 - id: R-APP-NOTIFY-01
   title: Письма по заявке получают только клиент и представитель
@@ -1219,9 +1130,7 @@ rules:
     hash: 7e834c395ef9
   tested_by:
   - tests/test_notifications.py::test_booking_email_goes_to_client_and_representative
-  satisfies:
-  - requirement: REQ-MAIL-01
-    hash: 139cac418756
+  schema_ref: §13 Запись на визит и письма
   status: draft
 - id: R-APP-ADMIN-01
   title: Администратор задаёт надбавку и разрешение работать в долг для представителя
@@ -1247,12 +1156,10 @@ rules:
   enforced_by_db:
   - constraint: representatives_markup_pct_check
     hash: 51afc1c12616
-  satisfies:
-  - requirement: REQ-ADMIN-01
-    hash: 1065f8055c6b
+  schema_ref: §10 Надбавка представителя
   status: verified
   verified_at: '2026-10-23'
-  verified_fingerprint: edf098024ac7
+  verified_fingerprint: f1ae46b0c76b
 - id: R-APP-ADMIN-02
   title: Реквизиты площадки задаёт администратор; без них счёт не выставить
   text: >
@@ -1282,14 +1189,10 @@ rules:
     hash: dc16f34adba2
   tested_by:
   - tests/test_paid_flow.py::test_invoice_requires_venue_requisites
-  satisfies:
-  - requirement: REQ-ADMIN-02
-    hash: 0a4775743d84
-  - requirement: REQ-INV-03
-    hash: 451b4c6f19cc
+  schema_ref: §7 Площадки и цены
   status: verified
   verified_at: '2026-10-23'
-  verified_fingerprint: b484f1dec783
+  verified_fingerprint: f214ad6708cc
 - id: R-APP-ADMIN-03
   title: Максимум мест в окне площадки положителен и передаётся в scheduling событием
   text: >
@@ -1315,9 +1218,7 @@ rules:
   enforced_by_db:
   - constraint: venues_max_slot_capacity_check
     hash: 009c191bd0d9
-  satisfies:
-  - requirement: REQ-SLOT-03
-    hash: b74ef714474a
+  schema_ref: §2 Администратор
   status: draft
 - id: R-APP-ADMIN-04
   title: Отключение сферы на площадке запрещает новые заявки, действующие доводятся до конца
@@ -1342,7 +1243,5 @@ rules:
   - symbol: services/applications/service.py::_check_sphere_at_venue
     lines: 44-46
     hash: 635bd4429515
-  satisfies:
-  - requirement: REQ-SPHERE-04
-    hash: 8d815af2b86c
+  schema_ref: §8 Сферы и книги
   status: draft

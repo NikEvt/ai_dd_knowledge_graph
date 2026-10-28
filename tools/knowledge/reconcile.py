@@ -7,10 +7,7 @@
 - литералы, совпадающие со значением настройки (срок задан в обход настройки);
 - события без подписчиков или публикаторов, модули с подписчиками вне services/wiring.py;
 - условия процесса без реализации, переходы, которые код никогда не выполняет;
-- роли, которые код не проверяет; фоновые задачи без вызова из кода (только тесты);
-- бизнес-требования без реализующих правил, правила, расходящиеся с требованиями, правила модулей
-  с бизнес-описанием, но без требования (поведение, о котором бизнес не знает), отменённые требования,
-  которые всё ещё реализованы.
+- роли, которые код не проверяет; фоновые задачи без вызова из кода (только тесты).
 
   uv run python tools/knowledge/reconcile.py [--format md|json]
   uv run python tools/knowledge/reconcile.py --rules-digest     # краткий список правил для LLM
@@ -26,9 +23,8 @@ from typing import Any
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from tools.knowledge.common import SERVICES, load_glossary, load_model, load_rules
+from tools.knowledge.common import load_glossary, load_model, load_rules
 from tools.knowledge.drift import DB_KINDS, ref_target
-from tools.knowledge.requirements import load_requirements
 
 CHECK_ERRORS = {"DomainError", "AccessDenied", "TransitionError"}
 
@@ -173,7 +169,9 @@ def findings() -> dict[str, Any]:
         for n in code["nodes"]
         if n["type"] == "job" and n["id"] not in callers
     )
-    out.update(requirement_findings(rules))
+    out["rules_with_discrepancy"] = sorted(
+        f"{r['id']}: {' '.join(str(r['discrepancy']).split())}" for r in rules if r.get("discrepancy")
+    )
     out["rules_unresolved_refs"] = sorted(
         f"{r['id']}: {', '.join(r['unresolved_refs'])}" for r in rules if r.get("unresolved_refs")
     )
@@ -192,10 +190,7 @@ TITLES = {
     "bpm_unexecuted": "Переходы процесса, которые код не выполняет",
     "roles_unchecked": "Роли схемы, которые код не проверяет",
     "jobs_unscheduled": "Фоновые задачи без запуска в репозитории",
-    "requirements_unimplemented": "Бизнес-требования без реализующих правил",
-    "rules_deviating": "Правила, расходящиеся с бизнес-требованиями",
-    "rules_without_requirement": "Правила модулей с бизнес-описанием, но без требования",
-    "requirements_cancelled_implemented": "Отменённые требования, которые всё ещё реализованы",
+    "rules_with_discrepancy": "Правила с расхождением со схемой",
     "rules_unresolved_refs": "Правила с неразрешёнными ссылками",
 }
 
@@ -210,41 +205,6 @@ def to_markdown(f: dict[str, Any]) -> str:
     return "\n".join(parts) + "\n"
 
 
-def requirement_findings(rules: list[dict[str, Any]]) -> dict[str, list[str]]:
-    reqs = {r["id"]: r for r in load_requirements()}
-    satisfied: dict[str, list[str]] = {}
-    deviated: dict[str, list[str]] = {}
-    for r in rules:
-        for e in r.get("satisfies") or []:
-            satisfied.setdefault(e.get("requirement"), []).append(r["id"])
-        for e in r.get("deviates_from") or []:
-            deviated.setdefault(e.get("requirement"), []).append(r["id"])
-    described = {f"knowledge/rules/{m}.yaml" for m in (*SERVICES, "schema")}
-    return {
-        "requirements_unimplemented": sorted(
-            f"{rid}: {q['title']}"
-            + (f" (есть расходящиеся: {', '.join(deviated[rid])})" if rid in deviated else "")
-            for rid, q in reqs.items()
-            if q["status"] != "cancelled" and rid not in satisfied
-        ),
-        "rules_deviating": sorted(
-            f"{r['id']} -> {e.get('requirement')}: {' '.join(str(e.get('note', '')).split())}"
-            for r in rules
-            for e in r.get("deviates_from") or []
-        ),
-        "rules_without_requirement": sorted(
-            f"{r['id']}: {r.get('title', '')}"
-            for r in rules
-            if r.get("_file") in described and not r.get("satisfies") and not r.get("deviates_from")
-        ),
-        "requirements_cancelled_implemented": sorted(
-            f"{rid}: {', '.join(satisfied[rid])}"
-            for rid, q in reqs.items()
-            if q["status"] == "cancelled" and rid in satisfied
-        ),
-    }
-
-
 def rules_digest() -> str:
     lines = []
     for r in load_rules():
@@ -252,12 +212,8 @@ def rules_digest() -> str:
         db = ", ".join(str(ref_target(e)) for e in r.get("enforced_by_db") or [])
         lines.append(
             f"- {r['id']} | {r.get('title', '')} | {' '.join(str(r.get('text', '')).split())}"
-            f" | требования: {', '.join(e.get('requirement', '') for e in r.get('satisfies') or []) or '-'}"
-            f" | код: {impl or '-'} | БД: {db or '-'}"
-            + "".join(
-                f" | расходится с {e.get('requirement')}: {' '.join(str(e.get('note', '')).split())}"
-                for e in r.get("deviates_from") or []
-            )
+            f" | schema_ref: {r.get('schema_ref', '-')} | код: {impl or '-'} | БД: {db or '-'}"
+            + (f" | discrepancy: {' '.join(str(r['discrepancy']).split())}" if r.get("discrepancy") else "")
         )
     return "\n".join(lines) + "\n"
 

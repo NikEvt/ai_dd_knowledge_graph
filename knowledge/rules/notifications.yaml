@@ -30,9 +30,7 @@ rules:
   tested_by:
   - tests/test_notifications.py::test_booking_email_goes_to_client_and_representative
   - tests/test_notifications.py::test_social_uses_social_templates
-  satisfies:
-  - requirement: REQ-MAIL-02
-    hash: 47a4a6f16844
+  schema_ref: §13 Запись на визит и письма
   status: draft
 - id: R-NOTIF-CANCEL-01
   title: Любая отмена записи даёт письмо об отмене
@@ -66,9 +64,7 @@ rules:
     hash: 49ccca1187a7
   tested_by:
   - tests/test_notifications.py::test_reschedule_sends_cancel_and_booking
-  satisfies:
-  - requirement: REQ-MAIL-02
-    hash: 47a4a6f16844
+  schema_ref: §13 Запись на визит и письма
   status: draft
 - id: R-NOTIF-RESCHEDULE-01
   title: Перенос даёт письмо об отмене и письмо о новой записи
@@ -96,11 +92,7 @@ rules:
     hash: b765a21d3fc7
   tested_by:
   - tests/test_notifications.py::test_reschedule_sends_cancel_and_booking
-  satisfies:
-  - requirement: REQ-MAIL-02
-    hash: 47a4a6f16844
-  - requirement: REQ-BOOK-04
-    hash: e1eec766cbe9
+  schema_ref: §13 Запись на визит и письма
   status: draft
 - id: R-NOTIF-NOSHOW-01
   title: Неявка отправляет письмо об отмене
@@ -120,12 +112,10 @@ rules:
   - symbol: services/notifications/consumers.py::on_booking_cancelled
     lines: 20-28
     hash: 9cb13a16e669
-  satisfies:
-  - requirement: REQ-MAIL-02
-    hash: 47a4a6f16844
+  schema_ref: §13 Запись на визит и письма
   status: verified
   verified_at: '2026-10-23'
-  verified_fingerprint: 899b2311d940
+  verified_fingerprint: 6b55a656b8c1
 - id: R-NOTIF-SLOT-01
   title: Удаление окна с записями рассылает письма об отмене
   text: >
@@ -143,12 +133,10 @@ rules:
   - symbol: services/notifications/consumers.py::on_booking_cancelled
     lines: 20-28
     hash: 9cb13a16e669
-  satisfies:
-  - requirement: REQ-SLOT-04
-    hash: 4e9d5f940703
+  schema_ref: §12 Расписание площадок
   status: verified
   verified_at: '2026-10-23'
-  verified_fingerprint: 5f8d32a1d3a5
+  verified_fingerprint: bac419cd9030
 - id: R-NOTIF-RESET-01
   title: Архивирование, дубль и смена площадки отправляют письмо об отмене
   text: >
@@ -172,15 +160,14 @@ rules:
   - symbol: services/notifications/service.py::send
     lines: 42-58
     hash: 49ccca1187a7
-  deviates_from:
-  - requirement: REQ-ARCH-07
-    note: >
-      Схема (§5): пока заявка в архиве, письма не отправляются. Код: в момент архивирования письмо об
-      отмене всё-таки уходит. В send нет проверки этапа и архивного статуса, поэтому любое событие booking.*
-      по заявке в архиве тоже приведёт к письму.
+  schema_ref: §5 Архив и попытки
+  discrepancy: >
+    Схема (§5): пока заявка в архиве, письма не отправляются. Код: в момент архивирования письмо об отмене
+    всё-таки уходит. В send нет проверки этапа и архивного статуса, поэтому любое событие booking.* по
+    заявке в архиве тоже приведёт к письму.
   status: verified
   verified_at: '2026-10-23'
-  verified_fingerprint: 7052bd0acd88
+  verified_fingerprint: e527b56606d6
 - id: R-NOTIF-RECIPIENTS-01
   title: Письма получают только клиент и представитель
   text: >
@@ -204,9 +191,7 @@ rules:
     hash: 7e834c395ef9
   tested_by:
   - tests/test_notifications.py::test_booking_email_goes_to_client_and_representative
-  satisfies:
-  - requirement: REQ-MAIL-01
-    hash: 139cac418756
+  schema_ref: §13 Запись на визит и письма
   status: draft
 - id: R-NOTIF-CHAT-01
   title: События записи параллельно попадают в чат заявки
@@ -230,9 +215,7 @@ rules:
   - symbol: services/notifications/consumers.py::on_booking_cancelled
     lines: 20-28
     hash: 9cb13a16e669
-  satisfies:
-  - requirement: REQ-CHAT-04
-    hash: f2a67fe36b6b
+  schema_ref: §13 Запись на визит и письма
   status: draft
 - id: R-NOTIF-TEMPLATE-01
   title: Шаблон выбирается по площадке, группе вида заявки и типу письма
@@ -261,9 +244,7 @@ rules:
   tested_by:
   - tests/test_notifications.py::test_booking_email_goes_to_client_and_representative
   - tests/test_notifications.py::test_social_uses_social_templates
-  satisfies:
-  - requirement: REQ-MAIL-05
-    hash: 999f06164516
+  schema_ref: §13 Запись на визит и письма
   status: draft
 - id: R-NOTIF-TEMPLATE-02
   title: Заявки в долг используют шаблоны платных заявок
@@ -292,9 +273,7 @@ rules:
   - services/notifications/config.py::TEMPLATE_GROUP
   tested_by:
   - tests/test_notifications.py::test_social_uses_social_templates
-  satisfies:
-  - requirement: REQ-MAIL-05
-    hash: 999f06164516
+  schema_ref: §13 Запись на визит и письма
   status: draft
 - id: R-NOTIF-TEMPLATE-03
   title: Вид заявки без записи в TEMPLATE_GROUP ломает отправку
@@ -340,9 +319,7 @@ rules:
   enforced_by_db:
   - constraint: templates_venue_id_kind_group_type_key
     hash: 22edef15da0d
-  satisfies:
-  - requirement: REQ-MAIL-05
-    hash: 999f06164516
+  schema_ref: §13 Запись на визит и письма
   status: draft
 - id: R-NOTIF-TEMPLATE-05
   title: Допустимые группы шаблонов — paid и social, типы — booking и cancel
@@ -368,11 +345,7 @@ rules:
     hash: 115f01b40a7d
   - constraint: templates_type_check
     hash: 4f2f9153f03c
-  satisfies:
-  - requirement: REQ-MAIL-05
-    hash: 999f06164516
-  - requirement: REQ-MAIL-02
-    hash: 47a4a6f16844
+  schema_ref: §13 Запись на визит и письма
   status: draft
 - id: R-NOTIF-TEMPLATE-06
   title: Сохранение шаблона создаёт его или заменяет текст
@@ -396,9 +369,7 @@ rules:
   enforced_by_db:
   - constraint: templates_venue_id_kind_group_type_key
     hash: 22edef15da0d
-  satisfies:
-  - requirement: REQ-MAIL-05
-    hash: 999f06164516
+  schema_ref: §13 Запись на визит и письма
   status: draft
 - id: R-NOTIF-TEMPLATE-07
   title: Настройка шаблонов не ограничена ролью администратора
@@ -418,11 +389,10 @@ rules:
   - symbol: services/notifications/service.py::set_template
     lines: 15-29
     hash: e944ddc8f1ad
-  deviates_from:
-  - requirement: REQ-MAIL-05
-    note: >
-      Схема (§2, §17): шаблоны писем настраивает только администратор в админке. Код: в set_template нет
-      проверки роли и нет точки входа для администратора.
+  schema_ref: '§17 Сводная таблица: кто что может'
+  discrepancy: >
+    Схема (§2, §17): шаблоны писем настраивает только администратор в админке. Код: в set_template нет
+    проверки роли и нет точки входа для администратора.
   status: draft
 - id: R-NOTIF-MISSING-01
   title: Без шаблона письмо фиксируется со статусом no_template
@@ -492,14 +462,13 @@ rules:
   - symbol: services/notifications/consumers.py::on_booking_cancelled
     lines: 22-28
     hash: 9cb13a16e669
-  deviates_from:
-  - requirement: REQ-VENUE-05
-    note: >
-      Схема (§7): при смене площадки клиент и представитель получают письмо об отмене и новую ссылку.
-      Код: в письме об отмене нет ссылки, а отдельного письма со ссылкой модуль не отправляет.
+  schema_ref: §7 Площадки и цены
+  discrepancy: >
+    Схема (§7): при смене площадки клиент и представитель получают письмо об отмене и новую ссылку. Код:
+    в письме об отмене нет ссылки, а отдельного письма со ссылкой модуль не отправляет.
   status: verified
   verified_at: '2026-10-23'
-  verified_fingerprint: f724ad07ce82
+  verified_fingerprint: 5f59c4b62c6a
 - id: R-NOTIF-TYPES-01
   title: Существует только два типа писем — booking и cancel
   text: >
@@ -529,9 +498,7 @@ rules:
     hash: 4f2f9153f03c
   tested_by:
   - tests/test_notifications.py::test_reschedule_sends_cancel_and_booking
-  satisfies:
-  - requirement: REQ-MAIL-02
-    hash: 47a4a6f16844
+  schema_ref: §13 Запись на визит и письма
   status: draft
 - id: R-NOTIF-LOG-01
   title: Каждое письмо сохраняется в журнале emails

@@ -21,8 +21,7 @@ rules:
   - services/lectures/settings.py::MIN_LEAD_TIME
   tested_by:
   - tests/test_lectures_events.py::test_event_announced_at_least_a_day_ahead
-  caveats:
-  - >
+  discrepancy: >
     В тексте ошибки срок записан литералом («за сутки»), а проверка берёт его из настройки MIN_LEAD_TIME.
     Если настройку поменять, сообщение станет неверным.
   status: draft

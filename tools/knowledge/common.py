@@ -15,14 +15,12 @@ MODEL = KNOWLEDGE / "model"
 RULES = KNOWLEDGE / "rules"
 INDEX = KNOWLEDGE / "index.sqlite"
 GLOSSARY = KNOWLEDGE / "glossary.yaml"
-REQUIREMENTS = KNOWLEDGE / "requirements"
 RECONCILIATION = KNOWLEDGE / "reconciliation.yaml"
 DOCS = ROOT / "docs"
 
 MODEL_FILES = ("db", "code", "events", "bpm")
 RULE_ID = re.compile(r"^R-[A-Z0-9]+(?:-[A-Z0-9]+)*-\d{2,}$")
 RULE_STATUSES = ("draft", "verified", "suspect")
-SUSPECT_REASONS = ("code_changed", "requirement_changed")
 SERVICES = ("applications", "billing", "scheduling", "notifications", "chat")
 
 

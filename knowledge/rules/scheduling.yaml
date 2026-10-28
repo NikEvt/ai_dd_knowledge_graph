@@ -34,11 +34,7 @@ rules:
   - symbol: services/scheduling/service.py::mark_no_show
     lines: '218'
     hash: 7d0ed8f66900
-  satisfies:
-  - requirement: REQ-ROLE-09
-    hash: b4d0725655b8
-  - requirement: REQ-SLOT-01
-    hash: a9a4afb94218
+  schema_ref: §2 Проверяющий оператор; §12 Расписание площадок
   status: draft
 - id: R-SCHED-SLOT-01
   title: Нельзя создать окно на прошедшее время
@@ -59,9 +55,7 @@ rules:
     hash: 1f95c51ca4d1
   tested_by:
   - tests/test_scheduling.py::test_slot_in_past_forbidden
-  satisfies:
-  - requirement: REQ-SLOT-02
-    hash: 269831511de5
+  schema_ref: §12 Расписание площадок
   status: draft
 - id: R-SCHED-SLOT-02
   title: По умолчанию в окне столько мест, сколько максимум площадки
@@ -90,9 +84,7 @@ rules:
     hash: 9474bb1e6464
   tested_by:
   - tests/test_scheduling.py::test_checker_can_only_reduce_capacity
-  satisfies:
-  - requirement: REQ-SLOT-03
-    hash: b74ef714474a
+  schema_ref: §12 Расписание площадок
   status: draft
 - id: R-SCHED-SLOT-03
   title: Число мест в окне не больше максимума площадки (контроль в БД)
@@ -124,9 +116,7 @@ rules:
     hash: f197e4338295
   tested_by:
   - tests/test_scheduling.py::test_slot_capacity_cannot_exceed_venue_maximum
-  satisfies:
-  - requirement: REQ-SLOT-03
-    hash: b74ef714474a
+  schema_ref: §12 Расписание площадок
   status: draft
 - id: R-SCHED-SLOT-04
   title: Проверяющий оператор может только уменьшить число мест в окне
@@ -159,9 +149,7 @@ rules:
     hash: f197e4338295
   tested_by:
   - tests/test_scheduling.py::test_checker_can_only_reduce_capacity
-  satisfies:
-  - requirement: REQ-SLOT-03
-    hash: b74ef714474a
+  schema_ref: §12 Расписание площадок
   status: draft
 - id: R-SCHED-SLOT-05
   title: Удаление окна отменяет записи на него
@@ -189,9 +177,7 @@ rules:
   - symbol: services/scheduling/service.py::_cancel
     lines: 178-190
     hash: 6120ee8baf20
-  satisfies:
-  - requirement: REQ-SLOT-04
-    hash: 4e9d5f940703
+  schema_ref: §12 Расписание площадок
   status: draft
 - id: R-SCHED-VENUE-LIMIT-01
   title: Максимум мест площадки реплицируется из админки событием
@@ -218,9 +204,7 @@ rules:
   enforced_by_db:
   - constraint: venue_limits_max_capacity_check
     hash: 3a9484826b99
-  satisfies:
-  - requirement: REQ-SLOT-03
-    hash: b74ef714474a
+  schema_ref: §2 Администратор; §12 Расписание площадок
   status: draft
 - id: R-SCHED-LINK-01
   title: Ссылка на запись за книгами выдаётся при готовности к записи
@@ -247,9 +231,7 @@ rules:
     hash: f6a14a335442
   tested_by:
   - tests/test_paid_flow.py::test_paid_application_full_path
-  satisfies:
-  - requirement: REQ-BOOK-01
-    hash: 036fc6e3e9dd
+  schema_ref: §13 Запись на визит и письма
   status: draft
 - id: R-SCHED-LINK-02
   title: У заявки только одна действующая ссылка
@@ -301,11 +283,10 @@ rules:
   - symbol: services/scheduling/service.py::_link_by_token
     lines: 95-99
     hash: f72f2a1be4fe
-  deviates_from:
-  - requirement: REQ-BOOK-07
-    note: >
-      Схема: по закрытой заявке ссылка не работает. Код: на закрытие заявки (books_out->closed) модуль
-      не подписан, ссылка на сдачу (purpose=return) после закрытия остаётся активной.
+  schema_ref: §13 Запись на визит и письма
+  discrepancy: >
+    Схема: по закрытой заявке ссылка не работает. Код: на закрытие заявки (books_out->closed) модуль не
+    подписан, ссылка на сдачу (purpose=return) после закрытия остаётся активной.
   status: draft
 - id: R-SCHED-FREE-SLOTS-01
   title: По ссылке видны только будущие свободные окна площадки и сферы заявки
@@ -330,9 +311,7 @@ rules:
     hash: bd5b1d3cdea7
   tested_by:
   - tests/test_scheduling.py::test_free_slots_hide_full_windows
-  satisfies:
-  - requirement: REQ-SLOT-05
-    hash: 32a37899f44d
+  schema_ref: §12 Расписание площадок
   status: draft
 - id: R-SCHED-BOOK-01
   title: Запись только в своё, будущее и не заполненное окно
@@ -357,11 +336,8 @@ rules:
     hash: e0cce5e125eb
   tested_by:
   - tests/test_scheduling.py::test_booking_only_on_own_venue_and_sphere
-  satisfies:
-  - requirement: REQ-BOOK-03
-    hash: 87cb26754bb3
-  caveats:
-  - >
+  schema_ref: §2 Клиент; §12 Расписание площадок
+  discrepancy: >
     Число свободных мест проверяется подсчётом в коде без блокировки. При параллельных записях окно можно
     переполнить: в БД нет ограничения на число записей в окне.
   status: draft
@@ -419,11 +395,9 @@ rules:
   enforced_by_db:
   - constraint: bookings_booked_by_check
     hash: 0d38bf98b5fc
-  deviates_from:
-  - requirement: REQ-BOOK-02
-    note: >
-      Схема: оператор записывает в системе, клиент и представитель — по ссылке. Код: публичный эндпоинт
-      POST /links/{token}/bookings принимает booked_by=operator от кого угодно с токеном.
+  discrepancy: >
+    Схема: оператор записывает в системе, клиент и представитель — по ссылке. Код: публичный эндпоинт
+    POST /links/{token}/bookings принимает booked_by=operator от кого угодно с токеном.
   status: draft
 - id: R-SCHED-HOLD-01
   title: Книги закрепляются за заявкой при записи за книгами
@@ -448,9 +422,7 @@ rules:
   - symbol: services/scheduling/service.py::book
     lines: 148-150
     hash: e0cce5e125eb
-  satisfies:
-  - requirement: REQ-SPHERE-03
-    hash: a0a4d629eb78
+  schema_ref: §8 Сферы и книги
   status: draft
 - id: R-SCHED-HOLD-02
   title: Отмена, перенос и неявка не освобождают книги
@@ -473,9 +445,7 @@ rules:
   - symbol: services/scheduling/service.py::_cancel
     lines: 178-190
     hash: 6120ee8baf20
-  satisfies:
-  - requirement: REQ-SPHERE-03
-    hash: a0a4d629eb78
+  schema_ref: §8 Сферы и книги
   status: draft
 - id: R-SCHED-BOOK-EVENT-01
   title: Запись на визит — письмо клиенту и представителю, событие в чате
@@ -510,14 +480,10 @@ rules:
   tested_by:
   - tests/test_notifications.py::test_booking_email_goes_to_client_and_representative
   - tests/test_notifications.py::test_social_uses_social_templates
-  satisfies:
-  - requirement: REQ-MAIL-02
-    hash: 47a4a6f16844
-  - requirement: REQ-CHAT-04
-    hash: f2a67fe36b6b
+  schema_ref: §13 Запись на визит и письма
   status: verified
   verified_at: '2026-10-23'
-  verified_fingerprint: 052484cdf6f3
+  verified_fingerprint: 5324306ad669
 - id: R-SCHED-OPERATOR-BOOK-01
   title: Оператор записывает клиента только по своей заявке и при активной ссылке
   text: >
@@ -538,11 +504,7 @@ rules:
   - symbol: services/scheduling/service.py::book_by_operator
     lines: 169-175
     hash: 4543c4eb44c4
-  satisfies:
-  - requirement: REQ-BOOK-02
-    hash: 5c9684fcec8e
-  - requirement: REQ-ROLE-04
-    hash: 6ba1a1adbdce
+  schema_ref: §13 Запись на визит и письма
   status: draft
 - id: R-SCHED-CANCEL-01
   title: Отмена записи — письмо об отмене и событие в чате
@@ -584,11 +546,7 @@ rules:
     hash: 9e9bc99257e7
   tested_by:
   - tests/test_notifications.py::test_reschedule_sends_cancel_and_booking
-  satisfies:
-  - requirement: REQ-MAIL-02
-    hash: 47a4a6f16844
-  - requirement: REQ-CHAT-04
-    hash: f2a67fe36b6b
+  schema_ref: §13 Запись на визит и письма
   status: draft
 - id: R-SCHED-CANCEL-02
   title: Клиент и представитель не отменяют визит менее чем за два дня
@@ -620,13 +578,12 @@ rules:
   - services/scheduling/service.py::CLIENT_SIDE
   tested_by:
   - tests/test_scheduling.py::test_client_cannot_cancel_less_than_two_days_before
-  deviates_from:
-  - requirement: REQ-BOOK-04
-    note: >
-      Схема: менее чем за два дня отменить или перенести визит может только оператор. Код: роль определяется
-      параметром by из запроса DELETE /bookings/{booking_id}?by=..., без проверки, кто вызывает. Любой,
-      передав by=operator, обходит ограничение, и личность оператора не сверяется. Текст ошибки «за два
-      дня» зашит в строку и не зависит от настройки.
+  schema_ref: §2 Клиент; §13 Запись на визит и письма
+  discrepancy: >
+    Схема: менее чем за два дня отменить или перенести визит может только оператор. Код: роль определяется
+    параметром by из запроса DELETE /bookings/{booking_id}?by=..., без проверки, кто вызывает. Любой,
+    передав by=operator, обходит ограничение, и личность оператора не сверяется. Текст ошибки «за два
+    дня» зашит в строку и не зависит от настройки.
   status: draft
 - id: R-SCHED-RESCHEDULE-01
   title: Перенос — это отмена и новая запись
@@ -660,9 +617,7 @@ rules:
   - libs/settings.py::CLIENT_RESCHEDULE_MIN_DAYS
   tested_by:
   - tests/test_notifications.py::test_reschedule_sends_cancel_and_booking
-  satisfies:
-  - requirement: REQ-BOOK-04
-    hash: e1eec766cbe9
+  schema_ref: §13 Запись на визит и письма
   status: draft
 - id: R-SCHED-NO-SHOW-01
   title: Неявка отменяет запись, клиент может записаться снова
@@ -691,9 +646,7 @@ rules:
     hash: 9e9bc99257e7
   tested_by:
   - tests/test_scheduling.py::test_no_show_cancels_booking_and_allows_rebooking
-  satisfies:
-  - requirement: REQ-BOOK-05
-    hash: 77921d51f536
+  schema_ref: §13 Запись на визит и письма; §5 Архив и попытки
   status: draft
 - id: R-SCHED-ISSUE-01
   title: Выдача книг — только по записи, на этапе «Ожидает выдачи», в выбранную дату
@@ -718,9 +671,7 @@ rules:
   tested_by:
   - tests/test_paid_flow.py::test_issue_only_on_booked_date
   - tests/test_paid_flow.py::test_paid_application_full_path
-  satisfies:
-  - requirement: REQ-ISSUE-01
-    hash: 89b8a8a58cdf
+  schema_ref: §14 Выдача, возврат и штрафы
   status: draft
 - id: R-SCHED-ISSUE-02
   title: Срок возврата — LOAN_PERIOD_DAYS от момента выдачи
@@ -748,9 +699,7 @@ rules:
   - libs/settings.py::LOAN_PERIOD_DAYS
   tested_by:
   - tests/test_paid_flow.py::test_paid_application_full_path
-  satisfies:
-  - requirement: REQ-RETURN-01
-    hash: 32d52497f10d
+  schema_ref: §14 Выдача, возврат и штрафы
   status: draft
 - id: R-SCHED-ISSUE-03
   title: После выдачи — запись выполнена, книги откреплены, ссылка на сдачу, этап «Книги у клиента»
@@ -788,16 +737,10 @@ rules:
   tested_by:
   - tests/test_paid_flow.py::test_paid_application_full_path
   - tests/test_kinds.py::test_social_application_skips_invoice
-  satisfies:
-  - requirement: REQ-PROC-01
-    hash: 4b84ad405815
-  - requirement: REQ-BOOK-01
-    hash: 036fc6e3e9dd
-  deviates_from:
-  - requirement: REQ-SPHERE-03
-    note: >
-      Схема (§8): книги освобождаются после отметки о возврате. Код: holds удаляются уже при выдаче. Открытые
-      выдачи учитываются только в scheduling.loans.
+  schema_ref: §4 Порядок прохождения заявки; §13 Запись на визит и письма
+  discrepancy: >
+    Схема (§8): книги освобождаются после отметки о возврате. Код: holds удаляются уже при выдаче. Открытые
+    выдачи учитываются только в scheduling.loans.
   status: draft
 - id: R-SCHED-RETURN-01
   title: Возврат и утерю отмечает проверяющий оператор площадки заявки по каждой книге
@@ -832,11 +775,8 @@ rules:
     hash: 93d592b55f0f
   tested_by:
   - tests/test_paid_flow.py::test_paid_application_full_path
-  satisfies:
-  - requirement: REQ-RETURN-02
-    hash: 177b60951f66
-  caveats:
-  - >
+  schema_ref: §14 Выдача, возврат и штрафы
+  discrepancy: >
     Возврат не связан с записью на сдачу: return_book не требует записи и не закрывает её, поэтому запись
     с purpose=return остаётся в статусе active после приёма книг.
   status: draft
@@ -872,17 +812,13 @@ rules:
   - symbol: services/billing/consumers.py::on_loan_lost
     lines: 43-45
     hash: 62a29a02319a
-  satisfies:
-  - requirement: REQ-FINE-03
-    hash: e42ab257dca0
-  deviates_from:
-  - requirement: REQ-CHAT-04
-    note: >
-      Схема (§15): в чат попадают все события заявки. Код: loan.damaged и loan.lost в EVENT_TEXT чата
-      нет, в чат они не попадают.
+  schema_ref: §14 Выдача, возврат и штрафы
+  discrepancy: >
+    Схема (§15): в чат попадают все события заявки. Код: loan.damaged и loan.lost в EVENT_TEXT чата нет,
+    в чат они не попадают.
   status: verified
   verified_at: '2026-10-23'
-  verified_fingerprint: 8d0bf39661b1
+  verified_fingerprint: d85d3e13ac1a
 - id: R-SCHED-OVERDUE-01
   title: Фоновая задача отмечает просрочку через 30 дней с выдачи и создаёт штраф
   text: >
@@ -913,12 +849,11 @@ rules:
     hash: 602403bac5f9
   config:
   - libs/settings.py::LOAN_PERIOD_DAYS
-  deviates_from:
-  - requirement: REQ-FINE-04
-    note: >
-      Срок просрочки зашит литералом timedelta(days=30), а не берётся из LOAN_PERIOD_DAYS или loans.due_at.
-      Если настройку изменить, due_at и момент начисления штрафа разойдутся. Схема: «месяц с выдачи»,
-      а не фиксированные 30 дней. Книга, возвращённая с опозданием до запуска задачи, штраф не получает.
+  schema_ref: §14 Выдача, возврат и штрафы
+  discrepancy: >
+    Срок просрочки зашит литералом timedelta(days=30), а не берётся из LOAN_PERIOD_DAYS или loans.due_at.
+    Если настройку изменить, due_at и момент начисления штрафа разойдутся. Схема: «месяц с выдачи», а
+    не фиксированные 30 дней. Книга, возвращённая с опозданием до запуска задачи, штраф не получает.
   status: draft
 - id: R-SCHED-RESET-01
   title: Архив и закрытие дублем сбрасывают записи, книги и ссылку
@@ -951,11 +886,7 @@ rules:
   - symbol: services/scheduling/service.py::reset_bookings
     lines: 286-299
     hash: c39779723a67
-  satisfies:
-  - requirement: REQ-ARCH-07
-    hash: bcc60f063b0b
-  - requirement: REQ-DEDUP-02
-    hash: b8176aceb354
+  schema_ref: §5 Архив и попытки; §6 Клиент и проверка данных
   status: draft
 - id: R-SCHED-VENUE-CHANGE-01
   title: Смена площадки отменяет запись и выдаёт новую ссылку
@@ -984,17 +915,13 @@ rules:
   - symbol: services/scheduling/service.py::reset_bookings
     lines: 286-299
     hash: c39779723a67
-  satisfies:
-  - requirement: REQ-VENUE-05
-    hash: 2152cfa0e6c0
-  deviates_from:
-  - requirement: REQ-VENUE-03
-    note: >
-      Схема: у социальных заявок и заявок в долг площадку меняют только до формирования ссылки, после
-      выдачи — никогда. Код change_venue блокирует смену только для paid на awaiting_issue и books_out.
-      У debt/social на этапе books_out смена проходит: записи на сдачу отменяются, ссылка на сдачу гаснет,
-      а новая не выпускается (выпуск только при awaiting_issue) — клиент не может записаться на сдачу.
-      Письмо об отмене уходит по шаблону старой площадки (venue_id окна).
+  schema_ref: §7 Площадки и цены
+  discrepancy: >
+    Схема: у социальных заявок и заявок в долг площадку меняют только до формирования ссылки, после выдачи
+    — никогда. Код change_venue блокирует смену только для paid на awaiting_issue и books_out. У debt/social
+    на этапе books_out смена проходит: записи на сдачу отменяются, ссылка на сдачу гаснет, а новая не
+    выпускается (выпуск только при awaiting_issue) — клиент не может записаться на сдачу. Письмо об отмене
+    уходит по шаблону старой площадки (venue_id окна).
   status: draft
 - id: R-SCHED-CLOSE-01
   title: Заявку нельзя закрыть, пока есть книги на руках
@@ -1024,7 +951,5 @@ rules:
   tested_by:
   - tests/test_paid_flow.py::test_cannot_close_with_books_out
   - tests/test_paid_flow.py::test_paid_application_full_path
-  satisfies:
-  - requirement: REQ-PROC-09
-    hash: e7d66e1cb076
+  schema_ref: §4 Порядок прохождения заявки; §14 Выдача, возврат и штрафы
   status: draft
