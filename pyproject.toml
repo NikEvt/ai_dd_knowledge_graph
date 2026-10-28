@@ -33,6 +33,8 @@ pythonpath = ["."]
 
 [tool.ruff]
 line-length = 110
+# vendor/ — сабмодули сторонних проектов для исследования (memgraph), не наш код
+extend-exclude = ["vendor"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
