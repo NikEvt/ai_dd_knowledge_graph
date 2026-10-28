@@ -8,6 +8,8 @@
 
 `draft` · permission
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
+
 Изменять определение отчёта, отключать его и ставить на расписание может только сотрудник, чей id совпадает с owner_id определения; иначе AccessDenied «настройки отчёта меняет только его владелец». Проверка в _owned_definition, её вызывают update_definition, deactivate_definition и create_schedule. Идентификатор действующего лица (`by`, `owner_id`) API берёт из параметров запроса без аутентификации.
 
 - Реализация: [`services/reports/service.py::_owned_definition:84-88`](../../services/reports/service.py#L84), [`services/reports/service.py::update_definition:146-146`](../../services/reports/service.py#L146), [`services/reports/service.py::deactivate_definition:167-167`](../../services/reports/service.py#L167)
@@ -17,6 +19,8 @@
 ## R-REPORTS-DEF-02 — Название отчёта обязательно и уникально среди действующих отчётов владельца
 
 `draft` · invariant
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 2 тестами
 
 Название обрезается по краям и не может быть пустым. У одного владельца не может быть двух действующих (is_active) отчётов с одинаковым названием без учёта регистра; отключённые отчёты название не занимают. Код проверяет это при создании и при переименовании (кроме самого отчёта), БД дублирует проверку частичным уникальным индексом по (owner_id, lower(title)) WHERE is_active и CHECK на непустое название.
 
@@ -29,6 +33,8 @@
 
 `draft` · invariant
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 1 тестом
+
 Код отчёта уникален среди всех определений, включая отключённые: занятый код нельзя использовать повторно («код отчёта … уже занят»). Формат кода (^[a-z][a-z0-9_-]{2,63}$) код не проверяет — неверный код отклоняет только CHECK в БД, и это приходит ошибкой БД, а не DomainError.
 
 - Реализация: [`services/reports/service.py::create_definition:119-120`](../../services/reports/service.py#L119)
@@ -38,6 +44,8 @@
 ## R-REPORTS-DEF-04 — Тип отчёта — один из трёх, у каждого типа свой набор параметров
 
 `draft` · invariant
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 1 тестом
 
 Допустимые типы — metric_summary, metric_trend, run_audit (константа KINDS и CHECK в БД). Для каждого типа задан набор допустимых параметров (_ALLOWED): сводка — metrics, days, dimension, as_of; динамика — metric, days, dimension, as_of; аудит запусков — только days и as_of. Неизвестный тип и лишние параметры отклоняются в normalize_params. params в БД обязан быть JSON-объектом.
 
@@ -51,6 +59,8 @@
 
 `draft` · invariant
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 2 тестами
+
 В сводном отчёте metrics — непустой список не длиннее MAX_METRICS_PER_REPORT (20) корректных имён метрик; дубли убираются с сохранением порядка. Определение сводки без metrics и динамики без metric отклоняется (require_complete) при создании и изменении.
 
 - Реализация: [`services/reports/builders.py::normalize_params:63-71`](../../services/reports/builders.py#L63), [`services/reports/builders.py::require_complete:83-87`](../../services/reports/builders.py#L83)
@@ -61,6 +71,8 @@
 ## R-REPORTS-DEF-06 — Период отчёта — целое число от 1 до 90 дней; разрез до 64 символов; дата в формате ГГГГ-ММ-ДД
 
 `draft` · invariant
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
 
 Параметр days — целое (не bool) от 1 до MAX_PERIOD_DAYS (90). dimension — строка до 64 символов (литерал 64 в коде, совпадает с CHECK на metric_snapshots.dimension). as_of — дата ISO, приводится к каноническому виду. Проверки одинаково применяются к определению и к параметрам запуска.
 
@@ -73,6 +85,8 @@
 
 `draft` · invariant
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 1 тестом
+
 Триггер БД trg_report_definitions_kind_locked запрещает менять kind, если в report_runs есть хоть один запуск этого определения. В update_definition такой проверки нет — смена типа падает ошибкой БД. update_definition не выведен в API. После того как purge_old_runs удалит все запуски отчёта, тип снова можно менять.
 
 - Реализация: [`services/reports/service.py::update_definition:155-160`](../../services/reports/service.py#L155)
@@ -84,6 +98,8 @@
 
 `draft` · guard
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
+
 Если у определения is_active = false, update_definition, request_run и create_schedule возвращают DomainError. Включить отчёт обратно в модуле нельзя.
 
 - Реализация: [`services/reports/service.py::update_definition:147-148`](../../services/reports/service.py#L147), [`services/reports/service.py::request_run:232-233`](../../services/reports/service.py#L232), [`services/reports/service.py::create_schedule:385-386`](../../services/reports/service.py#L385)
@@ -94,6 +110,8 @@
 
 `draft` · effect
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 2 тестами
+
 DELETE /reports/definitions/{id} — мягкое удаление: владелец ставит is_active = false (повторный вызов ничего не делает), в той же транзакции отключаются все действующие расписания выгрузки отчёта и публикуется reports.definition_deactivated. Название освобождается для нового отчёта.
 
 - Реализация: [`services/reports/service.py::deactivate_definition:166-182`](../../services/reports/service.py#L166)
@@ -103,6 +121,8 @@ DELETE /reports/definitions/{id} — мягкое удаление: владел
 ## R-REPORTS-DEF-10 — После отключения отчёта ожидающие запуски отменяются
 
 `draft` · effect
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
 
 Подписчик reports.definition_deactivated отменяет все запуски отчёта в статусе requested (строки, заблокированные другой транзакцией, пропускаются: skip_locked) и на каждый публикует reports.run_cancelled с reason=definition_deactivated. Запуски в статусе running достраиваются как обычно.
 
@@ -115,6 +135,8 @@ DELETE /reports/definitions/{id} — мягкое удаление: владел
 
 `draft` · guard
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
+
 Параметры ручного запуска ограничены RUN_OVERRIDABLE (days, as_of, dimension); остальные отклоняются («при запуске нельзя менять параметры»). Затем параметры проверяются по правилам типа отчёта, поэтому для run_audit dimension тоже отклоняется как лишний параметр. В запуске сохраняются только переопределения: параметры определения подмешиваются при построении, так что правка определения до начала построения меняет результат уже запрошенного запуска.
 
 - Реализация: [`services/reports/service.py::request_run:234-238`](../../services/reports/service.py#L234), [`services/reports/builders.py::build:170-170`](../../services/reports/builders.py#L170)
@@ -125,6 +147,8 @@ DELETE /reports/definitions/{id} — мягкое удаление: владел
 ## R-REPORTS-RUN-02 — Лимит незавершённых ручных запусков на сотрудника
 
 `draft` · guard
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 1 тестом
 
 У сотрудника может быть не больше одного незавершённого (requested/running) ручного запуска одного отчёта и не больше MAX_PENDING_RUNS_PER_USER (3) таких запусков всего. Запуски по расписанию в лимит не входят и не проверяются. Первое ограничение дублирует частичный уникальный индекс report_runs_one_in_flight (definition_id, requested_by) WHERE schedule_id IS NULL AND status IN (requested, running).
 
@@ -138,6 +162,8 @@ DELETE /reports/definitions/{id} — мягкое удаление: владел
 
 `draft` · effect
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 2 тестами
+
 request_run создаёт запуск в статусе requested и публикует reports.run_requested (API отвечает 202). Подписчик вызывает build_run: он блокирует строку запуска (FOR UPDATE) и ничего не делает, если запуск уже не в requested, поэтому повторная доставка события отчёт не перестраивает. Иначе статус меняется на running и фиксируется started_at.
 
 - Реализация: [`services/reports/service.py::request_run:242-257`](../../services/reports/service.py#L242), [`services/reports/consumers.py::on_run_requested:11-12`](../../services/reports/consumers.py#L11), [`services/reports/service.py::build_run:280-291`](../../services/reports/service.py#L280)
@@ -149,6 +175,8 @@ request_run создаёт запуск в статусе requested и публ�
 
 `draft` · guard
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, есть код, нет тестов — сверь с кодом
+
 Если на момент построения определение уже отключено, build_run переводит запуск requested → cancelled и публикует reports.run_cancelled с reason=definition_deactivated. Это закрывает гонку с cancel_pending_for_definition, который пропускает заблокированные строки.
 
 - Реализация: [`services/reports/service.py::build_run:283-287`](../../services/reports/service.py#L283)
@@ -158,6 +186,8 @@ request_run создаёт запуск в статусе requested и публ�
 ## R-REPORTS-RUN-05 — Итог построения — completed с телом отчёта или failed с текстом ошибки
 
 `draft` · effect
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 2 тестами
 
 Если построитель бросает DomainError (например, за период нет данных), запуск становится failed, ошибка сохраняется в error и публикуется reports.run_failed. При успехе тело отчёта сохраняется в body, запуск становится completed и публикуется reports.run_completed с code отчёта, schedule_id и датой finished_on.
 
@@ -171,6 +201,8 @@ request_run создаёт запуск в статусе requested и публ�
 
 `draft` · permission
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
+
 POST /reports/runs/{id}/cancel: при requested_by ≠ by — AccessDenied, при статусе не requested — DomainError. Запуск переходит в cancelled и публикуется reports.run_cancelled с reason=by_user. У запусков по расписанию requested_by — автор расписания, поэтому их может отменить только он.
 
 - Реализация: [`services/reports/service.py::cancel_run:320-328`](../../services/reports/service.py#L320)
@@ -180,6 +212,8 @@ POST /reports/runs/{id}/cancel: при requested_by ≠ by — AccessDenied, п�
 ## R-REPORTS-RUN-07 — Допустимые переходы статуса запуска задаёт триггер БД
 
 `draft` · invariant
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 1 тестом
 
 Статусы запуска — requested, running, completed, failed, cancelled. Триггер trg_report_runs_transition разрешает только requested → running/failed/cancelled и running → completed/failed. Код использует requested → running/cancelled (build_run, cancel_run, отмена по отключению) и running → completed/failed (build_run, fail_stuck_runs). Переход requested → failed БД разрешает, но код его не выполняет.
 
@@ -193,6 +227,8 @@ POST /reports/runs/{id}/cancel: при requested_by ≠ by — AccessDenied, п�
 
 `draft` · invariant
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 1 тестом
+
 Триггер trg_report_runs_immutable запрещает любое UPDATE строки запуска в статусе completed, failed или cancelled. Удалять такие строки можно — это делает purge_old_runs по сроку хранения. CHECK требуют, чтобы finished_at был заполнен ровно у завершённых запусков; _finish ставит status, body, error и finished_at одновременно.
 
 - Реализация: [`services/reports/service.py::_finish:261-267`](../../services/reports/service.py#L261)
@@ -203,6 +239,8 @@ POST /reports/runs/{id}/cancel: при requested_by ≠ by — AccessDenied, п�
 ## R-REPORTS-CALC-01 — Период отчёта заканчивается датой as_of или датой запуска и длится days дней включительно
 
 `draft` · calculation
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
 
 Параметры определения и запуска объединяются, запуск важнее. Конец периода — as_of, а если её нет — дата scheduled_for (для запуска по расписанию) или requested_at (для ручного). Начало = конец − (days − 1), days по умолчанию DEFAULT_PERIOD_DAYS (7). Комментарий в settings называет DEFAULT_PERIOD_DAYS «максимальной глубиной», но фактический максимум — MAX_PERIOD_DAYS (90).
 
@@ -216,6 +254,8 @@ POST /reports/runs/{id}/cancel: при requested_by ≠ by — AccessDenied, п�
 
 `draft` · calculation
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
+
 По каждой метрике берутся снимки за период в заданном разрезе: points, total, avg, min, max с округлением до 0.01 (CENT). Метрика без данных попадает в отчёт с points = 0. Если данных нет ни по одной метрике — DomainError, и запуск завершается со статусом failed.
 
 - Реализация: [`services/reports/builders.py::_summary:111-129`](../../services/reports/builders.py#L111), [`services/reports/builders.py::_money:32-33`](../../services/reports/builders.py#L32)
@@ -228,6 +268,8 @@ POST /reports/runs/{id}/cancel: при requested_by ≠ by — AccessDenied, п�
 
 `draft` · calculation
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
+
 Для metric_trend строится ряд снимков метрики по дням периода (значения округлены до 0.01) и change = последнее значение − первое. Если за период нет ни одного снимка — DomainError, запуск failed.
 
 - Реализация: [`services/reports/builders.py::_trend:132-142`](../../services/reports/builders.py#L132)
@@ -239,6 +281,8 @@ POST /reports/runs/{id}/cancel: при requested_by ≠ by — AccessDenied, п�
 
 `draft` · calculation
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
+
 Снимки отбираются по точному совпадению dimension. По умолчанию это пустая строка, то есть ряд «без разреза»: значения по разным разрезам не суммируются в итог.
 
 - Реализация: [`services/reports/builders.py::_points:96-108`](../../services/reports/builders.py#L96), [`services/reports/builders.py::_summary:112-112`](../../services/reports/builders.py#L112)
@@ -249,6 +293,8 @@ POST /reports/runs/{id}/cancel: при requested_by ≠ by — AccessDenied, п�
 ## R-REPORTS-CALC-05 — Аудит запусков считает запуски периода по статусам и кодам отчётов, кроме текущего
 
 `draft` · calculation
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
 
 run_audit группирует запуски, у которых дата requested_at (UTC) попадает в период, по статусу и по коду отчёта; текущий запуск не учитывается. Завершённые запуски старше RETENTION_DAYS (30) удаляются, поэтому аудит за период до 90 дней фактически видит только последние 30 дней завершённых запусков.
 
@@ -262,6 +308,8 @@ run_audit группирует запуски, у которых дата reques
 
 `draft` · effect
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 1 тестом
+
 POST /reports/snapshots записывает значение метрики за день (по умолчанию сегодня) в разрезе dimension. Повторная запись по тому же (metric, dimension, day) заменяет значение и taken_at (upsert по metric_snapshots_point). Значение должно быть конечным числом (_decimal). Проверки прав на запись снимков нет.
 
 - Реализация: [`services/reports/service.py::record_snapshot:44-57`](../../services/reports/service.py#L44), [`services/reports/service.py::_decimal:26-33`](../../services/reports/service.py#L26)
@@ -272,6 +320,8 @@ POST /reports/snapshots записывает значение метрики з�
 ## R-REPORTS-SNAP-02 — Имя метрики — латиница в нижнем регистре с точками-разделителями
 
 `draft` · invariant
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 1 тестом
 
 Имя метрики должно соответствовать ^[a-z][a-z0-9_]*(\.[a-z0-9_]+)*$. Код проверяет его при записи снимка и в параметрах отчёта (metric_name), БД дублирует проверку CHECK. add_to_snapshot имя не проверяет и полагается на CHECK.
 
@@ -285,6 +335,8 @@ POST /reports/snapshots записывает значение метрики з�
 
 `draft` · invariant
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, есть код, нет тестов — сверь с кодом
+
 record_snapshot не проверяет dimension: разрез длиннее 64 символов отклоняет только CHECK metric_snapshots_dimension_len, и это приходит ошибкой БД. В параметрах отчёта то же ограничение проверяет код (литерал 64 в normalize_params).
 
 - Реализация: [`services/reports/service.py::record_snapshot:46-52`](../../services/reports/service.py#L46)
@@ -294,6 +346,8 @@ record_snapshot не проверяет dimension: разрез длиннее 6
 ## R-REPORTS-SNAP-04 — Каждый построенный отчёт прибавляет 1 к служебной метрике reports.runs_completed
 
 `draft` · effect
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, есть код, нет тестов — сверь с кодом
 
 Подписчик reports.run_completed прибавляет 1 к снимку метрики RUNS_COMPLETED_METRIC за день finished_on в разрезе кода отчёта (upsert с прибавлением). Обработчик не идемпотентен: при повторной доставке события счётчик увеличится повторно.
 
@@ -307,6 +361,8 @@ record_snapshot не проверяет dimension: разрез длиннее 6
 
 `draft` · guard
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 2 тестами
+
 create_schedule доступен только владельцу (_owned_definition) и только для действующего отчёта. Если у отчёта уже есть активное расписание — DomainError; БД дублирует это частичным уникальным индексом export_schedules_one_active (definition_id) WHERE is_active.
 
 - Реализация: [`services/reports/service.py::create_schedule:384-401`](../../services/reports/service.py#L384)
@@ -317,6 +373,8 @@ create_schedule доступен только владельцу (_owned_definit
 ## R-REPORTS-SCHED-02 — Интервал выгрузки — от 1 до 744 часов, первая выгрузка не в прошлом
 
 `draft` · guard
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 1 тестом
 
 every_hours должен быть в диапазоне MIN_SCHEDULE_INTERVAL_HOURS..MAX_SCHEDULE_INTERVAL_HOURS (1..24*31). БД дублирует диапазон CHECK с литералом 744, который не связан с настройкой. first_run_at не может быть раньше текущего момента; если её не указать, первая выгрузка ставится на «сейчас».
 
@@ -330,6 +388,8 @@ every_hours должен быть в диапазоне MIN_SCHEDULE_INTERVAL_HO
 
 `draft` · guard
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 1 тестом
+
 Список получателей очищается от дублей с сохранением порядка, должен быть непустым и не длиннее MAX_RECIPIENTS (20). Существование получателей не проверяется. В БД recipients обязан быть JSON-массивом.
 
 - Реализация: [`services/reports/service.py::_recipients:366-372`](../../services/reports/service.py#L366)
@@ -342,6 +402,8 @@ every_hours должен быть в диапазоне MIN_SCHEDULE_INTERVAL_HO
 
 `draft` · permission
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, есть код, нет тестов — сверь с кодом
+
 deactivate_schedule разрешён, если by равен created_by расписания или owner_id отчёта, иначе AccessDenied. Маршрута в API нет; расписания также отключаются вместе с отчётом и фоновой задачей при ошибке запуска.
 
 - Реализация: [`services/reports/service.py::deactivate_schedule:415-423`](../../services/reports/service.py#L415)
@@ -350,6 +412,8 @@ deactivate_schedule разрешён, если by равен created_by расп
 ## R-REPORTS-SCHED-05 — Фоновая задача ставит в очередь выгрузки, у которых подошёл срок
 
 `draft` · timer
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 2 тестами
 
 run_scheduled берёт активные расписания действующих отчётов с next_run_at ≤ now (FOR UPDATE SKIP LOCKED) и для каждого создаёт запуск: requested_by — автор расписания, scheduled_for — next_run_at, лимит ручных запусков не применяется. Индекс report_runs_schedule_once не даёт создать второй запуск на тот же слот, CHECK report_runs_schedule_slot требует, чтобы schedule_id и scheduled_for были заданы вместе. Как часто вызывается задача, в модуле не задано.
 
@@ -363,6 +427,8 @@ run_scheduled берёт активные расписания действую�
 
 `draft` · effect
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, есть код, нет тестов — сверь с кодом
+
 Если request_run для расписания бросает DomainError (например, определение испорчено), run_scheduled ставит расписанию is_active = false и переходит к следующему. Ни автор, ни получатели об этом не уведомляются.
 
 - Реализация: [`services/reports/jobs.py::run_scheduled:29-36`](../../services/reports/jobs.py#L29)
@@ -372,6 +438,8 @@ run_scheduled берёт активные расписания действую�
 ## R-REPORTS-SCHED-07 — Пропущенные интервалы выгрузки не догоняются
 
 `draft` · timer
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
 
 После постановки запуска advance сдвигает next_run_at на every_hours, пока он не станет позже now, и записывает last_enqueued_at. Если задача долго не работала, создаётся один запуск, а не по одному на каждый пропущенный интервал.
 
@@ -384,6 +452,8 @@ run_scheduled берёт активные расписания действую�
 
 `draft` · effect
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 2 тестами
+
 По reports.run_completed создаются уведомления kind=completed запросившему, а для запуска по расписанию — ещё и всем получателям выгрузки (без дублей). Текст: «Отчёт «…» готов (запуск №…)».
 
 - Реализация: [`services/reports/consumers.py::on_run_completed:16-17`](../../services/reports/consumers.py#L16), [`services/reports/service.py::_notification_targets:440-443`](../../services/reports/service.py#L440), [`services/reports/service.py::notify_run_finished:459-474`](../../services/reports/service.py#L459)
@@ -394,6 +464,8 @@ run_scheduled берёт активные расписания действую�
 ## R-REPORTS-NOTIFY-02 — О неуспешном запуске уведомляются запросивший и владелец отчёта
 
 `draft` · effect
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 2 тестами
 
 По reports.run_failed (ошибка построения или зависание) уведомления kind=failed с текстом ошибки получают запросивший и владелец отчёта. Получатели выгрузки о сбое не узнают.
 
@@ -406,6 +478,8 @@ run_scheduled берёт активные расписания действую�
 
 `draft` · effect
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 2 тестами
+
 Подписчик reports.run_cancelled не создаёт уведомление при reason=by_user. В остальных случаях уведомление kind=cancelled получает только запросивший. Текст всегда «… отменён: отчёт отключён», какой бы ни была причина.
 
 - Реализация: [`services/reports/consumers.py::on_run_cancelled:37-40`](../../services/reports/consumers.py#L37), [`services/reports/service.py::_notification_text:449-456`](../../services/reports/service.py#L449)
@@ -416,6 +490,8 @@ run_scheduled берёт активные расписания действую�
 ## R-REPORTS-NOTIFY-04 — Не больше одного уведомления на запуск и получателя
 
 `draft` · invariant
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 1 тестом
 
 Уведомления вставляются с ON CONFLICT DO NOTHING по ограничению run_notifications_once (run_id, recipient_id), поэтому повторная доставка события уведомление не дублирует. kind уведомления — completed, failed или cancelled.
 
@@ -429,6 +505,8 @@ run_scheduled берёт активные расписания действую�
 
 `draft` · permission
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, есть код, нет тестов — сверь с кодом
+
 mark_read возвращает AccessDenied, если recipient_id не совпадает с адресатом. Повторная отметка не меняет read_at. recipient_id API берёт из параметра запроса без аутентификации.
 
 - Реализация: [`services/reports/service.py::mark_read:490-498`](../../services/reports/service.py#L490)
@@ -436,6 +514,8 @@ mark_read возвращает AccessDenied, если recipient_id не совп
 ## R-REPORTS-TIMER-01 — Запуск, который строится дольше 30 минут, помечается неуспешным
 
 `draft` · timer
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
 
 fail_stuck_runs переводит запуски running со started_at раньше now − RUN_TIMEOUT_MINUTES (30) в failed с ошибкой-литералом «превышено время построения отчёта» и публикует reports.run_failed. Запуски, застрявшие в requested (событие так и не обработано), эта задача не трогает.
 
@@ -448,6 +528,8 @@ fail_stuck_runs переводит запуски running со started_at ран
 ## R-REPORTS-TIMER-02 — Завершённые запуски удаляются через 30 дней вместе с уведомлениями
 
 `draft` · timer
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
 
 purge_old_runs удаляет запуски в статусах FINISHED с finished_at раньше now − RETENTION_DAYS (30); незавершённые запуски остаются. Уведомления удаляются каскадом по внешнему ключу ON DELETE CASCADE. Побочные эффекты: аудит запусков теряет историю, а после удаления всех запусков отчёта снова можно менять его тип.
 

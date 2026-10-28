@@ -6,7 +6,7 @@
 #      с промптом prompts/extract_rules.md и срезом графа модуля. Результат: knowledge/rules/<module>.yaml
 #      (status: draft, ссылки на строки кода, хэши проставляются скриптом).
 #   3. Сверка со схемой: детерминированная (reconcile.py) + сессия `claude -p` с prompts/reconcile.md.
-#      Результат: knowledge/rules/schema.yaml и knowledge/reconciliation.yaml.
+#      Результат: knowledge/rules/schema.yaml (правила по требованиям без реализующих правил) и knowledge/reconciliation.yaml.
 #   4. Хэши, индекс, документация. Итоговая стоимость — в конце вывода.
 #
 # Лог каждой сессии (stream-json) — knowledge/.bootstrap/<module>.jsonl (в .gitignore).

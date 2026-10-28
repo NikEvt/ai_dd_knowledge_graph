@@ -1,6 +1,6 @@
 """Документация для людей из модели знаний: docs/ (markdown + mermaid) и блок L0 в AGENTS.md.
 
-Ничего в docs/ руками не правится: правится модель (knowledge/rules, glossary) или код, затем
+Ничего в docs/ руками не правится: правится модель (knowledge/rules, requirements, glossary) или код, затем
   uv run python tools/knowledge/render_docs.py
 CI проверяет, что docs/ совпадает с результатом рендера.
 """
@@ -17,8 +17,9 @@ import yaml
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from tools.knowledge import graph, reconcile
+from tools.knowledge import graph, reconcile, trust
 from tools.knowledge.common import DOCS, INDEX, KNOWLEDGE, ROOT, load_glossary, load_rules
+from tools.knowledge.requirements import STATUS_RU, load_requirements
 
 GENERATED = (
     "<!-- Сгенерировано tools/knowledge/render_docs.py. "
@@ -52,7 +53,14 @@ class Docs:
         self.g = graph.Graph.load(INDEX, rebuild_if_stale=False)
         self.glossary = load_glossary()
         self.rules = load_rules()
+        self.requirements = load_requirements()
         self.files: dict[str, str] = {}
+
+    def trust_of(self, rid: str) -> dict[str, Any]:
+        return self.g.nodes[rid]["trust"]
+
+    def describe(self, rid: str) -> str:
+        return trust.describe(self.g.nodes[rid])
 
     def nodes(self, type_: str) -> list[dict[str, Any]]:
         return sorted((n for n in self.g.nodes.values() if n["type"] == type_), key=lambda n: n["id"])
@@ -88,7 +96,9 @@ class Docs:
             "| [Сущности](entities/README.md) | таблицы: поля, ограничения, триггеры, код, правила |",
             "| [Роли](roles.md) | кто что может: по правилам, коду и процессу |",
             "| [Настройки и фоновые задачи](config.md) | константы, сроки, таймеры и кто их читает |",
-            "| [Правила](rules/README.md) | все правила по модулям, статусы |",
+            "| [Бизнес-требования](requirements/README.md) | как должно быть: требования и их реализация |",
+            "| [Правила](rules/README.md) | как устроено: все правила по модулям, статусы и достоверность |",
+            "| [Достоверность](trust.md) | на какие правила можно опереться, что сверить, что уточнить |",
             "| [Покрытие](coverage.md) | правила без кода и тестов, suspect, непокрытые ограничения БД |",
             "| [Сверка источников](reconciliation.md) | расхождения схемы, кода и БД |",
             "",
@@ -99,6 +109,10 @@ class Docs:
             *(f"| {t} | {c} |" for t, c in sorted(stats.items())),
             "",
             "Правила по статусу: " + ", ".join(f"{k} — {v}" for k, v in sorted(statuses.items())),
+            "",
+            "Правила по достоверности: " + self.levels_text(),
+            "",
+            f"Бизнес-требований: {len(self.requirements)}.",
         ]
         self.page("README.md", "\n".join(out))
 
@@ -207,9 +221,11 @@ class Docs:
         for role in self.glossary.get("roles", {}):
             rs = by_role.get(role, [])
             out.append(f"### {self.role(role)} (`{role}`)\n")
-            out += [f"- {r['id']} [{r.get('status')}] {esc(r.get('title', ''))}" for r in rs] or [
-                "- правил нет"
-            ]
+            out += [
+                f"- {r['id']} [{r.get('status')}] {esc(r.get('title', ''))} — "
+                f"{esc(trust.describe(self.g.nodes[r['id']], 'short'))}"
+                for r in rs
+            ] or ["- правил нет"]
             out.append("")
         out += ["## По процессу заявки (исполнители переходов)", "", "| Роль | Переходы |", "|---|---|"]
         trans_by_role: dict[str, list[str]] = defaultdict(list)
@@ -222,7 +238,13 @@ class Docs:
         for role, ts in sorted(trans_by_role.items()):
             out.append(f"| {self.role(role)} | {', '.join(sorted(set(ts)))} |")
         out += ["", "## По коду (параметр-исполнитель и проверки доступа)", ""]
-        out += ["| Функция | Роль | Проверки доступа |", "|---|---|---|"]
+        out += [
+            "Роль здесь — предположение по имени параметра функции (`operator_id` → оператор), а не проверка "
+            "доступа. Проверки доступа — в последней колонке.",
+            "",
+            "| Функция | Роль (предположение) | Проверки доступа |",
+            "|---|---|---|",
+        ]
         for n in self.nodes("symbol"):
             if not n["id"].startswith("services/") or n.get("kind") in ("route", "class", "orm_model"):
                 continue
@@ -233,7 +255,7 @@ class Docs:
             checks = "<br>".join(esc(c["message"]) for c in denied) or "—"
             out.append(
                 f"| {link(n, 0, graph.short(n['id']))} | "
-                f"{', '.join(self.role(r) for r in roles) or '—'} | {checks} |"
+                f"{', '.join(f'{self.role(r)} (по `{p}`)' for r, p in roles) or '—'} | {checks} |"
             )
         self.page("roles.md", "\n".join(out))
 
@@ -273,12 +295,22 @@ class Docs:
         by_file: dict[str, list[dict[str, Any]]] = defaultdict(list)
         for r in self.rules:
             by_file[Path(r["_file"]).stem].append(r)
-        index = ["# Правила", "", "| Модуль | Правил | verified | draft | suspect |", "|---|---|---|---|---|"]
+        index = [
+            "# Правила",
+            "",
+            "Статус — этап ревью (draft, verified, suspect). Достоверность — см. [trust.md](../trust.md).",
+            "",
+            "| Модуль | Правил | verified | draft | suspect | "
+            + " | ".join(trust.LEVEL_RU[x] for x in trust.LEVELS)
+            + " |",
+            "|---|---|---|---|---|" + "---|" * len(trust.LEVELS),
+        ]
         for module, rs in sorted(by_file.items()):
             count = lambda s, rs=rs: sum(1 for r in rs if r.get("status") == s)  # noqa: E731
+            levels = [sum(1 for r in rs if self.trust_of(r["id"])["level"] == x) for x in trust.LEVELS]
             index.append(
                 f"| [{module}]({module}.md) | {len(rs)} | {count('verified')} | {count('draft')} | "
-                f"{count('suspect')} |"
+                f"{count('suspect')} | " + " | ".join(map(str, levels)) + " |"
             )
             out = [
                 f"# Правила: {module}",
@@ -289,11 +321,9 @@ class Docs:
             for r in rs:
                 out.append(f"## {r['id']} — {esc(r.get('title', ''))}")
                 out.append("")
-                out.append(
-                    f"`{r.get('status', 'draft')}`"
-                    + (f" · {r['kind']}" if r.get("kind") else "")
-                    + (f" · {esc(r['schema_ref'])}" if r.get("schema_ref") else "")
-                )
+                out.append(f"`{r.get('status', 'draft')}`" + (f" · {r['kind']}" if r.get("kind") else ""))
+                out.append("")
+                out.append(f"Достоверность: {esc(self.describe(r['id']))}")
                 out.append("")
                 out.append(esc(r.get("text", "")))
                 out.append("")
@@ -324,8 +354,19 @@ class Docs:
                     out.append("- Роли: " + ", ".join(self.role(x) for x in r["roles"]))
                 if r.get("related"):
                     out.append("- Связанные: " + ", ".join(r["related"]))
-                if r.get("discrepancy"):
-                    out.append(f"- ⚠ Расхождение со схемой: {esc(r['discrepancy'])}")
+                if r.get("satisfies"):
+                    out.append(
+                        "- Реализует требования: "
+                        + ", ".join(self.req_link(e["requirement"], 1) for e in r["satisfies"])
+                    )
+                for e in r.get("deviates_from") or []:
+                    out.append(
+                        f"- ⚠ Расходится с {self.req_link(e['requirement'], 1)}: {esc(e.get('note', ''))}"
+                    )
+                for c in r.get("caveats") or []:
+                    out.append(f"- Оговорка: {esc(c)}")
+                for q in r.get("open_questions") or []:
+                    out.append(f"- ⚠ Открытый вопрос: {esc(q)}")
                 out.append("")
             self.page(f"rules/{module}.md", "\n".join(out))
         self.page("rules/README.md", "\n".join(index))
@@ -365,7 +406,10 @@ class Docs:
         out.append(
             "Проект реализует подмножество общей схемы (`knowledge/sources/erp-library.md`) с упрощениями."
         )
-        out.append("Расхождения фиксируются здесь и в `knowledge/reconciliation.yaml`; код не исправляется.")
+        out.append(
+            "Требования — `knowledge/requirements/`, связи правил с ними — `satisfies` и `deviates_from`. "
+            "Решения людей по расхождениям — `knowledge/reconciliation.yaml`; код не исправляется."
+        )
         path = KNOWLEDGE / "reconciliation.yaml"
         items = (
             (yaml.safe_load(path.read_text(encoding="utf-8")) or {}).get("discrepancies", [])
@@ -375,15 +419,18 @@ class Docs:
         out += ["", f"## Расхождения ({len(items)})", ""]
         if items:
             out += [
-                "| ID | Важность | Расхождение | Схема | Код / БД | Правила | Вопрос |",
-                "|---|---|---|---|---|---|---|",
+                "| ID | Статус | Важность | Расхождение | Схема | Код / БД | Требования | Правила | Вопрос |",
+                "|---|---|---|---|---|---|---|---|---|",
             ]
             for d in items:
                 code_db = esc(d.get("code", "")) + (f"<br>БД: {esc(d['db'])}" if d.get("db") else "")
                 out.append(
-                    f"| {d.get('id')} | {d.get('severity', '')} | {esc(d.get('title', ''))} | "
+                    f"| {d.get('id')} | {d.get('status', 'open')} | {d.get('severity', '')} | "
+                    f"{esc(d.get('title', ''))} | "
                     f"{esc(d.get('schema', ''))} | "
-                    f"{code_db} | {', '.join(d.get('rules') or [])} | {esc(d.get('question', ''))} |"
+                    f"{code_db} | {', '.join(d.get('requirements') or [])} | "
+                    f"{', '.join(d.get('rules') or [])} | "
+                    f"{esc(d.get('question', ''))} |"
                 )
         else:
             out.append("- пока нет")
@@ -421,9 +468,123 @@ class Docs:
         lines.append(
             f"Правил в модели: {len(self.rules)} ("
             + ", ".join(f"{k}: {v}" for k, v in sorted(statuses.items()))
-            + ")."
+            + "). По достоверности: "
+            + self.levels_text()
+            + "."
+        )
+        approved = sum(1 for q in self.requirements if q["status"] == "approved")
+        lines.append("")
+        lines.append(
+            f"Бизнес-требований: {len(self.requirements)} (утверждено: {approved}); "
+            "без реализующих правил: "
+            + str(len(reconcile.requirement_findings(self.rules)["requirements_unimplemented"]))
+            + "."
         )
         return "\n".join(lines)
+
+    # ----------------------------------------------------------------- требования и достоверность
+
+    def levels_text(self) -> str:
+        counts = defaultdict(int)
+        for r in self.rules:
+            counts[self.trust_of(r["id"])["level"]] += 1
+        return ", ".join(f"{trust.LEVEL_RU[x]} — {counts[x]}" for x in trust.LEVELS if counts[x])
+
+    def req_link(self, rid: str, depth: int) -> str:
+        n = self.g.nodes.get(rid)
+        if not n:
+            return f"`{rid}`"
+        area = Path(n["path"]).stem
+        return f"[{rid}]({'../' * depth}requirements/{area}.md#{rid.lower()})"
+
+    def requirements_pages(self) -> None:
+        by_area: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for q in self.requirements:
+            by_area[Path(q["path"]).stem].append(q)
+        impl: dict[str, list[str]] = defaultdict(list)
+        dev: dict[str, list[str]] = defaultdict(list)
+        for r in self.rules:
+            for e in r.get("satisfies") or []:
+                impl[e["requirement"]].append(r["id"])
+            for e in r.get("deviates_from") or []:
+                dev[e["requirement"]].append(r["id"])
+        index = [
+            "# Бизнес-требования",
+            "",
+            "Как должна работать система — по решению бизнеса. Источник: "
+            "[`knowledge/requirements/`](../../knowledge/requirements/README.md), правят люди. "
+            "Правила (как устроено сейчас) ссылаются на требования через `satisfies` и `deviates_from`.",
+            "",
+            "| Область | Требований | утверждено | без реализации | с расхождением |",
+            "|---|---|---|---|---|",
+        ]
+        for area, qs in sorted(by_area.items()):
+            index.append(
+                f"| [{area}]({area}.md) | {len(qs)} | {sum(q['status'] == 'approved' for q in qs)} | "
+                f"{sum(q['id'] not in impl for q in qs)} | {sum(q['id'] in dev for q in qs)} |"
+            )
+            out = [
+                f"# Требования: {area}",
+                "",
+                f"Источник: [`knowledge/requirements/{area}.md`](../../knowledge/requirements/{area}.md)",
+            ]
+            for q in qs:
+                out += ["", f"## {q['id']}", "", f"**{esc(q['title'])}**", ""]
+                meta = [STATUS_RU[q["status"]], f"владелец: {q.get('owner') or '—'}"]
+                if q.get("schema"):
+                    meta.append(f"схема: {q['schema']}")
+                out += [" · ".join(meta), "", esc(q["text"]), ""]
+                rules = [
+                    f"[{x}](../rules/{Path(self.g.nodes[x]['path']).stem}.md) "
+                    f"({esc(trust.describe(self.g.nodes[x], 'short'))})"
+                    for x in impl.get(q["id"], [])
+                ]
+                out.append(
+                    "- Реализуют: " + (", ".join(rules) if rules else "⚠ правил нет — в коде не реализовано")
+                )
+                if dev.get(q["id"]):
+                    out.append("- ⚠ Расходятся: " + ", ".join(dev[q["id"]]))
+            self.page(f"requirements/{area}.md", "\n".join(out))
+        self.page("requirements/README.md", "\n".join(index))
+
+    def trust_page(self) -> None:
+        out = [
+            "# Достоверность правил",
+            "",
+            "Статус правила (draft, verified, suspect) — этап ревью. Достоверность считается при сборке "
+            "модели "
+            "(`tools/knowledge/trust.py`) по пяти осям: происхождение (кто и откуда записал правило), способ "
+            "получения связи (извлечена из кода, БД, процесса; указана ИИ; предположение), актуальность "
+            "(менялись ли "
+            "код и требование после фиксации правила и после проверки человеком), неоднозначность (открытые "
+            "расхождения, оговорки, вопросы) и соответствие бизнес-требованию.",
+            "",
+            "| Уровень | Что значит | Что делать агенту | Правил |",
+            "|---|---|---|---|",
+        ]
+        meaning = {
+            "contested": (
+                "код расходится с бизнес-требованием или открыт вопрос D-xx",
+                "уточнить у пользователя",
+            ),
+            "stale": ("код или требование менялись после фиксации правила или проверки", "сверить с кодом"),
+            "unanchored": ("нет ссылок на код или БД", "не опираться без проверки кода"),
+            "weak": ("есть код, нет тестов", "сверить с кодом"),
+            "supported": ("извлечено ИИ, подкреплено кодом и тестами", "можно опереться"),
+            "confirmed": ("проверено человеком, с тех пор не менялось", "можно опереться"),
+        }
+        counts = defaultdict(list)
+        for r in self.rules:
+            counts[self.trust_of(r["id"])["level"]].append(r)
+        for x in trust.LEVELS:
+            what, act = meaning[x]
+            out.append(f"| {trust.LEVEL_RU[x]} | {what} | {act} | {len(counts[x])} |")
+        for x in ("contested", "stale", "unanchored"):
+            out += ["", f"## {trust.LEVEL_RU[x].capitalize()} ({len(counts[x])})", ""]
+            out += [
+                f"- {r['id']} {esc(r.get('title', ''))} — {esc(self.describe(r['id']))}" for r in counts[x]
+            ] or ["- нет"]
+        self.page("trust.md", "\n".join(out))
 
     def write(self) -> None:
         self.readme()
@@ -433,6 +594,8 @@ class Docs:
         self.roles()
         self.config()
         self.rules_pages()
+        self.requirements_pages()
+        self.trust_page()
         self.coverage()
         self.reconciliation()
         if DOCS.exists():

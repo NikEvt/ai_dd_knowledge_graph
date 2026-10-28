@@ -1,6 +1,8 @@
 """Граф знаний: сборка индекса SQLite и запросы к нему (поиск точки входа, context pack, карточки).
 
-Индекс собирается из knowledge/model/*.json, knowledge/rules/*.yaml и knowledge/glossary.yaml.
+Индекс собирается из knowledge/model/*.json, knowledge/rules/*.yaml, knowledge/requirements/*.md,
+knowledge/reconciliation.yaml и knowledge/glossary.yaml. У ребра — способ получения (method), у правила —
+профиль достоверности (trust, см. trust.py).
 Граф небольшой (сотни узлов), поэтому запросы выполняются в памяти; SQLite хранит узлы, рёбра
 и полнотекстовый индекс FTS5 со стеммингом (русский и английский) и словарём синонимов.
 """
@@ -19,18 +21,22 @@ from typing import Any
 
 import snowballstemmer
 
+from tools.knowledge import trust
 from tools.knowledge.common import (
     GLOSSARY,
     INDEX,
     MODEL,
     MODEL_FILES,
+    RECONCILIATION,
     RULES,
     estimate_tokens,
+    load_discrepancies,
     load_glossary,
     load_model,
     load_rules,
     rule_files,
 )
+from tools.knowledge.requirements import requirement_files, requirement_nodes
 
 # ---------------------------------------------------------------------------- текст и стемминг
 
@@ -86,6 +92,7 @@ def expand(tokens: list[str]) -> list[str]:
 
 TYPE_BOOST = {
     "rule": 1.6,
+    "requirement": 1.5,
     "config": 1.4,
     "job": 1.2,
     "bpm_guard": 1.1,
@@ -131,6 +138,7 @@ def rule_graph(rules: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[
         rid = r.get("id")
         if not rid:
             continue
+        start = len(edges)
         nodes.append(
             {
                 "id": rid,
@@ -159,6 +167,16 @@ def rule_graph(rules: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[
             edges.append({"src": rid, "dst": f"role:{role}", "type": "performed_by"})
         for ref in _rule_refs([r.get("trigger"), r.get("applies_to"), r.get("effects")]):
             edges.append({"src": rid, "dst": ref, "type": "applies_to"})
+        for s in r.get("satisfies") or []:
+            edges.append({"src": rid, "dst": s.get("requirement"), "type": "satisfies"})
+        for d in r.get("deviates_from") or []:
+            edges.append(
+                {"src": rid, "dst": d.get("requirement"), "type": "deviates_from", "note": d.get("note")}
+            )
+        # Связи правила утверждены ИИ; проверены человеком, пока проверенная версия актуальна.
+        checked = r.get("status") == "verified" and r.get("verified_fingerprint") == trust.fingerprint(r)
+        for e in edges[start:]:
+            e["method"] = "human" if checked else "llm"
     return nodes, edges
 
 
@@ -167,7 +185,10 @@ def search_text(n: dict[str, Any]) -> tuple[str, str]:
     t = n["type"]
     title = " ".join([n.get("name") or "", n["id"]])
     body: list[str] = [n.get("doc") or ""]
-    if t == "rule":
+    if t == "requirement":
+        title = f"{n['id']} {n.get('title', '')}"
+        body.append(str(n.get("text", "")))
+    elif t == "rule":
         title = f"{n['id']} {n.get('title', '')}"
         body += [
             str(n.get("text", "")),
@@ -204,7 +225,13 @@ def glossary_stage(name: str) -> str:
 
 
 def _index_inputs() -> list[Path]:
-    return [*(MODEL / f"{m}.json" for m in MODEL_FILES), *rule_files(), GLOSSARY]
+    return [
+        *(MODEL / f"{m}.json" for m in MODEL_FILES),
+        *rule_files(),
+        *requirement_files(),
+        RECONCILIATION,
+        GLOSSARY,
+    ]
 
 
 def index_is_stale(path: Path = INDEX) -> bool:
@@ -223,12 +250,19 @@ def build(path: Path = INDEX) -> dict[str, int]:
         doc = load_model(name)
         for n in doc["nodes"]:
             nodes.setdefault(n["id"], n)
+        for e in doc["edges"]:
+            e["method"] = trust.edge_method(name, e)
         edges += doc["edges"]
+    for n in requirement_nodes():
+        nodes[n["id"]] = n
     rnodes, redges = rule_graph(load_rules())
     for n in rnodes:
         nodes[n["id"]] = n
     edges += redges
     edges = [e for e in edges if e["src"] in nodes and e["dst"] in nodes]
+    discrepancies = load_discrepancies()
+    for n in rnodes:
+        n["trust"] = trust.profile(n, nodes, discrepancies)
 
     tmp = path.with_suffix(f".{os.getpid()}.tmp")  # параллельные сборки не мешают друг другу
     tmp.unlink(missing_ok=True)
@@ -396,6 +430,8 @@ EDGE_WEIGHT: dict[str, tuple[float, float]] = {
     "constrains": (0.5, 0.85),
     "writes": (0.75, 0.6),
     "related": (0.7, 0.7),
+    "satisfies": (0.5, 0.9),
+    "deviates_from": (0.6, 0.9),
     "calls": (0.7, 0.5),
     "tested_by": (0.6, 0.35),
     "maps_to": (0.5, 0.35),
@@ -424,6 +460,8 @@ STRUCTURAL = {
     "on_table",
     "publishes",
     "notifies",
+    "satisfies",
+    "deviates_from",
 }
 LEAF_TYPES = {"role", "status", "service", "bpm_process", "test", "effect"}
 FANOUT = 4
@@ -506,8 +544,8 @@ def walk(
                 step = 0 if g.nodes[other]["type"] == "event" else 1
                 if other not in best or s > best[other][0]:
                     why = f"{short(nid)} —{etype}→" if fwd else f"—{etype}→ {short(nid)}"
-                    if e.data.get("inferred"):
-                        why += f" ({e.data['inferred']})"
+                    if note := trust.edge_note(e.data):
+                        why += f" ({note})"
                     best[other] = (s, depth + step, why)
                     arrived[other] = (etype, fwd)
                     arrived_cols[other] = frozenset(e.data.get("columns") or [])
@@ -549,9 +587,18 @@ def brief(n: dict[str, Any], detail: int = 1) -> str:
     """Одна строка про узел. detail=0 — минимум, 2 — с подробностями."""
     t, nid = n["type"], n["id"]
     if t == "rule":
-        s = f"{nid} [{n.get('status', 'draft')}] {n.get('title', '')}"
+        if detail == 0:
+            return f"{nid} {n.get('title', '')} ({trust.describe(n, 'short')})"
+        if detail >= 2:
+            s = f"{nid} {n.get('title', '')} [{trust.describe(n, 'compact')}]"
+            return s + (f" — {_clip(n['text'], 260)}" if n.get("text") else "")
+        return f"{nid} {n.get('title', '')} — {trust.describe(n)}"
+    if t == "requirement":
+        s = f"{nid} {n.get('title', '')} — бизнес-требование"
+        if n.get("status") != "approved":
+            s += f" ({requirement_status_ru(n)})"
         if detail >= 2 and n.get("text"):
-            s += f" — {_clip(n['text'], 260)}"
+            s += f": {_clip(n['text'], 220)}"
         return s
     if t == "config":
         value = n.get("value")
@@ -609,6 +656,7 @@ def brief(n: dict[str, Any], detail: int = 1) -> str:
 
 
 SECTIONS = [
+    ("Бизнес-требования", ("requirement",)),
     ("Правила", ("rule",)),
     ("Процесс (BPM): переходы и условия", ("bpm_transition", "bpm_guard")),
     ("События (outbox → подписчики)", ("event",)),
@@ -634,7 +682,9 @@ def impact(g: Graph, node: str, budget_tokens: int = 4000, max_depth: int = 4) -
     ranked = walk(g, start, max_depth=max_depth)
     header = (
         f"# Context pack: {start}\n(бюджет ~{budget_tokens} токенов, глубина ≤ {max_depth}; "
-        "курсивом — связь, по которой найден узел)\n"
+        "курсивом — связь, по которой найден узел: от кода, БД и процесса извлечена из них, от правила (R-…) "
+        "указана ИИ, если не помечено иначе;\nу правила в [ ] — бизнес-требование и насколько ему верить, "
+        "полностью — rule(id))\n"
     )
     used = estimate_tokens(header) + 150
     chosen: list[tuple[str, str]] = []
@@ -670,13 +720,8 @@ def _render_pack(g: Graph, header: str, chosen: list[tuple[str, str]], skipped: 
         lines = [ln for t in types for ln in by_type.get(t, [])]
         if lines:
             parts.append(f"\n## {title}\n" + "\n".join(lines))
-    rules = [g.nodes[n] for n, _ in chosen if g.nodes[n]["type"] == "rule"]
-    risky = [r["id"] for r in rules if r.get("status") in ("draft", "suspect")]
-    notes = []
-    if risky:
-        notes.append(f"Правила без подтверждения (draft/suspect) — отметь как риск: {', '.join(risky)}")
-    if any(r.get("status") == "suspect" for r in rules):
-        notes.append("suspect: код правила менялся после проверки текста, сверь с кодом.")
+    rules = [g.nodes[n] for n, _ in chosen if g.nodes[n]["type"] == "rule" and g.nodes[n].get("trust")]
+    notes = trust_summary(rules)
     if skipped:
         notes.append(
             f"Не вошло по бюджету: {skipped} узлов "
@@ -685,6 +730,38 @@ def _render_pack(g: Graph, header: str, chosen: list[tuple[str, str]], skipped: 
     if notes:
         parts.append("\n## Пометки\n" + "\n".join(f"- {x}" for x in notes))
     return "\n".join(parts) + "\n"
+
+
+def requirement_status_ru(n: dict[str, Any]) -> str:
+    return {
+        "proposed": "черновик требования, не утверждено",
+        "approved": "утверждено",
+        "cancelled": "отменено",
+    }.get(n.get("status", "proposed"), "")
+
+
+def trust_summary(rules: list[dict[str, Any]]) -> list[str]:
+    """Сводка по правилам пакета: на что опереться, что сверить с кодом, что уточнить у пользователя."""
+    groups: dict[str, list[str]] = defaultdict(list)
+    for r in rules:
+        t = r["trust"]
+        groups[trust.action(t)].append(r["id"])
+    out = []
+    if groups["rely"]:
+        out.append(f"Можно опереться: {len(groups['rely'])} правил(а).")
+    if groups["check"]:
+        out.append(
+            f"Сверь с кодом, прежде чем опираться (нет тестов или код менялся): {', '.join(groups['check'])}."
+        )
+    if groups["verify"]:
+        out.append(f"Не опирайся без проверки кода (ссылок на код нет): {', '.join(groups['verify'])}.")
+    if groups["ask"]:
+        out.append(
+            "Код расходится с бизнес-требованием или есть открытый вопрос (причина — у правила) — "
+            "уточни у пользователя: "
+            f"{', '.join(groups['ask'])}."
+        )
+    return out
 
 
 def find_entry(g: Graph, task_text: str, limit: int = 8) -> Answer:
@@ -708,26 +785,34 @@ def rule_card(g: Graph, rule_id: str) -> Answer:
         alt = "\n".join(f"- {brief(g.nodes[h], 0)}" for h, _ in hits)
         return Answer(f"Правило {rid} не найдено. Похожие:\n{alt}\n", [h for h, _ in hits])
     ids = [rid]
-    out = [
-        f"# {rid} [{n.get('status', 'draft')}] {n.get('title', '')}",
-        "",
-        str(n.get("text", "")).strip(),
-        "",
+    t = n["trust"]
+    out = [f"# {rid} {n.get('title', '')}", "", f"{trust.kind_text(t)} · {trust.verdict(t)}", ""]
+    why = []
+    for e in g.out.get(rid, []):
+        if e.type in ("satisfies", "deviates_from") and e.dst in g.nodes:
+            ids.append(e.dst)
+            req = g.nodes[e.dst]
+            line = f"- {brief(req, 2)}"
+            if e.type == "deviates_from":
+                line += f"\n  ⚠ код расходится с требованием: {_clip(e.data.get('note') or '', 300)}"
+            why.append(line)
+    out += [
+        "## Почему (бизнес-требования)",
+        *(why or ["- бизнес-требования нет: правило описывает поведение кода"]),
     ]
-    for key in (
-        "kind",
-        "applies_to",
-        "trigger",
-        "effects",
-        "roles",
-        "schema_ref",
-        "discrepancy",
-        "suspect_since",
-    ):
+    out += ["", "## Как (правило)", str(n.get("text", "")).strip()]
+    for key in ("kind", "applies_to", "trigger", "effects", "roles"):
         if n.get(key):
             out.append(
                 f"- {key}: {n[key] if isinstance(n[key], str) else json.dumps(n[key], ensure_ascii=False)}"
             )
+    out += ["", "## Достоверность", *trust_lines(t, n)]
+    linked = (
+        "проверены человеком"
+        if any(e.data.get("method") == "human" for e in g.out.get(rid, []))
+        else "указаны ИИ, существование проверяет CI"
+    )
+    out += ["", f"## Где (ссылки {linked})"]
     sections = [
         ("Реализация", "implemented_by"),
         ("Ограничения БД", "enforced_by_db"),
@@ -765,8 +850,94 @@ def rule_card(g: Graph, rule_id: str) -> Answer:
                 if e.type == "related" and e.src in g.nodes
             ]
         if lines:
-            out += ["", f"## {title}", *lines]
+            out += ["", f"### {title}", *lines]
     out.append(f"\nИсточник: {n.get('path')}")
+    return Answer("\n".join(out) + "\n", list(dict.fromkeys(ids)))
+
+
+def trust_lines(t: dict[str, Any], n: dict[str, Any]) -> list[str]:
+    """Оси достоверности правила словами — для карточки."""
+    a = t["anchors"]
+    out = [f"- происхождение: {trust.origin_text(t)}" + (f" ({t['source']})" if t.get("source") else "")]
+    v = t["verification"]
+    if v is None:
+        out.append("- проверка человеком: не проводилась")
+    else:
+        who = f"{v.get('by') or 'кто — не записано'}, {v.get('at') or 'дата не записана'}"
+        state = {
+            "current": "проверенная версия совпадает с текущей",
+            "outdated": "⚠ правило меняли после проверки",
+            "unpinned": "версия при проверке не зафиксирована",
+        }[v["state"]]
+        out.append(f"- проверка человеком: {who}; {state}")
+    fresh = {
+        "current": "код и требования не менялись после фиксации правила",
+        "code_changed": f"⚠ код изменился после фиксации правила: {', '.join(map(str, t['drifted']))}",
+        "requirement_changed": f"⚠ изменилось бизнес-требование: {', '.join(t['requirement_changed'])}",
+        "verified_outdated": "⚠ правило меняли после проверки человеком",
+    }[t["freshness"]]
+    out.append(
+        f"- актуальность: {fresh}" + (f" (suspect с {n['suspect_since']})" if n.get("suspect_since") else "")
+    )
+    out.append(f"- опоры: код — {a['code']}, ограничения БД — {a['db']}, тесты — {a['tests']}")
+    amb = t["ambiguity"]
+    for d in amb["discrepancies"]:
+        question = _clip(d.get("question") or "", 220)
+        out.append(f"- ⚠ открытое расхождение {d['id']} ({d.get('severity') or '?'}): {question}")
+    for q in amb["open_questions"]:
+        out.append(f"- ⚠ открытый вопрос: {_clip(q, 220)}")
+    for c in amb["caveats"]:
+        out.append(f"- оговорка: {_clip(c, 300)}")
+    if amb["missing"]:
+        out.append(f"- ⚠ ссылки не найдены в модели: {', '.join(amb['missing'])}")
+    if amb["cancelled_requirements"]:
+        out.append(f"- ⚠ реализует отменённые требования: {', '.join(amb['cancelled_requirements'])}")
+    return out
+
+
+def requirement_card(g: Graph, req_id: str) -> Answer:
+    rid = req_id.strip()
+    n = g.nodes.get(rid)
+    if n is None or n["type"] != "requirement":
+        hits = g.search(rid, limit=5, types=("requirement",))
+        if not hits:
+            return Answer(f"Требование {rid} не найдено.", [])
+        alt = "\n".join(f"- {brief(g.nodes[h], 1)}" for h, _ in hits)
+        return Answer(f"Требование {rid} не найдено. Похожие:\n{alt}\n", [h for h, _ in hits])
+    meta = [requirement_status_ru(n), f"владелец: {n.get('owner') or '—'}"]
+    if n.get("schema"):
+        meta.append(f"схема: {n['schema']}")
+    out = [
+        f"# {rid} {n.get('title', '')}",
+        "",
+        f"бизнес-требование · {' · '.join(meta)}",
+        "",
+        n.get("text", ""),
+    ]
+    ids = [rid]
+    impl = [e.src for e in g.inc.get(rid, []) if e.type == "satisfies" and e.src in g.nodes]
+    dev = [e for e in g.inc.get(rid, []) if e.type == "deviates_from" and e.src in g.nodes]
+    out += ["", "## Реализуют правила"]
+    out += [f"- {brief(g.nodes[r], 1)}" for r in impl] or [
+        "- ⚠ правил нет: требование в коде не реализовано (или реализующее правило не связано)"
+    ]
+    ids += impl
+    if dev:
+        out += ["", "## Расходятся с требованием"]
+        for e in dev:
+            ids.append(e.src)
+            out.append(f"- {e.src} {g.nodes[e.src].get('title', '')}: {_clip(e.data.get('note') or '', 260)}")
+    opened = [
+        d
+        for d in load_discrepancies()
+        if d.get("status", "open") == "open" and rid in (d.get("requirements") or [])
+    ]
+    if opened:
+        out += ["", "## Открытые расхождения (нужно решение)"]
+        out += [f"- {d['id']} {d.get('title', '')}: {_clip(d.get('question') or '', 220)}" for d in opened]
+    if n.get("status") == "cancelled" and impl:
+        out += ["", "⚠ требование отменено, но правила его реализуют — уточни, нужно ли поведение."]
+    out.append(f"\nИсточник: {n.get('path')}:{n.get('line')}")
     return Answer("\n".join(out) + "\n", list(dict.fromkeys(ids)))
 
 
@@ -864,12 +1035,12 @@ def entity_card(g: Graph, name: str) -> Answer:
     return Answer("\n".join(out) + "\n", list(dict.fromkeys(ids)))
 
 
-def _roles_of(g: Graph, n: dict[str, Any]) -> list[str]:
+def _roles_of(g: Graph, n: dict[str, Any]) -> list[tuple[str, str]]:
+    """Роли по именам параметров функции — предположение, не проверка доступа: (роль, параметр)."""
     params = (n.get("signature") or "").strip("()").replace("*", "").split(", ")
     roles = []
     for role, info in load_glossary().get("roles", {}).items():
-        if any(p in params for p in info.get("params", [])):
-            roles.append(role)
+        roles += [(role, p) for p in info.get("params", []) if p in params][:1]
     return roles
 
 
@@ -895,7 +1066,10 @@ def who_can(g: Graph, action: str) -> Answer:
         if t == "rule":
             ids.append(nid)
             who = ", ".join(roles_ru.get(r, r) for r in n["roles"])
-            out.append(f"\n## {brief(n, 0)}\n- роли: {who}\n- {_clip(n.get('text', ''), 300)}")
+            out.append(
+                f"\n## {n['id']} {n.get('title', '')}\n- {trust.describe(n)}\n- роли (по правилу): {who}"
+                f"\n- {_clip(n.get('text', ''), 300)}"
+            )
         elif t == "bpm_transition":
             ids.append(nid)
             out.append(f"\n## Переход {nid}")
@@ -912,8 +1086,10 @@ def who_can(g: Graph, action: str) -> Answer:
             roles = _roles_of(g, n)
             transitions = [e for e in g.out.get(nid, []) if e.type == "transitions_to"]
             out.append(f"\n## {nid}:{n.get('line')}" + (f" — {n['doc']}" if n.get("doc") else ""))
-            if roles:
-                out.append(f"- исполнитель по параметрам: {', '.join(roles_ru.get(r, r) for r in roles)}")
+            for role, param in roles:
+                out.append(
+                    f"- исполнитель (предположение по имени параметра {param}): {roles_ru.get(role, role)}"
+                )
             if t == "job" or n.get("kind") in ("consumer", "orm_listener"):
                 out.append("- исполнитель: система (событие или фоновая задача)")
             helpers = [
@@ -935,7 +1111,9 @@ def who_can(g: Graph, action: str) -> Answer:
                     r = g.nodes[e.src]
                     ids.append(r["id"])
                     roles_r = ", ".join(roles_ru.get(x, x) for x in r.get("roles") or [])
-                    out.append(f"- правило {brief(r, 0)}" + (f" — роли: {roles_r}" if roles_r else ""))
+                    out.append(
+                        f"- правило {brief(r, 0)}" + (f" — роли по правилу: {roles_r}" if roles_r else "")
+                    )
     return Answer("\n".join(out) + "\n", list(dict.fromkeys(ids)))
 
 

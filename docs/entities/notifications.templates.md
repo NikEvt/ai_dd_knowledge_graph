@@ -25,8 +25,8 @@
 - services/notifications/service.py::set_template [body]
 
 ## Правила
-- R-NOTIF-TEMPLATE-04 [draft] Один шаблон на площадку, группу и тип письма
-- R-NOTIF-TEMPLATE-05 [draft] Допустимые группы шаблонов — paid и social, типы — booking и cancel
-- R-NOTIF-TEMPLATE-06 [draft] Сохранение шаблона создаёт его или заменяет текст
-- R-NOTIF-TEMPLATE-07 [draft] Настройка шаблонов не ограничена ролью администратора
-- R-NOTIF-TYPES-01 [draft] Существует только два типа писем — booking и cancel
+- R-NOTIF-TEMPLATE-04 Один шаблон на площадку, группу и тип письма (⚠ без тестов)
+- R-NOTIF-TEMPLATE-05 Допустимые группы шаблонов — paid и social, типы — booking и cancel (⚠ без тестов)
+- R-NOTIF-TEMPLATE-06 Сохранение шаблона создаёт его или заменяет текст (⚠ без тестов)
+- R-NOTIF-TEMPLATE-07 Настройка шаблонов не ограничена ролью администратора (⚠ расхождение с требованием или открытый вопрос)
+- R-NOTIF-TYPES-01 Существует только два типа писем — booking и cancel (⚠ расхождение с требованием или открытый вопрос)

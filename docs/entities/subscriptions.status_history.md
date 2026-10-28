@@ -17,4 +17,4 @@
 - services/subscriptions/models.py::StatusChange:88 (orm_model)
 
 ## Правила
-- R-SUBSCRIPTIONS-STATUS-03 [draft] Журнал смены статусов абонемента пишет триггер БД
+- R-SUBSCRIPTIONS-STATUS-03 Журнал смены статусов абонемента пишет триггер БД (подкреплено кодом и тестами)

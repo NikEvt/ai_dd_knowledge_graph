@@ -22,4 +22,4 @@
 - services/partners/models.py::ContractHistory:112 (orm_model)
 
 ## Правила
-- R-PARTNERS-CONTRACT-07 [draft] Изменения условий договора журналируются триггером БД
+- R-PARTNERS-CONTRACT-07 Изменения условий договора журналируются триггером БД (подкреплено кодом и тестами)

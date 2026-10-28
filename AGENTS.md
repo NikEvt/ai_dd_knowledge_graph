@@ -21,9 +21,15 @@ uv run ruff check .           # линтер
 Связи здесь проходят по смыслу, а не по словам: смена площадки аннулирует счёт через событие,
 срок задаётся настройкой, запрет живёт в триггере БД. grep их пропускает. Поэтому есть граф знаний:
 
-- `knowledge/rules/*.yaml` — бизнес-правила со стабильными ID (`R-…`), статусом
-  (`verified` — проверено человеком, `draft` — извлечено LLM, `suspect` — код менялся после проверки),
-  ссылками на код (`path::symbol` + строки), ограничения БД, настройки и тесты;
+- `knowledge/requirements/*.md` — бизнес-требования (`REQ-…`): как должно быть. Правят люди (аналитик,
+  продукт); агент требования не меняет, а предлагает правку пользователю;
+- `knowledge/rules/*.yaml` — правила со стабильными ID (`R-…`): как устроено сейчас. Статус — этап ревью
+  (`verified` — проверено человеком, `draft` — извлечено LLM, `suspect` — код или требование менялись
+  после фиксации). Ссылки на код (`path::symbol` + строки), ограничения БД, настройки, тесты, связь с
+  требованиями: `satisfies` (реализует), `deviates_from` (расходится, с `note`), `caveats` (оговорки о коде);
+- достоверность правила считается при сборке (`tools/knowledge/trust.py`) и приходит в ответах MCP
+  словами: какое требование правило реализует, насколько ему верить и что делать — опереться, сверить
+  с кодом или уточнить у пользователя;
 - `knowledge/model/*.json` — слои, извлечённые детерминированно: `db` (реальная схема после
   миграций), `code` (символы, вызовы, ORM-таблицы, Depends, слушатели ORM, настройки, тесты),
   `events` (publish/subscribe, эффекты), `bpm` (этапы, переходы, guard'ы, код, выполняющий переход);
@@ -34,9 +40,10 @@ uv run ruff check .           # линтер
 
 | Инструмент | Когда |
 |---|---|
-| `find_entry(task_text)` | первым: формулировка задачи → узлы графа (правила, настройки, код, таблицы, события) |
+| `find_entry(task_text)` | первым: формулировка задачи → узлы графа (требования, правила, настройки, код, таблицы, события) |
 | `impact(node)` | context pack от узла: правила, переходы и guard'ы, события и подписчики в других сервисах, триггеры и CHECK, код, настройки, письма/чат, тесты (≈4000 токенов) |
-| `rule(id)` | полный текст правила, реализация, БД, тесты, drift |
+| `rule(id)` | карточка правила: почему (требования), как (текст), достоверность, где (код, БД, тесты) |
+| `requirement(id)` | бизнес-требование: текст, статус, правила, которые его реализуют или расходятся с ним |
 | `entity(name)` | карточка таблицы: поля, ограничения, триггеры, кто пишет, правила |
 | `who_can(action)` | роли и условия действия |
 
@@ -48,8 +55,10 @@ uv run ruff check .           # линтер
 
 1. Вызови `find_entry` с текстом задачи.
 2. Вызови `impact` для каждого найденного узла, относящегося к задаче.
-3. В плане явно перечисли затронутые правила по ID.
-   Если правило в статусе `draft` или `suspect` — отметь это как риск и сверь с кодом.
+3. В плане явно перечисли затронутые правила и бизнес-требования по ID. Следуй пометке у правила:
+   «сверь с кодом» — сверь, прежде чем опираться; «уточни у пользователя» (код расходится с
+   требованием или открыт вопрос D-xx) — вынеси вопрос пользователю, не решай сам.
+   Если задача — изменение бизнес-требования, начни с `requirement(REQ-…)` и `impact(REQ-…)`.
 4. Не читай файлы целиком, если `impact` указал конкретные символы и строки.
 5. Проверь неочевидные места: подписчиков событий в других сервисах, триггеры и CHECK в миграциях,
    условия в `bpm/application_process.yaml` и guard'ы (`@bpm.guard`), настройки (`libs/settings.py`
@@ -60,13 +69,14 @@ uv run ruff check .           # линтер
 
 5. Обнови аннотации `# @rule R-…` в изменённом коде (комментарий над функцией или внутри неё;
    символ должен быть в `implemented_by` правила, тест — в `tested_by`).
-6. Если изменилось поведение — предложи правку правила в `knowledge/rules/` (текст, ссылки, строки).
-   Статус `verified` ставит только человек.
+6. Если изменилось поведение — предложи правку правила в `knowledge/rules/` (текст, ссылки, строки,
+   `satisfies` / `deviates_from`). Требования в `knowledge/requirements/` не правь — предложи правку
+   пользователю. Статус `verified` ставит только человек: `tools/knowledge/verify_rule.py R-… --by <кто>`.
 7. Пересобери модель и проверь:
 
 ```bash
 uv run python tools/knowledge/build_index.py --all     # экстракторы (с БД) + индекс
-uv run python tools/knowledge/drift.py --write         # хэши; правила с изменённым кодом -> suspect
+uv run python tools/knowledge/drift.py --write         # хэши; изменился код или требование -> suspect
 uv run python tools/knowledge/check_rules.py           # ссылки правил и аннотации @rule
 uv run python tools/knowledge/render_docs.py           # docs/ и блок L0 ниже
 ```
@@ -101,5 +111,7 @@ args = ["run", "--quiet", "python", "mcp/knowledge_server.py"]
 
 События: `application.archived`, `application.closed_duplicate`, `application.ready_for_booking`, `application.review_passed`, `application.stage_changed`, `application.unarchived`, `application.venue_changed`, `booking.cancelled`, `booking.created`, `books.issued`, `client.updated`, `halls.booking_cancelled`, `halls.booking_confirmed`, `halls.booking_created`, `halls.booking_held`, `halls.booking_prepaid`, `halls.invoice_issued`, `halls.payment_received`, `halls.venue_changed`, `inventory.copy_damaged`, `inventory.copy_lost`, `inventory.copy_registered`, `inventory.copy_relocated`, `inventory.copy_written_off`, `inventory.ill_issued`, `inventory.ill_overdue`, `inventory.ill_penalty_accrued`, `inventory.ill_returned`, `inventory.partner_resumed`, `inventory.partner_suspended`, `inventory.transfer_cancelled`, `inventory.transfer_received`, `inventory.transfer_shipped`, `invoice.cancelled`, `invoice.issued`, `lectures.capacity_increased`, `lectures.event_cancelled`, `lectures.event_moved`, `lectures.registration_cancelled`, `lectures.registration_created`, `lectures.seat_released`, `lectures.venue_limit_changed`, `lectures.waitlist_expired`, `lectures.waitlist_promoted`, `loan.damaged`, `loan.lost`, `loan.overdue`, `marketing.campaign_finished`, `marketing.campaign_launched`, `marketing.campaign_prepared`, `marketing.message_bounced`, `marketing.unsubscribed`, `partners.commission_accrued`, `partners.contract_activated`, `partners.contract_expired`, `partners.contract_rate_changed`, `partners.contract_resumed`, `partners.contract_suspended`, `partners.contract_terminated`, `partners.credit_overdue`, `partners.deal_cancelled`, `partners.deal_closed`, `partners.deal_created`, `partners.deal_paid`, `partners.partner_onboarded`, `partners.payout_closed`, `partners.request_approved`, `partners.request_closed_duplicate`, `partners.request_rejected`, `partners.request_submitted`, `payment.fully_paid`, `payment.linked`, `payment.refunded`, `reports.definition_deactivated`, `reports.run_cancelled`, `reports.run_completed`, `reports.run_failed`, `reports.run_requested`, `staff.clearance_expired`, `staff.clearance_granted`, `staff.clearance_revoked`, `staff.employee_dismissed`, `staff.employee_hired`, `staff.employee_transferred`, `staff.employee_updated`, `staff.shift_member_removed`, `staff.shift_understaffed`, `subscriptions.activated`, `subscriptions.closed_duplicate`, `subscriptions.created`, `subscriptions.expired`, `subscriptions.grace_started`, `subscriptions.holder_rejected`, `subscriptions.holder_updated`, `subscriptions.invoice_issued`, `subscriptions.payment_completed`, `subscriptions.refund_required`, `subscriptions.renewed`, `venue.settings_changed`.
 
-Правил в модели: 478 (draft: 456, verified: 22).
+Правил в модели: 471 (draft: 449, verified: 22). По достоверности: расхождение с требованием или открытый вопрос — 62, без ссылок на код — 1, без тестов — 77, подкреплено кодом и тестами — 318, проверено человеком — 13.
+
+Бизнес-требований: 102 (утверждено: 0); без реализующих правил: 23.
 <!-- END L0 -->

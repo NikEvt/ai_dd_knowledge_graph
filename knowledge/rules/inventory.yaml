@@ -33,7 +33,8 @@ rules:
     hash: 3d87da916474
   tested_by:
   - tests/test_inventory_copies.py::test_worn_out_write_off_by_custodian_only
-  discrepancy: >
+  caveats:
+  - >
     В общей схеме роли «хранитель фонда» нет: в модели ролей проекта (operator, admin и т.д.) её тоже
     нет. Полномочия держатся только на таблице inventory.custodians, а employee_id приходит в теле запроса
     (custodian_id) и не сверяется с аутентифицированным пользователем.
@@ -58,7 +59,8 @@ rules:
   - services/inventory/service.py::INVENTORY_NO
   tested_by:
   - tests/test_inventory_copies.py::test_inventory_number_is_normalized_and_unique
-  discrepancy: >
+  caveats:
+  - >
     Формат номера проверяет только код. CHECK на inventory.copies.inventory_no нет, поэтому прямая запись
     в БД может сохранить номер в любом формате.
   status: draft
@@ -108,7 +110,8 @@ rules:
     hash: 5c4b50479016
   tested_by:
   - tests/test_inventory_copies.py::test_registered_copies_counted_in_stock
-  discrepancy: >
+  caveats:
+  - >
     В срезе графа у inventory.copy_registered и других событий остатка не указан публикатор: их публикует
     _stock_event(topic=…), и экстрактор такой вызов не распознаёт.
   status: draft
@@ -189,7 +192,8 @@ rules:
   tested_by:
   - tests/test_inventory_transfers.py::test_transfer_moves_copy_and_stock
   - tests/test_inventory_transfers.py::test_cancel_in_transit_returns_copy_to_shelf
-  discrepancy: >
+  caveats:
+  - >
     На inventory.copy_lost и inventory.copy_damaged on_stock_changed не подписан: остаток после утери
     или порчи пересчитывается только через последующее copy_written_off. Пока событие списания не обработано,
     total и available включают экземпляр в состоянии lost/damaged по старому значению.
@@ -242,7 +246,8 @@ rules:
     hash: 5ce28ba8bb8b
   tested_by:
   - tests/test_inventory_transfers.py::test_loaned_copy_cannot_change_venue_even_on_reconciliation
-  discrepancy: >
+  caveats:
+  - >
     Код проверяет только хранителя площадки назначения, площадку-источник не проверяет: хранитель любой
     площадки может «забрать» к себе экземпляр чужой. Состояние экземпляра код не проверяет, его блокирует
     только триггер БД. У функции нет HTTP-маршрута.
@@ -373,7 +378,8 @@ rules:
   - services/inventory/settings.py::MIN_COPIES_ON_VENUE
   tested_by:
   - tests/test_inventory_transfers.py::test_last_copy_stays_on_venue
-  discrepancy: >
+  caveats:
+  - >
     Текст ошибки «хотя бы один» зашит в код и не меняется вместе с MIN_COPIES_ON_VENUE. Учитываются только
     уже оформленные перемещения: два одновременных запроса по разным экземплярам могут вместе вывести
     площадку ниже минимума (ограничения в БД нет).
@@ -493,7 +499,8 @@ rules:
   - services/inventory/settings.py::TRANSFER_REQUEST_TTL_DAYS
   tested_by:
   - tests/test_inventory_transfers.py::test_stale_requests_expire
-  discrepancy: >
+  caveats:
+  - >
     В репозитории не найден планировщик, вызывающий jobs.py модуля inventory: задача запускается только
     из тестов. Для перемещений, застрявших в in_transit, таймера нет.
   status: draft
@@ -607,7 +614,8 @@ rules:
   - services/inventory/settings.py::ILL_LOAN_PERIOD_DAYS
   tested_by:
   - tests/test_inventory_ill.py::test_renewal_only_once_and_not_when_overdue
-  discrepancy: >
+  caveats:
+  - >
     Число продлений нигде не хранится: оно выводится из разницы due_at и issued_at. Поэтому смена ILL_LOAN_PERIOD_DAYS
     или ILL_RENEWAL_DAYS меняет лимит и для уже действующих выдач.
   status: draft
@@ -700,8 +708,8 @@ rules:
   - services/inventory/settings.py::ILL_LOST_COMPENSATION
   tested_by:
   - tests/test_inventory_ill.py::test_loss_by_partner_charges_and_suspends
-  discrepancy: >
-    Компенсация одинакова для любых изданий и партнёров и не зависит от стоимости книги.
+  caveats:
+  - Компенсация одинакова для любых изданий и партнёров и не зависит от стоимости книги.
   status: draft
 - id: R-INVENTORY-PENALTY-01
   title: Просрочка считается в начатых сутках
@@ -755,8 +763,8 @@ rules:
   tested_by:
   - tests/test_inventory_ill.py::test_overdue_flag_accrues_penalty
   - tests/test_inventory_ill.py::test_penalty_is_capped
-  discrepancy: >
-    В репозитории не найден планировщик, запускающий эту задачу: она вызывается только из тестов.
+  caveats:
+  - 'В репозитории не найден планировщик, запускающий эту задачу: она вызывается только из тестов.'
   status: draft
 - id: R-INVENTORY-PENALTY-03
   title: Пени по невозвращённым выдачам ежедневно пересчитываются
@@ -785,7 +793,8 @@ rules:
     hash: fa8d303c47d9
   tested_by:
   - tests/test_inventory_ill.py::test_overdue_flag_accrues_penalty
-  discrepancy: >
+  caveats:
+  - >
     В докстринге задача названа ежедневной, но расписание в коде не задано и планировщик в репозитории
     не найден.
   status: draft
@@ -877,7 +886,8 @@ rules:
   - symbol: services/inventory/service.py::charge_lost_copy
     lines: 491-495
     hash: 93f66119875b
-  discrepancy: >
+  caveats:
+  - >
     Если выдача просрочена, но flag_overdue_ill ещё не отработал, пеня за просрочку при утере не начисляется
     вовсе: on_ill_returned при утере не вызывается, а пени overdue ещё нет.
   status: draft
@@ -904,7 +914,8 @@ rules:
     hash: e4d204d4a8cf
   tested_by:
   - tests/test_inventory_ill.py::test_settling_debt_resumes_partner
-  discrepancy: >
+  caveats:
+  - >
     В settle_penalty нет проверки прав и HTTP-маршрута; связи с платежами billing нет, оплата отмечается
     прямым вызовом.
   status: draft
@@ -965,8 +976,8 @@ rules:
   - services/inventory/settings.py::ILL_PARTNER_DEBT_LIMIT
   tested_by:
   - tests/test_inventory_ill.py::test_loss_by_partner_charges_and_suspends
-  discrepancy: >
-    На inventory.partner_suspended нет подписчиков: никого не уведомляют.
+  caveats:
+  - 'На inventory.partner_suspended нет подписчиков: никого не уведомляют.'
   status: draft
 - id: R-INVENTORY-PARTNER-03
   title: Оплата пеней возобновляет выдачи, когда долг опускается до лимита
@@ -991,7 +1002,8 @@ rules:
   - services/inventory/settings.py::ILL_PARTNER_DEBT_LIMIT
   tested_by:
   - tests/test_inventory_ill.py::test_settling_debt_resumes_partner
-  discrepancy: >
+  caveats:
+  - >
     На inventory.partner_resumed нет подписчиков. Приостановка снимается только оплатой, другого пути
     (например, вручную) нет.
   status: draft

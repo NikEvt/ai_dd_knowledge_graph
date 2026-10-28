@@ -33413,6 +33413,96 @@
    "type": "test"
   },
   {
+   "end_line": 107,
+   "id": "tests/knowledge/test_trust.py::test_edge_notes",
+   "kind": "test",
+   "line": 103,
+   "name": "test_edge_notes",
+   "path": "tests/knowledge/test_trust.py",
+   "signature": "()",
+   "type": "test"
+  },
+  {
+   "end_line": 125,
+   "id": "tests/knowledge/test_trust.py::test_graph_has_requirements_and_trust",
+   "kind": "test",
+   "line": 117,
+   "name": "test_graph_has_requirements_and_trust",
+   "path": "tests/knowledge/test_trust.py",
+   "signature": "(g)",
+   "type": "test"
+  },
+  {
+   "end_line": 132,
+   "id": "tests/knowledge/test_trust.py::test_impact_from_requirement_reaches_code",
+   "kind": "test",
+   "line": 128,
+   "name": "test_impact_from_requirement_reaches_code",
+   "path": "tests/knowledge/test_trust.py",
+   "signature": "(g)",
+   "type": "test"
+  },
+  {
+   "end_line": 78,
+   "id": "tests/knowledge/test_trust.py::test_levels",
+   "kind": "test",
+   "line": 66,
+   "name": "test_levels",
+   "path": "tests/knowledge/test_trust.py",
+   "signature": "()",
+   "type": "test"
+  },
+  {
+   "end_line": 100,
+   "id": "tests/knowledge/test_trust.py::test_phrases_have_no_codes_and_say_what_to_do",
+   "kind": "test",
+   "line": 93,
+   "name": "test_phrases_have_no_codes_and_say_what_to_do",
+   "path": "tests/knowledge/test_trust.py",
+   "signature": "()",
+   "type": "test"
+  },
+  {
+   "end_line": 63,
+   "id": "tests/knowledge/test_trust.py::test_requirement_hash_ignores_formatting_only",
+   "kind": "test",
+   "line": 60,
+   "name": "test_requirement_hash_ignores_formatting_only",
+   "path": "tests/knowledge/test_trust.py",
+   "signature": "()",
+   "type": "test"
+  },
+  {
+   "end_line": 57,
+   "id": "tests/knowledge/test_trust.py::test_requirements_parse_meta_text_and_errors",
+   "kind": "test",
+   "line": 33,
+   "name": "test_requirements_parse_meta_text_and_errors",
+   "path": "tests/knowledge/test_trust.py",
+   "signature": "(tmp_path)",
+   "type": "test"
+  },
+  {
+   "end_line": 90,
+   "id": "tests/knowledge/test_trust.py::test_verification_is_bound_to_the_checked_version",
+   "kind": "test",
+   "line": 81,
+   "name": "test_verification_is_bound_to_the_checked_version",
+   "path": "tests/knowledge/test_trust.py",
+   "signature": "()",
+   "type": "test"
+  },
+  {
+   "end_line": 137,
+   "id": "tests/knowledge/test_trust.py::test_who_can_marks_role_guess",
+   "kind": "test",
+   "line": 135,
+   "name": "test_who_can_marks_role_guess",
+   "path": "tests/knowledge/test_trust.py",
+   "signature": "(g)",
+   "type": "test"
+  },
+  {
    "end_line": 67,
    "id": "tests/test_archive.py::test_paid_application_cannot_be_archived_by_operator_after_payment",
    "kind": "test",

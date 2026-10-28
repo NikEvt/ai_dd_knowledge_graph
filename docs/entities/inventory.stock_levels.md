@@ -19,4 +19,4 @@
 - services/inventory/models.py::StockLevel:111 (orm_model)
 
 ## Правила
-- R-INVENTORY-STOCK-03 [draft] Остатки в БД неотрицательны, и доступных не больше общего числа
+- R-INVENTORY-STOCK-03 Остатки в БД неотрицательны, и доступных не больше общего числа (⚠ без тестов)

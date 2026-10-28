@@ -1,0 +1,4 @@
+[submodule "vendor/memgraph"]
+	path = vendor/memgraph
+	url = https://github.com/memgraph/memgraph.git
+	shallow = true
