@@ -28,7 +28,9 @@ rules:
   tested_by:
   - tests/test_chat_api.py::test_operator_posts_and_reads
   - tests/test_chat_api.py::test_outsider_cannot_post
-  schema_ref: §15 Чат заявки
+  satisfies:
+  - requirement: REQ-CHAT-02
+    hash: 48152a6c69f5
   status: draft
 - id: R-CHAT-PARTICIPANTS-02
   title: Доступ к чату следует за текущим закреплением сотрудника
@@ -49,7 +51,11 @@ rules:
   - symbol: services/chat/service.py::participants
     lines: 16-21
     hash: bb500ee14bc3
-  schema_ref: §15 Чат заявки
+  satisfies:
+  - requirement: REQ-CHAT-02
+    hash: 48152a6c69f5
+  - requirement: REQ-ROLE-02
+    hash: 7d666f5f795f
   status: draft
 - id: R-CHAT-POST-01
   title: После закрытия заявки писать в чат нельзя
@@ -73,9 +79,12 @@ rules:
   - symbol: services/chat/service.py::post_message
     lines: 26-28
     hash: 201ddba10869
-  schema_ref: §15 Чат заявки
+  satisfies:
+  - requirement: REQ-CHAT-06
+    hash: 2bdeae4a7d3a
   status: verified
   verified_at: '2026-10-23'
+  verified_fingerprint: 035b09783f42
 - id: R-CHAT-POST-02
   title: Писать в чат могут только закреплённые за заявкой сотрудники
   text: >
@@ -107,7 +116,9 @@ rules:
   tested_by:
   - tests/test_chat_api.py::test_outsider_cannot_post
   - tests/test_chat_api.py::test_operator_posts_and_reads
-  schema_ref: '§17 Сводная таблица: кто что может'
+  satisfies:
+  - requirement: REQ-CHAT-02
+    hash: 48152a6c69f5
   status: draft
 - id: R-CHAT-POST-03
   title: Сообщение сотрудника записывается как обычное, с автором и временем
@@ -136,10 +147,11 @@ rules:
     hash: e20257837c74
   tested_by:
   - tests/test_chat_api.py::test_operator_posts_and_reads
-  schema_ref: §15 Чат заявки
-  discrepancy: >
-    Схема: к сообщениям можно прикреплять файлы. Код: у сообщения есть только текст (body), поддержки
-    вложений нет ни в модели, ни в API.
+  deviates_from:
+  - requirement: REQ-CHAT-05
+    note: >
+      Схема: к сообщениям можно прикреплять файлы. Код: у сообщения есть только текст (body), поддержки
+      вложений нет ни в модели, ни в API.
   status: draft
 - id: R-CHAT-READ-01
   title: Главный бухгалтер и руководитель проверяющих не видят чат
@@ -165,7 +177,9 @@ rules:
   - services/chat/service.py::NO_CHAT_ROLES
   tested_by:
   - tests/test_chat_api.py::test_admin_reads_chief_accountant_does_not
-  schema_ref: §15 Чат заявки
+  satisfies:
+  - requirement: REQ-CHAT-03
+    hash: 1afd36296ceb
   status: draft
 - id: R-CHAT-READ-02
   title: Чат видят участники заявки и администратор
@@ -200,7 +214,9 @@ rules:
   - tests/test_chat_api.py::test_admin_reads_chief_accountant_does_not
   - tests/test_chat_api.py::test_operator_posts_and_reads
   - tests/test_chat_api.py::test_stage_changes_appear_in_chat
-  schema_ref: §15 Чат заявки
+  satisfies:
+  - requirement: REQ-CHAT-03
+    hash: 1afd36296ceb
   status: draft
 - id: R-CHAT-READ-03
   title: Один чат на заявку, общий для всех попыток, в порядке создания
@@ -222,7 +238,9 @@ rules:
     hash: cdd465085f6e
   tested_by:
   - tests/test_chat_api.py::test_operator_posts_and_reads
-  schema_ref: §15 Чат заявки
+  satisfies:
+  - requirement: REQ-CHAT-01
+    hash: 800ff842a023
   status: draft
 - id: R-CHAT-READ-04
   title: Администратор чат только читает
@@ -247,7 +265,9 @@ rules:
     hash: 201ddba10869
   tested_by:
   - tests/test_chat_api.py::test_admin_reads_chief_accountant_does_not
-  schema_ref: §3 Администратор
+  satisfies:
+  - requirement: REQ-CHAT-03
+    hash: 1afd36296ceb
   status: draft
 - id: R-CHAT-AUTH-01
   title: Личность и роль в API чата берутся из параметров запроса без проверки
@@ -270,9 +290,11 @@ rules:
   - symbol: services/chat/api.py::post
     lines: 40-41
     hash: ecd0dec2ae00
-  discrepancy: >
-    Схема: доступ к чату определяется ролью сотрудника и закреплением за заявкой. Код: роль приходит от
-    клиента API — если передать role=admin, проверка участника для чтения отключается.
+  deviates_from:
+  - requirement: REQ-CHAT-03
+    note: >
+      Схема: доступ к чату определяется ролью сотрудника и закреплением за заявкой. Код: роль приходит
+      от клиента API — если передать role=admin, проверка участника для чтения отключается.
   status: draft
 - id: R-CHAT-CONFIG-01
   title: Список ролей без доступа к чату задан константой NO_CHAT_ROLES
@@ -322,6 +344,7 @@ rules:
     hash: e20257837c74
   status: verified
   verified_at: '2026-10-23'
+  verified_fingerprint: 1fdb54de2279
 - id: R-CHAT-DB-02
   title: Сообщения чата нельзя редактировать и удалять (триггер БД)
   text: >
@@ -337,7 +360,9 @@ rules:
     hash: d83d76e532f3
   - constraint: forbid_message_changes
     hash: d67e5f27ecc8
-  schema_ref: §15 Чат заявки
+  satisfies:
+  - requirement: REQ-CHAT-05
+    hash: f906492a2e06
   status: draft
 - id: R-CHAT-EVENTS-01
   title: 11 топиков из EVENT_TEXT автоматически пишутся в чат системными сообщениями
@@ -376,9 +401,12 @@ rules:
   - services/chat/consumers.py::EVENT_TEXT
   tested_by:
   - tests/test_chat_api.py::test_stage_changes_appear_in_chat
-  schema_ref: §15 Чат заявки
+  satisfies:
+  - requirement: REQ-CHAT-04
+    hash: f2a67fe36b6b
   status: verified
   verified_at: '2026-10-23'
+  verified_fingerprint: f722bf93d1ae
 - id: R-CHAT-CONFIG-02
   title: Набор событий для чата и их тексты заданы словарём EVENT_TEXT
   text: >
@@ -431,7 +459,9 @@ rules:
   - services/chat/consumers.py::EVENT_TEXT
   tested_by:
   - tests/test_chat_api.py::test_stage_changes_appear_in_chat
-  schema_ref: §15 Чат заявки
+  satisfies:
+  - requirement: REQ-CHAT-04
+    hash: f2a67fe36b6b
   status: draft
 - id: R-CHAT-EVENTS-03
   title: Смена площадки, архив, возврат из архива и закрытие как дубль пишутся в чат
@@ -457,9 +487,12 @@ rules:
     hash: f46c9b143853
   config:
   - services/chat/consumers.py::EVENT_TEXT
-  schema_ref: §15 Чат заявки
+  satisfies:
+  - requirement: REQ-CHAT-04
+    hash: f2a67fe36b6b
   status: verified
   verified_at: '2026-10-23'
+  verified_fingerprint: 81b08e87428d
 - id: R-CHAT-EVENTS-04
   title: Выставление и аннулирование счёта и привязка платежа пишутся в чат
   text: >
@@ -482,7 +515,9 @@ rules:
     hash: f46c9b143853
   config:
   - services/chat/consumers.py::EVENT_TEXT
-  schema_ref: §15 Чат заявки
+  satisfies:
+  - requirement: REQ-CHAT-04
+    hash: f2a67fe36b6b
   status: draft
 - id: R-CHAT-EVENTS-05
   title: События пишутся в чат и после закрытия заявки
@@ -528,12 +563,14 @@ rules:
     hash: f46c9b143853
   config:
   - services/chat/consumers.py::EVENT_TEXT
-  schema_ref: §15 Чат заявки
-  discrepancy: >
-    Схема называет перенос и неявку отдельными событиями чата. Код: перенос не отличить от отмены с новой
-    записью, неявка показывается кодом причины «no_show» внутри текста об отмене.
+  deviates_from:
+  - requirement: REQ-CHAT-04
+    note: >
+      Схема называет перенос и неявку отдельными событиями чата. Код: перенос не отличить от отмены с
+      новой записью, неявка показывается кодом причины «no_show» внутри текста об отмене.
   status: verified
   verified_at: '2026-10-23'
+  verified_fingerprint: 3eccd48bbbf4
 - id: R-CHAT-EVENTS-07
   title: Часть событий заявки в чат не попадает
   text: >
@@ -556,10 +593,11 @@ rules:
     hash: 5226d3aa3215
   config:
   - services/chat/consumers.py::EVENT_TEXT
-  schema_ref: §15 Чат заявки
-  discrepancy: >
-    Схема: в чат автоматически попадают все события заявки, включая назначения и платежи. Код: назначения,
-    возврат и отвязка платежа, порча и утеря книг в чате не фиксируются.
+  deviates_from:
+  - requirement: REQ-CHAT-04
+    note: >
+      Схема: в чат автоматически попадают все события заявки, включая назначения и платежи. Код: назначения,
+      возврат и отвязка платежа, порча и утеря книг в чате не фиксируются.
   status: draft
 - id: R-CHAT-EVENTS-08
   title: Срыв срока возврата книги пишется в чат
@@ -586,5 +624,7 @@ rules:
     hash: f46c9b143853
   config:
   - services/chat/consumers.py::EVENT_TEXT
-  schema_ref: §15 Чат заявки
+  satisfies:
+  - requirement: REQ-CHAT-04
+    hash: f2a67fe36b6b
   status: draft

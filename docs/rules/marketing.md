@@ -8,6 +8,8 @@
 
 `draft` · permission
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 3 тестами
+
 Любое действие с аудиториями, шаблонами, кампаниями и письмами (создание, архив, добавление адресов, планирование, отмена, запуск, отчёт, просмотр писем, тестовое письмо) требует записи в marketing.managers: менеджер этой площадки (venue_id = площадка) или менеджер сети (venue_id IS NULL), который допущен ко всем площадкам. Иначе AccessDenied «менеджер не ведёт рассылки этой площадки» (HTTP 403). Менеджера рассылок нет в общей модели ролей: права задаются только таблицей marketing.managers.
 
 - Реализация: [`services/marketing/service.py::_require_manager:50-58`](../../services/marketing/service.py#L50), [`services/marketing/service.py::_campaign_for:261-266`](../../services/marketing/service.py#L261)
@@ -18,6 +20,8 @@
 
 `draft` · permission
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
+
 Шаблон без площадки (venue_id = NULL, шаблон сети по умолчанию) может создать или изменить только менеджер сети (строка marketing.managers без venue_id); менеджер площадки получает AccessDenied «шаблоны сети задаёт только менеджер сети». Проверка в _require_manager при вызове из set_template.
 
 - Реализация: [`services/marketing/service.py::_require_manager:55-57`](../../services/marketing/service.py#L55), [`services/marketing/service.py::set_template:165-165`](../../services/marketing/service.py#L165)
@@ -27,6 +31,8 @@
 ## R-MARKETING-ACCESS-03 — Отписка и регистрация возврата письма доступны без проверки менеджера
 
 `draft` · permission
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
 
 Эндпоинты POST /marketing/unsubscribe и POST /marketing/messages/{id}/bounce не принимают manager_id и не проверяют права. Отписка через API всегда записывается с причиной reader (причину передать нельзя), venue_id необязателен — без него адрес отписывается от всей сети.
 
@@ -39,6 +45,8 @@
 
 `draft` · invariant
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, есть код, нет тестов — сверь с кодом
+
 Один manager_id может быть только одной строкой менеджера сети (managers_network_uq, venue_id IS NULL) и только одной строкой на каждую площадку (managers_venue_uq). add_manager сам ничего не проверяет и в API не выставлен; дубль отсекает только БД.
 
 - Реализация: [`services/marketing/service.py::add_manager:41-47`](../../services/marketing/service.py#L41)
@@ -49,6 +57,8 @@
 
 `draft` · guard
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 2 тестами
+
 При создании аудитории название обрезается по краям пробелов; пустое — DomainError «у аудитории должно быть название», уже занятое на этой площадке (точное совпадение с учётом регистра) — DomainError «на площадке уже есть аудитория …». БД дублирует обе проверки (CHECK на trim(name) и UNIQUE (venue_id, name)).
 
 - Реализация: [`services/marketing/service.py::create_audience:66-73`](../../services/marketing/service.py#L66)
@@ -58,6 +68,8 @@
 ## R-MARKETING-AUDIENCE-02 — Нельзя архивировать аудиторию с запланированной или идущей кампанией
 
 `draft` · guard
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 2 тестами
 
 archive_audience запрещает архив, если по аудитории есть кампании в статусах scheduled, preparing или sending (DomainError «по аудитории есть незавершённые кампании»). Черновики (draft) архиву не мешают и остаются, но запустить их после архива нельзя. После отмены запланированной кампании архив разрешён.
 
@@ -70,6 +82,8 @@ archive_audience запрещает архив, если по аудитории
 
 `draft` · guard
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
+
 Если аудитория в архиве, add_member, create_campaign и start (ручной запуск и запуск по расписанию) отклоняют действие с DomainError «аудитория в архиве». Ограничение только в коде, в БД его нет.
 
 - Реализация: [`services/marketing/service.py::add_member:124-125`](../../services/marketing/service.py#L124), [`services/marketing/service.py::create_campaign:237-238`](../../services/marketing/service.py#L237), [`services/marketing/service.py::start:299-300`](../../services/marketing/service.py#L299)
@@ -79,6 +93,8 @@ archive_audience запрещает архив, если по аудитории
 ## R-MARKETING-MEMBER-01 — Сегмент читателя ограничен списком из настройки AUDIENCE_GROUP
 
 `draft` · guard
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 1 тестом
 
 При добавлении адреса сегмент должен быть ключом AUDIENCE_GROUP (paid, debt, social, vip, corporate), иначе DomainError «неизвестный сегмент читателя». Тот же список захардкожен в CHECK audience_members_segment_check: при добавлении сегмента в настройку нужна миграция.
 
@@ -92,6 +108,8 @@ archive_audience запрещает архив, если по аудитории
 
 `draft` · config
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, есть код, нет тестов — сверь с кодом
+
 add_member отклоняет новый адрес, если в аудитории уже MAX_AUDIENCE_SIZE (5000) записей. В счёт входят и отписавшиеся (opted_out) участники, которые писем уже не получают. В БД лимита нет.
 
 - Реализация: [`services/marketing/service.py::add_member:129-131`](../../services/marketing/service.py#L129)
@@ -100,6 +118,8 @@ add_member отклоняет новый адрес, если в аудитор�
 ## R-MARKETING-MEMBER-03 — Адрес встречается в аудитории один раз
 
 `draft` · invariant
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 1 тестом
 
 После нормализации адрес не может повторяться внутри аудитории: код отвечает DomainError «адрес уже есть в аудитории», БД держит уникальный индекс (audience_id, email). Один адрес может быть в разных аудиториях.
 
@@ -112,6 +132,8 @@ add_member отклоняет новый адрес, если в аудитор�
 
 `draft` · guard
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
+
 add_member отклоняет адрес, если для него есть отписка от всей сети или от площадки аудитории (DomainError «адрес отписан от рассылок площадки»). Отписка от другой площадки добавлению не мешает.
 
 - Реализация: [`services/marketing/service.py::add_member:139-140`](../../services/marketing/service.py#L139), [`services/marketing/service.py::is_unsubscribed:101-110`](../../services/marketing/service.py#L101)
@@ -121,6 +143,8 @@ add_member отклоняет адрес, если для него есть от
 ## R-MARKETING-EMAIL-01 — Адреса хранятся в нижнем регистре без пробелов и с «@» не в начале
 
 `draft` · invariant
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 3 тестами
 
 normalize_email обрезает пробелы, переводит адрес в нижний регистр и отклоняет адрес без «@» после первого символа. БД дублирует нормализацию триггерами audience_members_normalize_email и unsubscriptions_normalize_email (функция normalize_email), формат — CHECK audience_members_email_check. У marketing.sent_messages триггера нормализации нет.
 
@@ -133,6 +157,8 @@ normalize_email обрезает пробелы, переводит адрес �
 
 `draft` · config
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
+
 Шаблоны заводятся на группу аудитории, а не на сегмент: AUDIENCE_GROUP отображает corporate, debt и paid в группу paid, social — в social, vip — в vip. Поэтому шаблон группы paid получают все платные сегменты.
 
 - Реализация: [`services/marketing/service.py::find_template:194-195`](../../services/marketing/service.py#L194)
@@ -143,6 +169,8 @@ normalize_email обрезает пробелы, переводит адрес �
 ## R-MARKETING-TEMPLATE-02 — Порядок поиска шаблона: площадка, сеть, затем запасная группа paid
 
 `draft` · calculation
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 2 тестами
 
 Для сегмента читателя и типа кампании find_template ищет шаблон в таком порядке: шаблон площадки для группы читателя, шаблон сети для этой группы, затем шаблон площадки и шаблон сети для FALLBACK_GROUP (paid). Если сегмент неизвестен, берётся сразу группа paid. Если ничего не нашлось, возвращается None: при подготовке рассылки письмо пропускается, для тестового письма возникает ошибка.
 
@@ -156,6 +184,8 @@ normalize_email обрезает пробелы, переводит адрес �
 
 `draft` · guard
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 2 тестами
+
 set_template принимает только группу из значений AUDIENCE_GROUP (paid, social, vip; сегмент, например debt, отклоняется), тип из CAMPAIGN_TYPES (newsletter, event, promo), текст не из одних пробелов и не длиннее MAX_TEMPLATE_LENGTH (10000). В БД есть CHECK на группу (список захардкожен) и на length(body) > 0 (пробельный текст БД пропустит). Тип кампании и длину шаблона БД не проверяет.
 
 - Реализация: [`services/marketing/service.py::set_template:166-173`](../../services/marketing/service.py#L166)
@@ -168,6 +198,8 @@ set_template принимает только группу из значений 
 
 `draft` · invariant
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 1 тестом
+
 set_template работает как upsert: если шаблон для (площадка или сеть, группа, тип) уже есть, меняются его body и updated_at, иначе создаётся новый. В БД уникальность держат UNIQUE (venue_id, audience_group, type) и частичный индекс campaign_templates_default_uq для шаблонов сети, потому что NULL в UNIQUE не сравниваются.
 
 - Реализация: [`services/marketing/service.py::set_template:175-186`](../../services/marketing/service.py#L175)
@@ -179,6 +211,8 @@ set_template работает как upsert: если шаблон для (пл�
 
 `draft` · calculation
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 2 тестами
+
 Текст письма получается из шаблона через string.Template.safe_substitute с переменными full_name, email и subject (тема кампании). Неизвестные плейсхолдеры остаются в тексте как есть, ошибки нет. Так готовятся и письма кампании, и тестовые письма.
 
 - Реализация: [`services/marketing/service.py::render:34-35`](../../services/marketing/service.py#L34), [`services/marketing/service.py::prepare_messages:369-372`](../../services/marketing/service.py#L369), [`services/marketing/service.py::send_test_message:481-481`](../../services/marketing/service.py#L481)
@@ -189,6 +223,8 @@ set_template работает как upsert: если шаблон для (пл�
 ## R-MARKETING-CAMPAIGN-01 — Кампания создаётся с известным типом и темой, в статусе draft или scheduled
 
 `draft` · guard
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 1 тестом
 
 create_campaign требует тип из CAMPAIGN_TYPES и непустую тему (после обрезки пробелов). Если задано scheduled_at, оно проверяется по окну планирования и кампания получает статус scheduled, иначе draft. Площадка кампании берётся из аудитории. Наличие шаблона при создании не проверяется, а тип кампании в БД не ограничен.
 
@@ -202,6 +238,8 @@ create_campaign требует тип из CAMPAIGN_TYPES и непустую т
 
 `draft` · guard
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 1 тестом
+
 При создании с датой и при переносе время запуска должно быть позже текущего («нельзя запланировать кампанию на прошедшее время») и не дальше MAX_SCHEDULE_AHEAD_DAYS (90) дней от текущего момента. В БД CHECK campaigns_check требует scheduled_at у кампании в статусе scheduled; само окно планирования БД не проверяет.
 
 - Реализация: [`services/marketing/service.py::_check_schedule:216-223`](../../services/marketing/service.py#L216), [`services/marketing/service.py::create_campaign:244-245`](../../services/marketing/service.py#L244), [`services/marketing/service.py::schedule_campaign:275-277`](../../services/marketing/service.py#L275)
@@ -214,6 +252,8 @@ create_campaign требует тип из CAMPAIGN_TYPES и непустую т
 
 `draft` · guard
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 2 тестами
+
 schedule_campaign и cancel_campaign разрешены только в статусах draft и scheduled (NOT_STARTED). Перенос переводит кампанию в scheduled с новой датой, в том числе из draft; отмена — в cancelled. Для запущенной или завершённой кампании — DomainError «…только кампанию, которая ещё не запущена».
 
 - Реализация: [`services/marketing/service.py::schedule_campaign:273-277`](../../services/marketing/service.py#L273), [`services/marketing/service.py::cancel_campaign:283-285`](../../services/marketing/service.py#L283)
@@ -224,6 +264,8 @@ schedule_campaign и cancel_campaign разрешены только в стат
 ## R-MARKETING-CAMPAIGN-04 — Отправленная или отменённая кампания больше не меняет статус
 
 `draft` · invariant
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 2 тестами
 
 Жизненный цикл кампании: draft/scheduled → preparing → sending → sent, или draft/scheduled → cancelled. Допустимые статусы задаёт CHECK campaigns_status_check. Триггер campaigns_guard_status запрещает менять статус из sent и cancelled («кампания % уже в статусе %») даже прямым SQL.
 
@@ -237,6 +279,8 @@ schedule_campaign и cancel_campaign разрешены только в стат
 
 `draft` · guard
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 2 тестами
+
 start запускает кампанию только при выполнении всех условий: статус draft или scheduled, аудитория не в архиве, по аудитории не идёт другая кампания, выдержана пауза MIN_DAYS_BETWEEN_CAMPAIGNS и есть хотя бы один не отписавшийся участник. Тогда кампания переходит в preparing, получает launched_at и публикует marketing.campaign_launched. Через start идут и ручной запуск (launch_campaign), и запуск по расписанию.
 
 - Реализация: [`services/marketing/service.py::start:295-327`](../../services/marketing/service.py#L295), [`services/marketing/service.py::launch_campaign:289-292`](../../services/marketing/service.py#L289)
@@ -247,6 +291,8 @@ start запускает кампанию только при выполнени
 ## R-MARKETING-LAUNCH-02 — По аудитории одновременно идёт не больше одной кампании
 
 `draft` · invariant
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 1 тестом
 
 start отклоняет запуск, если у аудитории уже есть другая кампания в статусе preparing или sending (DomainError «по аудитории уже идёт другая кампания»). БД дублирует проверку частичным уникальным индексом campaigns_audience_active_uq по audience_id для статусов preparing и sending.
 
@@ -260,6 +306,8 @@ start отклоняет запуск, если у аудитории уже е�
 
 `draft` · timer
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 2 тестами
+
 Кампанию нельзя запустить, если с last_campaign_at аудитории прошло меньше MIN_DAYS_BETWEEN_CAMPAIGNS (3) дней. last_campaign_at выставляет summarize_campaign (подписчик marketing.campaign_finished) равным finished_at завершённой кампании, а не времени запуска. Отменённые кампании паузу не сдвигают.
 
 - Реализация: [`services/marketing/service.py::start:308-312`](../../services/marketing/service.py#L308), [`services/marketing/service.py::summarize_campaign:416-418`](../../services/marketing/service.py#L416)
@@ -272,6 +320,8 @@ start отклоняет запуск, если у аудитории уже е�
 
 `draft` · guard
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, есть код, нет тестов — сверь с кодом
+
 launch_campaign вызывает start без сравнения с scheduled_at: кампания в статусе scheduled запускается вручную сразу. Срок планирования соблюдает только фоновая задача launch_due.
 
 - Реализация: [`services/marketing/service.py::launch_campaign:289-292`](../../services/marketing/service.py#L289), [`services/marketing/service.py::start:296-297`](../../services/marketing/service.py#L296)
@@ -281,6 +331,8 @@ launch_campaign вызывает start без сравнения с scheduled_at
 ## R-MARKETING-LAUNCH-05 — Фоновая задача запускает наступившие запланированные кампании, неудачные ждут следующего прогона
 
 `draft` · timer
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 1 тестом
 
 launch_due выбирает кампании в статусе scheduled с scheduled_at <= now (по возрастанию времени, со SKIP LOCKED) и запускает каждую через start во вложенной транзакции. Если запуск не прошёл (DomainError: пауза, идёт другая кампания, нет адресов), кампания остаётся scheduled и повторяется при каждом следующем прогоне без ограничения числа попыток и без уведомления менеджера.
 
@@ -294,6 +346,8 @@ launch_due выбирает кампании в статусе scheduled с sche
 
 `draft` · effect
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
+
 Кампания проходит три асинхронных шага внутри модуля: marketing.campaign_launched → prepare_messages (preparing → sending, публикует marketing.campaign_prepared) → deliver_messages (sending → sent, публикует marketing.campaign_finished) → summarize_campaign. Каждый шаг берёт кампанию с блокировкой FOR UPDATE и молча завершается, если статус уже не тот. Других подписчиков в других сервисах у событий нет.
 
 - Реализация: [`services/marketing/consumers.py::on_campaign_launched:10-11`](../../services/marketing/consumers.py#L10), [`services/marketing/consumers.py::on_campaign_prepared:15-16`](../../services/marketing/consumers.py#L15), [`services/marketing/consumers.py::on_campaign_finished:20-21`](../../services/marketing/consumers.py#L20), [`services/marketing/service.py::prepare_messages:332-334`](../../services/marketing/service.py#L332)
@@ -304,6 +358,8 @@ launch_due выбирает кампании в статусе scheduled с sche
 ## R-MARKETING-PREPARE-02 — Письма при подготовке: отписавшиеся не входят, отписанные и без шаблона пропускаются
 
 `draft` · effect
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 3 тестами
 
 prepare_messages создаёт письмо на каждого участника аудитории с opted_out = false; участники с opted_out не попадают ни в письма, ни в recipients_count. Если адрес отписан от сети или от площадки кампании, письмо получает статус skipped с причиной unsubscribed. Если для сегмента нет шаблона — skipped с причиной no_template. Остальные письма ставятся в queued с текстом по шаблону. recipients_count равен числу неотписавшихся участников.
 
@@ -317,6 +373,8 @@ prepare_messages создаёт письмо на каждого участни�
 
 `draft` · effect
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 1 тестом
+
 deliver_messages (подписчик marketing.campaign_prepared) одним UPDATE переводит все письма кампании из queued в sent с одним sent_at, ставит кампании статус sent и finished_at и публикует marketing.campaign_finished. Реальной отправки и поштучной обработки ошибок доставки нет. О проблемах доставки система узнаёт только из возвратов (bounce), зарегистрированных позже.
 
 - Реализация: [`services/marketing/consumers.py::on_campaign_prepared:15-16`](../../services/marketing/consumers.py#L15), [`services/marketing/service.py::deliver_messages:384-398`](../../services/marketing/service.py#L384)
@@ -328,6 +386,8 @@ deliver_messages (подписчик marketing.campaign_prepared) одним UPD
 ## R-MARKETING-REPORT-01 — Итоги кампании: sent_count — отправленные вместе с возвратами, skipped_count — пропущенные
 
 `draft` · calculation
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 3 тестами
 
 summarize_campaign (подписчик marketing.campaign_finished) считает письма кампании без тестовых: sent_count = sent + bounced, skipped_count = skipped. Счётчики считаются один раз при завершении, поэтому возвраты, зарегистрированные позже, их не меняют. Заодно обновляется last_campaign_at аудитории. Неотрицательность счётчиков обеспечивают CHECK в БД.
 
@@ -341,6 +401,8 @@ summarize_campaign (подписчик marketing.campaign_finished) считае
 
 `draft` · calculation
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
+
 campaign_report возвращает кампанию и число пропущенных писем по причинам skip_reason (unsubscribed, no_template) без тестовых писем. Доступен менеджеру площадки кампании или менеджеру сети.
 
 - Реализация: [`services/marketing/service.py::campaign_report:426-438`](../../services/marketing/service.py#L426)
@@ -351,6 +413,8 @@ campaign_report возвращает кампанию и число пропущ
 
 `draft` · invariant
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено ограничением БД и 1 тестом
+
 Триггер sent_messages_freeze_body запрещает менять body письма, у которого заполнен sent_at («письмо % уже отправлено, текст менять нельзя»). CHECK sent_messages_check требует sent_at у писем в статусах sent и bounced, CHECK sent_messages_status_check ограничивает статусы значениями queued, sent, skipped, bounced. В коде этих проверок нет: защищает только БД.
 
 - БД: `sent_messages_check`, `sent_messages_status_check`
@@ -360,6 +424,8 @@ campaign_report возвращает кампанию и число пропущ
 ## R-MARKETING-TEST-01 — Тестовые письма — только до запуска, не больше MAX_TEST_MESSAGES и только при наличии шаблона
 
 `draft` · guard
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 2 тестами
 
 send_test_message разрешён для кампании в статусе draft или scheduled, с известным сегментом (по умолчанию paid), не больше MAX_TEST_MESSAGES (5) на кампанию. Если шаблон не найден, возникает DomainError «для этого сегмента нет шаблона письма». Письмо сразу сохраняется со статусом sent и is_test = true. Тестовые письма выводятся в списке писем кампании вместе с настоящими.
 
@@ -372,6 +438,8 @@ send_test_message разрешён для кампании в статусе dra
 
 `draft` · invariant
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, есть код, нет тестов — сверь с кодом
+
 Письма с is_test = true не учитываются в sent_count и skipped_count, в отчёте о пропусках и в подсчёте возвратов. Регистрация возврата по ним запрещена. Уникальный индекс (campaign_id, email) действует только для нетестовых писем, поэтому тестовое письмо можно отправить на адрес из аудитории.
 
 - Реализация: [`services/marketing/service.py::summarize_campaign:407-410`](../../services/marketing/service.py#L407), [`services/marketing/service.py::campaign_report:429-435`](../../services/marketing/service.py#L429), [`services/marketing/service.py::register_bounce:496-497`](../../services/marketing/service.py#L496), [`services/marketing/service.py::handle_bounce:508-512`](../../services/marketing/service.py#L508)
@@ -381,6 +449,8 @@ send_test_message разрешён для кампании в статусе dra
 ## R-MARKETING-TEST-03 — Тестовые письма удаляются через TEST_MESSAGE_TTL_DAYS после отправки
 
 `draft` · timer
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
 
 Фоновая задача purge_test_messages физически удаляет тестовые письма, у которых sent_at раньше now − TEST_MESSAGE_TTL_DAYS (14 дней). Письма кампании не удаляются.
 
@@ -394,6 +464,8 @@ send_test_message разрешён для кампании в статусе dra
 
 `draft` · guard
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 2 тестами
+
 register_bounce принимает только нетестовое письмо в статусе sent. Повторный возврат по тому же письму и возврат по тестовому, пропущенному или ещё не отправленному письму отклоняются с DomainError «возврат возможен только по отправленному письму кампании». Письмо переходит в bounced, публикуется marketing.message_bounced.
 
 - Реализация: [`services/marketing/service.py::register_bounce:496-503`](../../services/marketing/service.py#L496)
@@ -404,6 +476,8 @@ register_bounce принимает только нетестовое письм�
 ## R-MARKETING-BOUNCE-02 — После BOUNCE_LIMIT возвратов адрес отписывается от всех рассылок сети
 
 `draft` · effect
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
 
 handle_bounce (подписчик marketing.message_bounced) считает все нетестовые письма адреса в статусе bounced по всем кампаниям и площадкам без ограничения по времени. Когда их становится BOUNCE_LIMIT (3) или больше, адрес отписывается от всей сети (venue_id = NULL) с причиной bounce. Это публикует marketing.unsubscribed и исключает адрес из аудиторий.
 
@@ -416,6 +490,8 @@ handle_bounce (подписчик marketing.message_bounced) считает вс
 ## R-MARKETING-UNSUBSCRIBE-01 — Отписка от площадки или сети идемпотентна и требует известной причины
 
 `draft` · guard
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 2 тестами
 
 unsubscribe принимает причину из UNSUBSCRIBE_REASONS (reader, bounce, complaint, operator) и нормализует адрес. Если адрес уже отписан от всей сети или от этой площадки, возвращается существующая отписка без нового события. Иначе создаётся запись (venue_id = NULL — от всей сети) и публикуется marketing.unsubscribed. Отписка от площадки не мешает последующей отписке от сети. Список причин продублирован в CHECK БД, уникальность держат частичные индексы для сети и для площадки.
 
@@ -430,6 +506,8 @@ unsubscribe принимает причину из UNSUBSCRIBE_REASONS (reader, 
 
 `draft` · effect
 
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом, ограничением БД и 2 тестами
+
 exclude_address (подписчик marketing.unsubscribed) ставит opted_out = true во всех аудиториях площадки отписки, а при отписке от сети — во всех аудиториях. Письма адреса в статусе queued в кампаниях, которые сейчас идут (preparing, sending), переводятся в skipped с причиной unsubscribed. Уже отправленные письма не меняются. Способа вернуть opted_out = false в коде нет.
 
 - Реализация: [`services/marketing/consumers.py::on_unsubscribed:25-26`](../../services/marketing/consumers.py#L25), [`services/marketing/service.py::exclude_address:554-572`](../../services/marketing/service.py#L554)
@@ -442,6 +520,8 @@ exclude_address (подписчик marketing.unsubscribed) ставит opted_o
 ## R-MARKETING-UNSUBSCRIBE-03 — Отписка от площадки не влияет на рассылки других площадок
 
 `draft` · invariant
+
+Достоверность: поведение кода без бизнес-требования · извлечено ИИ из кода, подкреплено кодом и 1 тестом
 
 Отписка с venue_id действует только на кампании и аудитории этой площадки: при подготовке писем и при добавлении в аудиторию учитываются отписки от сети и от площадки кампании или аудитории. Отписка от сети (venue_id = NULL) действует везде.
 

@@ -21,4 +21,4 @@
 - services/staff/models.py::ClearanceKind:54 (orm_model)
 
 ## Правила
-- R-STAFF-CLEARANCE-03 [draft] Срок допуска — valid_days его вида от момента выдачи
+- R-STAFF-CLEARANCE-03 Срок допуска — valid_days его вида от момента выдачи (подкреплено кодом и тестами)

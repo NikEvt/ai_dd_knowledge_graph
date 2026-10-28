@@ -20,4 +20,4 @@
 - services/subscriptions/service.py::add_notice
 
 ## Правила
-- R-SUBSCRIPTIONS-NOTICE-01 [draft] События абонемента превращаются в уведомления держателю
+- R-SUBSCRIPTIONS-NOTICE-01 События абонемента превращаются в уведомления держателю (подкреплено кодом и тестами)

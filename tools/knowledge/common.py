@@ -15,11 +15,14 @@ MODEL = KNOWLEDGE / "model"
 RULES = KNOWLEDGE / "rules"
 INDEX = KNOWLEDGE / "index.sqlite"
 GLOSSARY = KNOWLEDGE / "glossary.yaml"
+REQUIREMENTS = KNOWLEDGE / "requirements"
+RECONCILIATION = KNOWLEDGE / "reconciliation.yaml"
 DOCS = ROOT / "docs"
 
 MODEL_FILES = ("db", "code", "events", "bpm")
 RULE_ID = re.compile(r"^R-[A-Z0-9]+(?:-[A-Z0-9]+)*-\d{2,}$")
 RULE_STATUSES = ("draft", "verified", "suspect")
+SUSPECT_REASONS = ("code_changed", "requirement_changed")
 SERVICES = ("applications", "billing", "scheduling", "notifications", "chat")
 
 
@@ -101,6 +104,13 @@ def load_rules() -> list[dict[str, Any]]:
             r["_file"] = rel(path)
             rules.append(r)
     return rules
+
+
+def load_discrepancies() -> list[dict[str, Any]]:
+    """Решения людей по расхождениям (knowledge/reconciliation.yaml)."""
+    if not RECONCILIATION.exists():
+        return []
+    return (yaml.safe_load(RECONCILIATION.read_text(encoding="utf-8")) or {}).get("discrepancies", []) or []
 
 
 class _Dumper(yaml.SafeDumper):
